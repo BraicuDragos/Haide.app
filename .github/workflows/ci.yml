@@ -48,7 +48,7 @@ jobs:
   integration:
     name: integration
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 12
     needs: checks
     env:
       API_BASE_URL: http://127.0.0.1:54321/functions/v1/api/v1
@@ -64,12 +64,16 @@ jobs:
         with:
           version: latest
       - name: Start the local Supabase stack
+        timeout-minutes: 4
         run: supabase start -x studio,imgproxy,logflare,vector,realtime,postgres-meta
       - name: Reset database (migrations + seed)
+        timeout-minutes: 2
         run: supabase db reset
       - name: pgTAP (grants, RLS, functions, gazetteer search)
+        timeout-minutes: 2
         run: supabase test db
       - name: Serve the API function
+        timeout-minutes: 3
         run: |
           # Throwaway values for this job only: nothing here is a real secret.
           cat > "$RUNNER_TEMP/api.env" <<EOF
@@ -83,15 +87,31 @@ jobs:
           CORS_ORIGINS=http://localhost:5173
           EOF
           echo "CRON_SECRET=$(grep ^CRON_SECRET "$RUNNER_TEMP/api.env" | cut -d= -f2)" >> "$GITHUB_ENV"
-          nohup supabase functions serve api --no-verify-jwt --env-file "$RUNNER_TEMP/api.env" > "$RUNNER_TEMP/functions.log" 2>&1 &
-          for i in $(seq 1 60); do
-            if curl -fsS "$API_BASE_URL/health" > /dev/null 2>&1; then echo "API is up"; exit 0; fi
-            sleep 2
+          # Fully detached: own session, no stdin, all output in a log file, so nothing can hold the step open.
+          setsid nohup supabase functions serve api --no-verify-jwt --env-file "$RUNNER_TEMP/api.env" \
+            < /dev/null > "$RUNNER_TEMP/functions.log" 2>&1 &
+          SERVE_PID=$!
+          disown "$SERVE_PID" || true
+          deadline=$((SECONDS + 90))
+          code=000
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 3 --max-time 5 "$API_BASE_URL/health" || true)
+            if [ "$code" = "200" ]; then echo "API is up"; exit 0; fi
+            if ! kill -0 "$SERVE_PID" 2> /dev/null; then echo "serve process exited early"; break; fi
+            sleep 3
           done
-          echo "API did not start"; cat "$RUNNER_TEMP/functions.log"; exit 1
+          echo "API did not start (last HTTP status: $code)"
+          echo "--- functions.log (tail) ---"; tail -n 80 "$RUNNER_TEMP/functions.log" || true
+          echo "--- docker ps ---"; docker ps -a || true
+          for c in $(docker ps -a --format '{{.Names}}' | grep -i edge_runtime || true); do
+            echo "--- logs: $c ---"; docker logs --tail 80 "$c" 2>&1 || true
+          done
+          exit 1
       - name: API integration tests
+        timeout-minutes: 3
         run: pnpm test:int
       - name: Playwright smoke (360x800, axe), once the QA epic adds the config
+        timeout-minutes: 6
         run: |
           if [ -f playwright.config.ts ]; then
             pnpm exec playwright install --with-deps chromium
