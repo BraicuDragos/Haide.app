@@ -75,11 +75,17 @@ jobs:
       - name: Serve the API function
         timeout-minutes: 3
         run: |
+          # Deno's resolver inside the edge runtime fails on Docker DNS names (ENOTFOUND although
+          # getent works), so connect to the DB container by IP on the Supabase network (the same
+          # network the edge runtime joins). Fall back to the name if the lookup yields nothing.
+          DB_HOST=$(docker inspect -f '{{with index .NetworkSettings.Networks "supabase_network_haide"}}{{.IPAddress}}{{end}}' supabase_db_haide 2>/dev/null || true)
+          [ -n "$DB_HOST" ] || DB_HOST=supabase_db_haide
+          echo "DB host for the API: $DB_HOST"
           # Throwaway values for this job only: nothing here is a real secret.
           cat > "$RUNNER_TEMP/api.env" <<EOF
           APP_ENV=test
           APP_VERSION=${GITHUB_SHA}
-          API_DB_URL=postgresql://haide_api:haide_api_local@supabase_db_haide:5432/postgres
+          API_DB_URL=postgresql://haide_api:haide_api_local@${DB_HOST}:5432/postgres
           CRON_SECRET=$(openssl rand -hex 16)
           IP_HASH_SALT_SEED=$(openssl rand -hex 16)
           ROUTING_PROVIDER=fixture
@@ -109,6 +115,10 @@ jobs:
             psql -h 127.0.0.1 -U haide_api -d postgres -c 'select current_user' 2>&1 || true
           docker exec supabase_db_haide psql -U postgres -d postgres \
             -c "select rolname, rolcanlogin, rolpassword is not null as has_pw from pg_roles where rolname='haide_api'" 2>&1 || true
+          echo "--- networks per container ---"
+          for c in $(docker ps --format '{{.Names}}' | grep -i 'haide' || true); do
+            echo "$c: $(docker inspect -f '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}={{$v.IPAddress}} {{end}}' "$c")"
+          done
           echo "--- DNS/TCP from edge runtime container ---"
           for c in $(docker ps --format '{{.Names}}' | grep -i edge_runtime || true); do
             docker exec "$c" getent hosts supabase_db_haide 2>&1 || true
