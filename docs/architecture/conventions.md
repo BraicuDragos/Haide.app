@@ -31,7 +31,7 @@
 │  ├─ seed/gazetteer/              # areas.csv, places.csv (full Sibiu build, ODbL), loaded by a migration helper
 │  ├─ tests/                       # pgTAP: *.test.sql + fixtures/routes/*.geojson
 │  └─ functions/
-│     ├─ deno.json                 # import map: hono, zod, postgres, jose, imagescript
+│     ├─ deno.json                 # import map: hono, zod, postgres, jose, jimp
 │     ├─ api/
 │     │  ├─ index.ts               # Hono app, mounts routes, Deno.serve
 │     │  ├─ middleware/            # auth.ts, cors.ts, errors.ts, logging.ts, rateLimit.ts, gates.ts

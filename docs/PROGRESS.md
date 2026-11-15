@@ -10,7 +10,7 @@
 ## Done
 - [x] Phases 1–4: strategy, brand "Haide", UX + prototype, architecture (ADRs 0001–0015)
 - [x] Phase 5 — E0 scaffold + CI (PR #3, merged; CI green incl. integration)
-- [x] E1 — accounts, profile, vehicle: migration `20261116090000_accounts.sql` (6 tables, RLS), gates middleware, account endpoints, photo pipeline (imagescript), JWT iss check, bodyLimit; auth + onboarding + profile screens, policy pages. QA: APPROVED (292 unit tests, 30 mocked Playwright, initial JS 155 KB gzip)
+- [x] E1 — accounts, profile, vehicle: migration `20261116090000_accounts.sql` (6 tables, RLS), gates middleware, account endpoints, photo pipeline (Jimp), JWT iss check, bodyLimit; auth + onboarding + profile screens, policy pages. QA: APPROVED (292 unit tests, 30 mocked Playwright, initial JS 155 KB gzip)
 
 ## Next step
 - Owner merges E1 PR → epic **E-DM** (design & motion), brief: `docs/brand/design-direction.md` (starts only after E1 merge; branch `feat/design-motion`) → then E2 (rides + pricing engine)
@@ -20,7 +20,7 @@
 - Production later: create `avatars` bucket on hosted project, pin CSP `img-src` to the project host.
 
 ## Carry-forward findings (non-blocking)
-- E1 low: imagescript resize is nearest-neighbour; consider lowering `PHOTO_MAX_PIXELS` 24 MP → ~8 MP; imagescript v1 is unmaintained (v3 exists).
+- E1: imagescript replaced by pure-JS Jimp 1.6.1 (lazy import; native codec failed on Deno Edge Runtime); `PHOTO_MAX_PIXELS` lowered to 8 MP.
 - E4: retention/cleanup for `app.rate_limits` and `app.app_errors` via `/internal/tick`.
 - Every new migration must revoke PUBLIC EXECUTE on new `app` functions.
 - E5 refines rating visibility (7-day / counter-rating); E6 adds `DELETE /me`.

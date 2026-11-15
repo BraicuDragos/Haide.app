@@ -50,7 +50,7 @@ export const BIO_MAX_CHARS = 200;
 export const FIRST_NAME_MAX_CHARS = 30;
 export const VEHICLE_TEXT_MAX_CHARS = 30;
 export const PHOTO_MAX_BYTES = 1_572_864; // 1.5 MiB upload cap
-export const PHOTO_MAX_PIXELS = 24_000_000; // decode guard against decompression bombs
+export const PHOTO_MAX_PIXELS = 8_000_000; // decode guard against decompression bombs
 export const AVATAR_SIZE_PX = 512;
 export const AVATAR_JPEG_QUALITY = 85;
 

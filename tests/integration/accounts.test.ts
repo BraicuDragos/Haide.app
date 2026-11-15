@@ -1,4 +1,4 @@
-import { Image } from 'imagescript';
+import { Jimp, JimpMime } from 'jimp';
 import { SignJWT } from 'jose';
 import { describe, expect, it } from 'vitest';
 import {
@@ -118,10 +118,12 @@ describe.skipIf(!BASE || !SECRET)('accounts against the local stack', () => {
     expect(rejected.status).toBe(400);
     expect((await errorOf(rejected)).code).toBe('PHOTO_INVALID');
 
-    const img = new Image(64, 48);
-    img.fill(Image.rgbToColor(30, 140, 90));
+    const img = new Jimp({ width: 64, height: 48, color: 0x1e8c5aff });
     const form = new FormData();
-    form.set('photo', new File([(await img.encode()) as BlobPart], 'p.png', { type: 'image/png' }));
+    form.set(
+      'photo',
+      new File([(await img.getBuffer(JimpMime.png)) as BlobPart], 'p.png', { type: 'image/png' }),
+    );
     const res = await call('/me/photo', { method: 'PUT', body: form });
     expect(res.status).toBe(200);
     const { photoUrl } = photoResponseSchema.parse(await res.json());

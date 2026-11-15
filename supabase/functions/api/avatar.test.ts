@@ -1,4 +1,4 @@
-import { Image } from 'imagescript';
+import { Jimp, JimpMime } from 'jimp';
 import { describe, expect, it } from 'vitest';
 import { checkPhotoUpload, detectImageKind, readImageSize } from '../_shared/domain/photo.ts';
 import { encodeAvatar } from './services/avatar.ts';
@@ -21,9 +21,8 @@ const contains = (haystack: Uint8Array, needle: string) =>
   Buffer.from(haystack).includes(Buffer.from(needle));
 
 async function makeJpeg(width: number, height: number) {
-  const img = new Image(width, height);
-  img.fill(Image.rgbToColor(200, 80, 40));
-  return await img.encodeJPEG(90);
+  const img = new Jimp({ width, height, color: 0xc85028ff });
+  return new Uint8Array(await img.getBuffer(JimpMime.jpeg, { quality: 90 }));
 }
 
 describe('encodeAvatar', () => {
@@ -44,9 +43,8 @@ describe('encodeAvatar', () => {
   });
 
   it('accepts PNG input and outputs JPEG', async () => {
-    const img = new Image(300, 600);
-    img.fill(Image.rgbToColor(10, 120, 200));
-    const out = await encodeAvatar(await img.encode());
+    const img = new Jimp({ width: 300, height: 600, color: 0x0a78c8ff });
+    const out = await encodeAvatar(new Uint8Array(await img.getBuffer(JimpMime.png)));
     expect(detectImageKind(out)).toBe('jpeg');
     expect(readImageSize(out, 'jpeg')).toEqual({ width: 512, height: 512 });
   });
