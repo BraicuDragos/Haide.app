@@ -32,7 +32,8 @@ enabled = true
 port = 54323
 
 # Local mail catcher (Mailpit). Magic-link emails land here, UI at http://127.0.0.1:54324.
-[inbucket]
+# `[local_smtp]` replaced `[inbucket]` (CLI >= 2.108).
+[local_smtp]
 enabled = true
 port = 54324
 
@@ -96,7 +97,6 @@ skip_nonce_check = false
 [edge_runtime]
 enabled = true
 policy = "per_worker"
-deno_version = 2
 
 # One fat function serves the whole API under /functions/v1/api/v1/*.
 # verify_jwt = false because public routes must work signed out: the function verifies tokens
