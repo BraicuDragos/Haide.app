@@ -17,8 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: supabase/setup-cli@v1
+      - uses: actions/checkout@v7
+      - uses: supabase/setup-cli@v3
         with:
           version: latest
       - name: Install pg_dump 17 and age
@@ -52,7 +52,7 @@ jobs:
               --table=auth.users --table=auth.identities
           } | gzip -9 | age -r "$AGE_PUBLIC_KEY" > "haide-$stamp.sql.gz.age"
           ls -l "haide-$stamp.sql.gz.age"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: haide-backup
           path: haide-*.sql.gz.age
