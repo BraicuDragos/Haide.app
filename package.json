@@ -1,0 +1,47 @@
+{
+  "name": "haide",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.34.9",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "pnpm --filter ./apps/web dev",
+    "build": "pnpm --filter ./apps/web build",
+    "lint": "eslint . && prettier --check .",
+    "format": "prettier --write .",
+    "typecheck": "tsc -p tsconfig.json --noEmit && pnpm -r --if-present typecheck",
+    "test": "vitest run --coverage --project \"!integration\"",
+    "test:db": "supabase test db",
+    "test:int": "vitest run --project integration",
+    "test:e2e": "playwright test",
+    "tokens": "pnpm --filter ./apps/web tokens",
+    "gazetteer": "node --experimental-strip-types scripts/geo/build-gazetteer.ts",
+    "db:reset": "supabase db reset",
+    "fn:serve": "supabase functions serve api --no-verify-jwt --env-file .env"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
+    "@eslint/js": "9.39.5",
+    "@playwright/test": "1.65.1",
+    "@types/d3-delaunay": "6.0.4",
+    "@types/node": "24.19.2",
+    "@vitest/coverage-v8": "4.1.12",
+    "d3-delaunay": "6.0.6",
+    "eslint": "9.39.5",
+    "eslint-config-prettier": "10.1.8",
+    "fast-check": "4.10.2",
+    "globals": "16.5.0",
+    "hono": "4.13.18",
+    "jose": "6.2.17",
+    "polygon-clipping": "0.15.7",
+    "postgres": "3.4.9",
+    "prettier": "3.10.1",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.72.2",
+    "vitest": "4.1.12",
+    "zod": "4.6.7"
+  }
+}

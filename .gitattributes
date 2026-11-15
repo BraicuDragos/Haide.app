@@ -1,0 +1,6 @@
+*.sh text eol=lf
+*.pmtiles binary
+*.pbf binary
+*.png binary
+*.woff2 binary
+pnpm-lock.yaml -diff

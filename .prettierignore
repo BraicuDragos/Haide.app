@@ -1,0 +1,14 @@
+node_modules
+pnpm-lock.yaml
+dist
+coverage
+docs
+*.md
+assets
+.claude
+_setup
+apps/web/public
+supabase/seed
+supabase/tests/fixtures
+*.csv
+*.pmtiles

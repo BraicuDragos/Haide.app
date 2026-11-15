@@ -1,0 +1,22 @@
+name: Keepalive
+
+# Keeps the free Supabase project active and fails (so GitHub emails the owner) if /health is not 200.
+# Disabled until the production URL exists: set the repository variable PROD_API_URL after the first deploy.
+on:
+  schedule:
+    - cron: '17 6 * * 2,5' # Tuesday and Friday
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  health:
+    if: ${{ vars.PROD_API_URL != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: GET /health
+        env:
+          PROD_API_URL: ${{ vars.PROD_API_URL }}
+        run: curl -fsS --retry 3 --retry-delay 10 "$PROD_API_URL/health"
