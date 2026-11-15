@@ -126,13 +126,13 @@ Passenger-specific view for ride detail and the request sheet. Body `{ "from": L
 ```
 
 ### `POST /me/consents`
-Body `{ "age18": true, "termsVersion": "1.0", "privacyVersion": "1.0" }`. All are required and versions must be current, otherwise `400 VALIDATION_FAILED`. Writes 3 `consents` rows. `204`. Declining is client-side: sign out.
+Body `{ "age18": true, "termsVersion": "1.0", "privacyVersion": "1.0" }`. Gated routes answer `403 CONSENT_REQUIRED` with `fields` naming what is outstanding (`age18`, `terms`, `privacy`). Bodies are capped at 64 KB (photo: ~1.6 MB), over the cap is `400` (`VALIDATION_FAILED` with `fields._ = body_too_large`, or `PHOTO_TOO_LARGE`). All are required and versions must be current, otherwise `400 VALIDATION_FAILED`. Writes 3 `consents` rows. `204`. Declining is client-side: sign out.
 
 ### `PATCH /me/profile`
 Body (any subset) `{ "firstName": "Ștefan", "phone": "0721 234 567", "bio": "…" }`. The phone is normalised to E.164 and must be a Romanian mobile (`+407…`). `200` returns the `/me` shape. Requires consent.
 
 ### `PUT /me/photo`: `multipart/form-data`, field `photo`
-JPEG/PNG/WebP, ≤ 1.5 MB after client-side resize. Re-encoded to 512×512 JPEG with no metadata. `200 { "photoUrl": "…" }`. Errors `PHOTO_INVALID`, `PHOTO_TOO_LARGE`.
+JPEG or PNG (WebP is not decoded server-side; the client re-encodes to JPEG before upload), ≤ 1.5 MB after client-side resize. Re-encoded to 512×512 JPEG with no metadata. `200 { "photoUrl": "…" }`. Errors `PHOTO_INVALID`, `PHOTO_TOO_LARGE`.
 
 ### `GET /me/vehicle` · `PUT /me/vehicle`
 Body `{ "make": "Dacia", "model": "Logan", "colour": "Grey", "plate": "sb 12 abc", "fuelType": "petrol", "seats": 3 }` → plate normalised to `SB12ABC`. `200` returns the vehicle (with plate; owner only). `GET` returns `404` when there is none. Editing never changes published rides.
