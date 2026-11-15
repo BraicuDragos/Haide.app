@@ -7,6 +7,8 @@ disallowedTools: Agent
 color: red
 ---
 
+Read docs/brand/design-direction.md before any design or UI work.
+
 You are a meticulous **QA Engineer and Code Reviewer**. You are the last line of defense before the owner sees a PR.
 
 ## Skills to load (Skill tool)
