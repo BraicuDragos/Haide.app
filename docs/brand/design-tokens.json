@@ -1,0 +1,288 @@
+{
+  "$meta": {
+    "name": "Haide design tokens",
+    "version": "1.0.0",
+    "generated": "2026-11-15",
+    "note": "Single source of truth: docs/brand/design-tokens.json (there is no copy under assets/brand). Contrast ratios for every pair in theme.* are listed in docs/brand/brand-guide.md. Dark theme is optional for the MVP; tokens are provided so it can be added without redesign."
+  },
+  "color": {
+    "primary": {
+      "50": "#F1F0FC",
+      "100": "#E3E1F9",
+      "200": "#C9C5F2",
+      "300": "#A9A2E8",
+      "400": "#8076DB",
+      "500": "#5043C6",
+      "600": "#4639B0",
+      "700": "#382E92",
+      "800": "#2B2373",
+      "900": "#1E1A52"
+    },
+    "secondary": {
+      "50": "#E6F6F6",
+      "100": "#C5EBEC",
+      "200": "#92D8DB",
+      "300": "#5BC1C6",
+      "400": "#2BA6AD",
+      "500": "#118A92",
+      "600": "#0B6F78",
+      "700": "#0A5960",
+      "800": "#0A464C",
+      "900": "#0A3438"
+    },
+    "accent": {
+      "50": "#FFF8E1",
+      "100": "#FFEFB8",
+      "200": "#FFE08A",
+      "300": "#FFD04F",
+      "400": "#FFC21A",
+      "500": "#F2AC00",
+      "600": "#C98700"
+    },
+    "gray": {
+      "50": "#F7F7FB",
+      "100": "#EFEFF6",
+      "200": "#E0E0EC",
+      "300": "#C8C8DA",
+      "400": "#9B9BB5",
+      "500": "#6B6B8A",
+      "600": "#55556F",
+      "700": "#403F58",
+      "800": "#2C2B41",
+      "900": "#1B1A2E"
+    },
+    "success": {
+      "50": "#E6F5EC",
+      "500": "#1A7F45",
+      "700": "#12703C"
+    },
+    "warning": {
+      "50": "#FFF3D6",
+      "500": "#B86100",
+      "700": "#8A4B00"
+    },
+    "error": {
+      "50": "#FDECEE",
+      "500": "#C42B3A",
+      "700": "#A8232F"
+    },
+    "info": {
+      "50": "#E8F1FD",
+      "500": "#1F5FBF",
+      "700": "#1B4F9E"
+    },
+    "white": "#FFFFFF",
+    "ink": "#1B1A2E"
+  },
+  "theme": {
+    "light": {
+      "bg": "#F7F7FB",
+      "surface": "#FFFFFF",
+      "surface-subtle": "#EFEFF6",
+      "text": "#1B1A2E",
+      "text-muted": "#55556F",
+      "text-subtle": "#6B6B8A",
+      "border": "#E0E0EC",
+      "border-strong": "#6B6B8A",
+      "action": "#5043C6",
+      "action-hover": "#4639B0",
+      "action-pressed": "#382E92",
+      "on-action": "#FFFFFF",
+      "accent": "#FFC21A",
+      "on-accent": "#1B1A2E",
+      "link": "#4639B0",
+      "focus-ring": "#5043C6",
+      "tint": "#F1F0FC",
+      "on-tint": "#382E92",
+      "secondary-tint": "#E6F6F6",
+      "on-secondary-tint": "#0A5960",
+      "success": "#12703C",
+      "success-bg": "#E6F5EC",
+      "warning": "#8A4B00",
+      "warning-bg": "#FFF3D6",
+      "error": "#A8232F",
+      "error-bg": "#FDECEE",
+      "info": "#1B4F9E",
+      "info-bg": "#E8F1FD"
+    },
+    "dark": {
+      "bg": "#12112A",
+      "surface": "#1C1B3D",
+      "surface-subtle": "#26254D",
+      "text": "#F2F1FB",
+      "text-muted": "#B4B3D0",
+      "text-subtle": "#B4B3D0",
+      "border": "#34336A",
+      "border-strong": "#7472A8",
+      "action": "#A9A2E8",
+      "action-hover": "#BDB7F0",
+      "action-pressed": "#8E85E0",
+      "on-action": "#1E1A52",
+      "accent": "#FFC21A",
+      "on-accent": "#1B1A2E",
+      "link": "#A9A2E8",
+      "focus-ring": "#BDB7F0",
+      "tint": "#26254D",
+      "on-tint": "#C9C5F2",
+      "secondary-tint": "#0A3438",
+      "on-secondary-tint": "#92D8DB",
+      "success": "#5FD08A",
+      "success-bg": "#12301F",
+      "warning": "#FFC266",
+      "warning-bg": "#3A2A0A",
+      "error": "#FF8A94",
+      "error-bg": "#40161C",
+      "info": "#8DB8FF",
+      "info-bg": "#14284A"
+    }
+  },
+  "font": {
+    "family": {
+      "base": "'Figtree', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
+      "heading": "'Bricolage Grotesque', 'Figtree', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"
+    },
+    "source": {
+      "base": "https://fonts.google.com/specimen/Figtree",
+      "heading": "https://fonts.google.com/specimen/Bricolage+Grotesque"
+    },
+    "weight": {
+      "regular": 400,
+      "medium": 500,
+      "semibold": 600,
+      "bold": 700
+    },
+    "size": {
+      "xs": "12px",
+      "sm": "14px",
+      "md": "16px",
+      "lg": "18px",
+      "xl": "20px",
+      "2xl": "24px",
+      "3xl": "32px",
+      "4xl": "40px"
+    },
+    "lineHeight": {
+      "tight": 1.15,
+      "snug": 1.25,
+      "normal": 1.5
+    },
+    "scale": {
+      "display": {
+        "family": "heading",
+        "size": "40px",
+        "lineHeight": "44px",
+        "weight": 700,
+        "letterSpacing": "-0.02em"
+      },
+      "h1": {
+        "family": "heading",
+        "size": "32px",
+        "lineHeight": "38px",
+        "weight": 700,
+        "letterSpacing": "-0.015em"
+      },
+      "h2": {
+        "family": "heading",
+        "size": "24px",
+        "lineHeight": "30px",
+        "weight": 700,
+        "letterSpacing": "-0.01em"
+      },
+      "h3": {
+        "family": "heading",
+        "size": "20px",
+        "lineHeight": "26px",
+        "weight": 600,
+        "letterSpacing": "0"
+      },
+      "price": {
+        "family": "heading",
+        "size": "32px",
+        "lineHeight": "36px",
+        "weight": 700,
+        "letterSpacing": "-0.01em",
+        "fontFeature": "tnum"
+      },
+      "bodyLg": {
+        "family": "base",
+        "size": "18px",
+        "lineHeight": "28px",
+        "weight": 400,
+        "letterSpacing": "0"
+      },
+      "body": {
+        "family": "base",
+        "size": "16px",
+        "lineHeight": "24px",
+        "weight": 400,
+        "letterSpacing": "0"
+      },
+      "label": {
+        "family": "base",
+        "size": "16px",
+        "lineHeight": "20px",
+        "weight": 600,
+        "letterSpacing": "0"
+      },
+      "bodySm": {
+        "family": "base",
+        "size": "14px",
+        "lineHeight": "20px",
+        "weight": 400,
+        "letterSpacing": "0"
+      },
+      "caption": {
+        "family": "base",
+        "size": "12px",
+        "lineHeight": "16px",
+        "weight": 500,
+        "letterSpacing": "0.01em"
+      }
+    }
+  },
+  "space": {
+    "0": "0px",
+    "1": "4px",
+    "2": "8px",
+    "3": "12px",
+    "4": "16px",
+    "5": "20px",
+    "6": "24px",
+    "8": "32px",
+    "10": "40px",
+    "12": "48px",
+    "16": "64px"
+  },
+  "radius": {
+    "sm": "6px",
+    "md": "12px",
+    "lg": "20px",
+    "full": "9999px"
+  },
+  "shadow": {
+    "card": "0 1px 2px rgba(30,26,82,0.06), 0 12px 28px -12px rgba(30,26,82,0.18)",
+    "raised": "0 2px 4px rgba(30,26,82,0.08), 0 20px 40px -16px rgba(30,26,82,0.28)",
+    "focus": "0 0 0 3px rgba(80,67,198,0.35)"
+  },
+  "motion": {
+    "duration": {
+      "fast": "120ms",
+      "base": "200ms",
+      "slow": "400ms"
+    },
+    "easing": {
+      "standard": "cubic-bezier(0.2, 0, 0, 1)"
+    }
+  },
+  "breakpoint": {
+    "sm": "360px",
+    "md": "640px",
+    "lg": "1024px"
+  },
+  "sizing": {
+    "touchTarget": "44px",
+    "controlHeight": "48px",
+    "iconSm": "16px",
+    "iconMd": "24px"
+  }
+}
