@@ -26,7 +26,7 @@ export function StepProgress({ current }: { current: StepId }) {
         {steps.map((s, i) => (
           <span
             key={s}
-            className={`h-1.5 flex-1 rounded-full ${i < n ? 'bg-primary-700' : 'bg-gray-300'}`}
+            className={`h-1.5 flex-1 rounded-full ${i < n ? 'bg-route' : 'bg-border'}`}
           />
         ))}
       </div>

@@ -1,0 +1,494 @@
+/* Motion and the map overlay (ADR 0019, docs/ux/motion.md). Base CSS is always the calm final state: every animation
+   only decorates, so a missing or cancelled animation never breaks a screen. Transform and opacity only (the route
+   draw-in is the one stroke-dashoffset exception, set from motion/core.ts). All values are tokens. */
+
+@layer components {
+  /* ---- map frame: night map, route overlay (SVG) and the travelling light (HTML) ---- */
+  .map-frame {
+    position: relative;
+    height: 208px;
+    overflow: hidden;
+    isolation: isolate;
+    background: var(--theme-map-bg);
+    border: 1px solid var(--hair);
+    border-radius: var(--tk-radius-xl);
+    box-shadow: var(--elev-card);
+  }
+  .map-frame::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 9;
+    pointer-events: none;
+    background-image: var(--tk-grain-image);
+    background-size: var(--tk-grain-size);
+    opacity: var(--tk-grain-opacity);
+  }
+  .map-plain {
+    position: absolute;
+    inset: 0;
+    fill: none;
+    stroke: var(--theme-map-road);
+    stroke-width: 6px;
+    stroke-linecap: round;
+  }
+  .map-note {
+    position: absolute;
+    left: var(--tk-space-3);
+    top: var(--tk-space-3);
+    max-width: 62%;
+    z-index: 5;
+    padding: var(--tk-space-2) var(--tk-space-3);
+    border-radius: var(--tk-radius-lg);
+    font-size: var(--tk-text-sm);
+    line-height: 20px;
+    color: var(--theme-text);
+  }
+  .mini-loader {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--tk-space-1);
+  }
+
+  .route-fx {
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    pointer-events: none;
+  }
+  .route-fx > svg {
+    position: absolute;
+    inset: 0;
+    display: block;
+  }
+  .fx {
+    position: absolute;
+    left: 0;
+    top: 0;
+  }
+  .rt {
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-dasharray: 1 1.02;
+    stroke-dashoffset: 0;
+  }
+  .rt.aura {
+    stroke: var(--theme-route-glow);
+    stroke-width: var(--tk-size-routeAura);
+    opacity: 0.55;
+  }
+  .rt.halo {
+    stroke: var(--theme-route-glow);
+    stroke-width: var(--tk-size-routeHalo);
+  }
+  .rt.core {
+    stroke: var(--theme-route);
+    stroke-width: var(--tk-size-routeCore);
+  }
+  .rt.spark {
+    stroke: var(--theme-route-core);
+    stroke-width: 1.2px;
+  }
+  .mk {
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+  .pk .dot {
+    fill: var(--theme-accent);
+  }
+  .pk .ring,
+  .pk .ping {
+    fill: none;
+    stroke: var(--theme-pulse-ring);
+    stroke-width: 2;
+  }
+  .pk .ping {
+    opacity: 0;
+  }
+  .dp .t {
+    fill: var(--theme-map-bg);
+    stroke: var(--theme-route);
+    stroke-width: 3;
+  }
+  .route-fx .zone {
+    fill: var(--theme-route-glow);
+    stroke: var(--theme-route);
+    stroke-width: 1.5;
+    stroke-dasharray: 4 4;
+  }
+  /* The light: moved only with transform (keyframes sampled from the path), faded with opacity. */
+  .pl {
+    position: absolute;
+    left: -6px;
+    top: -6px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--theme-pulse);
+    box-shadow:
+      0 0 0 3px var(--theme-pulse-ring),
+      0 0 22px 6px var(--theme-route-glow);
+    opacity: 0;
+    will-change: transform, opacity;
+  }
+  .pl.t {
+    left: -4px;
+    top: -4px;
+    width: 8px;
+    height: 8px;
+    background: var(--theme-route-core);
+    box-shadow: 0 0 14px 3px var(--theme-route-glow);
+  }
+  .pl.t2 {
+    left: -3px;
+    top: -3px;
+    width: 6px;
+    height: 6px;
+  }
+  .pl.t3 {
+    left: -2px;
+    top: -2px;
+    width: 4px;
+    height: 4px;
+  }
+  :root[data-theme='light'] .pl {
+    box-shadow: 0 0 0 3px var(--theme-pulse-ring);
+  }
+  :root[data-theme='light'] .pl.t {
+    box-shadow: none;
+  }
+  /* Reduced motion: one still light mid-route. */
+  html[data-motion='reduced'] .pl.still {
+    opacity: 1;
+  }
+
+  /* ---- loading and empty: one small light on a tiny route, no spinners ---- */
+  .loader {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--tk-space-3);
+    padding: var(--tk-space-12) var(--tk-space-6);
+    text-align: center;
+  }
+  .empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--tk-space-3);
+    padding: var(--tk-space-8) var(--tk-space-6);
+    text-align: center;
+  }
+  .ld,
+  .empty-art {
+    display: block;
+    width: 160px;
+    height: 70px;
+    overflow: visible;
+  }
+  .ld.mini-ld {
+    width: 56px;
+    height: 24.5px;
+  }
+  .ld .tr,
+  .empty-art .tr {
+    fill: none;
+    stroke: var(--theme-border-strong);
+    stroke-width: 2.5;
+    stroke-linecap: round;
+    stroke-dasharray: 2 8;
+  }
+  .ld .tr {
+    stroke-dasharray: none;
+    stroke: var(--theme-border);
+  }
+  .ld .pt-a,
+  .empty-art .pt-a {
+    fill: var(--theme-accent);
+    stroke: var(--theme-pulse-ring);
+    stroke-width: 2.5;
+  }
+  .ld .pt-b,
+  .empty-art .pt-b {
+    fill: var(--theme-surface);
+    stroke: var(--theme-route);
+    stroke-width: 3;
+  }
+  .ld .hd,
+  .ld .still {
+    fill: var(--theme-pulse);
+    stroke: var(--theme-pulse-ring);
+    stroke-width: 3;
+    opacity: 0;
+  }
+  .ld .tl {
+    fill: var(--theme-route-core);
+    opacity: 0;
+  }
+  html[data-motion='reduced'] .ld .still {
+    opacity: 1;
+  }
+  .empty-art .breath {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: breath calc(var(--tk-dur-ambient) * 2 / 3) var(--tk-ease-standard) infinite;
+  }
+  @keyframes breath {
+    0%,
+    100% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.35);
+    }
+  }
+
+  /* ---- price roll: odometer digits (transform only) ---- */
+  .price-roll .roll {
+    display: inline-flex;
+    line-height: 1;
+  }
+  .price-roll .dg {
+    display: inline-block;
+    height: 1.14em;
+    overflow: hidden;
+    -webkit-mask-image: linear-gradient(transparent, black 22%, black 78%, transparent);
+    mask-image: linear-gradient(transparent, black 22%, black 78%, transparent);
+  }
+  .price-roll .st {
+    display: block;
+    will-change: transform;
+  }
+  .price-roll .st i {
+    display: block;
+    height: 1.14em;
+    line-height: 1.14em;
+    font-style: normal;
+  }
+  .price-roll .sep {
+    display: inline-block;
+    height: 1.14em;
+    line-height: 1.14em;
+  }
+
+  /* ---- seats: tactile tokens ---- */
+  .seats {
+    display: flex;
+    gap: var(--tk-space-3);
+  }
+  .seat {
+    position: relative;
+    flex: 1;
+    max-width: 72px;
+  }
+  .seat input {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+  .seat .mag {
+    display: block;
+    transform: translate(var(--mx, 0px), var(--my, 0px));
+    transition: transform var(--tk-dur-moderate) var(--tk-ease-magnet);
+  }
+  .face {
+    display: grid;
+    place-items: center;
+    aspect-ratio: 1;
+    border-radius: var(--tk-radius-lg);
+    background: var(--theme-surface-subtle);
+    color: var(--theme-text-muted);
+    box-shadow: var(--tk-shadow-edge);
+    transition:
+      background-color var(--tk-dur-fast) var(--tk-ease-standard),
+      color var(--tk-dur-fast) var(--tk-ease-standard);
+  }
+  .face .ic {
+    width: 32px;
+    height: 32px;
+  }
+  .face.on {
+    background: var(--theme-action);
+    color: var(--theme-on-action);
+    box-shadow: var(--elev-seat);
+  }
+  .seat input:focus-visible + .mag .face {
+    outline: 3px solid var(--theme-focus-ring);
+    outline-offset: 3px;
+  }
+  .seatrow {
+    display: flex;
+    gap: var(--tk-space-2);
+  }
+  .seatrow .face {
+    width: 40px;
+    border-radius: var(--tk-radius-md);
+  }
+  .seatrow .face .ic {
+    width: 22px;
+    height: 22px;
+  }
+  .seatrow .face.taken {
+    background: var(--theme-tint);
+    color: var(--theme-on-tint);
+  }
+  .seatrow .face.free {
+    background: transparent;
+    border: 1.5px dashed var(--theme-border-strong);
+    box-shadow: none;
+  }
+
+  /* ---- the Haide moment: launch button parts. Base CSS = not yet sent; .is-done = calm confirmed state ---- */
+  .cta-wrap {
+    position: relative;
+  }
+  .cta {
+    width: 100%;
+  }
+  .cta .wipe {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    background: var(--theme-tint);
+    transform-origin: left center;
+    transform: scaleX(0);
+  }
+  .cta .l {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--tk-space-2);
+  }
+  .cta .l1 {
+    opacity: 1;
+  }
+  .cta .l2 {
+    opacity: 0;
+    color: var(--theme-on-tint);
+  }
+  .cta .l2 .ic {
+    color: var(--theme-savings);
+  }
+  .cta .l3 {
+    z-index: 4;
+    opacity: 0;
+    color: var(--theme-on-tint);
+    font: 600 22px / 28px var(--tk-font-heading);
+    letter-spacing: -0.02em;
+  }
+  .cta .dotl {
+    position: absolute;
+    left: var(--tk-space-5);
+    top: 50%;
+    z-index: 3;
+    width: 14px;
+    height: 14px;
+    margin-top: -7px;
+    border-radius: 50%;
+    background: var(--theme-on-action);
+    opacity: 0;
+  }
+  .cta-ring {
+    position: absolute;
+    inset: 0;
+    border: 2px solid var(--theme-pulse-ring);
+    border-radius: var(--tk-radius-full);
+    opacity: 0;
+    pointer-events: none;
+  }
+  .cta.is-done {
+    cursor: default;
+    background: var(--theme-action);
+    box-shadow: none;
+  }
+  .cta.is-done .wipe {
+    transform: none;
+  }
+  .cta.is-done .l1 {
+    opacity: 0;
+  }
+  .cta.is-done .l2 {
+    opacity: 1;
+  }
+  .cta.is-done:active {
+    transform: none;
+  }
+}
+
+/* ---- shared-element and route transitions (View Transitions API). Without support, or with reduced motion,
+   navigation is instant. Names must be unique per state or the whole transition is skipped (docs/ux/motion.md 4). ---- */
+::view-transition-old(root) {
+  animation: vt-out var(--tk-dur-fast) var(--tk-ease-exit) both;
+}
+::view-transition-new(root) {
+  animation: vt-in var(--tk-dur-moderate) var(--tk-ease-enter) both;
+}
+::view-transition-group(*) {
+  animation-duration: var(--tk-dur-moderate);
+  animation-timing-function: var(--tk-ease-standard);
+}
+@keyframes vt-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes vt-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* ---- reduced motion: no transitions, no loops, no view transitions. The in-app switch (data-motion) and the OS
+   setting (before the script has run, or without JS) both land here. ---- */
+html[data-motion='reduced'] *,
+html[data-motion='reduced'] *::before,
+html[data-motion='reduced'] *::after {
+  transition-duration: 0.01ms !important;
+  animation: none !important;
+  scroll-behavior: auto !important;
+}
+html[data-motion='reduced'] .seat .mag {
+  transform: none;
+}
+html[data-motion='reduced']::view-transition-group(*),
+html[data-motion='reduced']::view-transition-old(*),
+html[data-motion='reduced']::view-transition-new(*) {
+  animation: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-motion='full']) *,
+  html:not([data-motion='full']) *::before,
+  html:not([data-motion='full']) *::after {
+    transition-duration: 0.01ms !important;
+    animation: none !important;
+    scroll-behavior: auto !important;
+  }
+  html:not([data-motion='full']) ::view-transition-group(*),
+  html:not([data-motion='full']) ::view-transition-old(*),
+  html:not([data-motion='full']) ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
+
+/* Branded busy indicator inside a button: one light breathing (opacity and transform), still when motion is reduced. */
+@layer components {
+  .btn-light {
+    width: 12px;
+    height: 12px;
+    flex: none;
+    border-radius: 50%;
+    background: var(--theme-accent);
+    box-shadow: 0 0 0 3px var(--theme-pulse-ring);
+    animation: breath calc(var(--tk-dur-pulse) / 2) var(--tk-ease-standard) infinite;
+  }
+}

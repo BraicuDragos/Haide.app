@@ -19,14 +19,14 @@ export function PageHeader({
   const lead = onClose ?? onBack;
   return (
     <header
-      className={`sticky top-0 z-10 flex min-h-14 items-center gap-1 border-b border-border bg-bg pr-4 ${lead ? 'pl-1' : 'pl-4'}`}
+      className={`sticky top-0 z-10 flex min-h-14 items-center gap-1 border-b border-(color:--hair) bg-bg pr-4 ${lead ? 'pl-1' : 'pl-4'}`}
     >
       {lead && (
         <button
           type="button"
           onClick={lead}
           aria-label={onClose ? t('common.close') : t('common.back')}
-          className="grid size-12 flex-none place-items-center rounded-md hover:bg-surface-subtle"
+          className="grid size-12 flex-none place-items-center rounded-full hover:bg-surface-subtle"
         >
           <Icon name={onClose ? 'close' : 'back'} />
         </button>

@@ -15,6 +15,7 @@ import { EmptyState } from '@/ui/EmptyState';
 import { Icon, type IconName } from '@/ui/Icon';
 import { Notice } from '@/ui/Notice';
 import { PageHeader } from '@/ui/PageHeader';
+import { DisplaySettings } from '../components/DisplaySettings';
 
 function Row({
   to,
@@ -33,7 +34,7 @@ function Row({
         to={to}
         className="flex min-h-14 items-center gap-3 px-4 py-2 text-text no-underline hover:bg-surface-subtle"
       >
-        <Icon name={icon} className="text-primary-700" />
+        <Icon name={icon} className="text-link" />
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="font-semibold">{label}</span>
           {value && <span className="text-sm leading-5 text-text-muted">{value}</span>}
@@ -50,7 +51,7 @@ function PolicyRows() {
       <h2 id="privacy-heading" className="type-h3 px-4">
         {t('me.privacy')}
       </h2>
-      <ul className="m-0 list-none divide-y divide-border border-y border-border bg-surface p-0">
+      <ul className="group mx-4">
         <Row to="/policy/privacy" icon="doc" label={t('settings.policy')} />
         <Row to="/policy/terms" icon="doc" label={t('settings.terms')} />
       </ul>
@@ -89,6 +90,7 @@ function SignedOut() {
         </Button>
       </EmptyState>
       <div className="flex flex-col gap-6 pb-4">
+        <DisplaySettings />
         <PolicyRows />
         <About />
       </div>
@@ -154,20 +156,20 @@ function SignedIn() {
         </div>
 
         {setupPath && (
-          <div className="mx-4 flex flex-col gap-3 rounded-md border border-border bg-surface p-4">
+          <div className="card mx-4 flex flex-col gap-3 p-4">
             <h2 className="type-h3">{t('me.setup.title')}</h2>
             <p className="text-text-muted">{t('me.setup.body')}</p>
             <Link
               to={setupPath}
               onClick={() => saveIntent({ kind: 'other', returnTo: '/profile' })}
-              className="inline-flex min-h-12 items-center justify-center rounded-md bg-action px-5 py-3 font-semibold text-on-action no-underline hover:bg-action-hover"
+              className="btn btn-primary"
             >
               {t('me.setup.cta')}
             </Link>
           </div>
         )}
 
-        <ul className="m-0 list-none divide-y divide-border border-y border-border bg-surface p-0">
+        <ul className="group mx-4">
           <Row to={`/user/${u.id}`} icon="user" label={t('me.viewPublic')} />
           <Row to="/profile/edit" icon="rides" label={t('me.edit')} />
           <Row
@@ -177,6 +179,8 @@ function SignedIn() {
             value={u.hasVehicle ? car : t('me.car.none')}
           />
         </ul>
+
+        <DisplaySettings />
 
         <PolicyRows />
 

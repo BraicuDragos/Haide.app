@@ -40,7 +40,7 @@ export function CheckEmailScreen() {
         onBack={() => void navigate('/auth', { replace: true })}
       />
       <div className="flex flex-col items-center gap-4 px-4 py-8 text-center">
-        <span className="grid size-20 place-items-center rounded-full bg-primary-100 text-primary-800">
+        <span className="grid size-20 place-items-center rounded-full bg-tint text-on-tint [box-shadow:var(--elev-seat)]">
           <Icon name="mail" className="size-9" />
         </span>
         <p className="max-w-[32ch] break-words">{t('auth.check.body', { email })}</p>

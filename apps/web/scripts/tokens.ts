@@ -5,8 +5,8 @@
  * Run: pnpm --filter @haide/web tokens   (also runs before `build`)
  *
  * Output:
- *   :root            raw values as --tk-* custom properties + light role tokens (--theme-*)
- *   [data-theme=dark] dark role tokens (not enabled in the MVP, ready for later)
+ *   :root              raw values as --tk-* custom properties + dark role tokens (--theme-*), the default
+ *   [data-theme=light] light role tokens
  *   @theme inline    Tailwind v4 theme wired to the --tk-* / --theme-* variables
  *   @utility type-*  typography scale from font.scale
  *
@@ -28,6 +28,7 @@ const lines: string[] = [];
 const root: string[] = [];
 const theme: string[] = [];
 const utilities: string[] = [];
+const springs: string[] = []; // linear() easings, applied only where supported (see below)
 
 // ---- raw palette ----
 for (const [family, value] of Object.entries(
@@ -85,9 +86,26 @@ for (const [k, v] of Object.entries<string>(t.shadow)) {
 }
 for (const [k, v] of Object.entries<string>(t.motion.duration)) root.push(`--tk-dur-${k}: ${v};`);
 for (const [k, v] of Object.entries<string>(t.motion.easing)) {
-  root.push(`--tk-ease-${k}: ${v};`);
+  // A linear() spring ships with a "<name>-fallback" cubic-bezier for browsers without linear().
+  const fallback = t.motion.easing[`${k}-fallback`];
+  if (v.startsWith('linear(') && fallback) {
+    root.push(`--tk-ease-${k}: ${fallback};`);
+    springs.push(`--tk-ease-${k}: ${v};`);
+  } else {
+    root.push(`--tk-ease-${k}: ${v};`);
+  }
   theme.push(`--ease-${k}: var(--tk-ease-${k});`);
 }
+// E-DM extras: flat groups emitted as --tk-<prefix>-<key> (depth, travel distances, stagger, press scales).
+const extras: Array<[string, Record<string, string> | undefined]> = [
+  ['blur', t.depth?.blur],
+  ['grain', t.depth?.grain],
+  ['travel', t.motion.distance],
+  ['stagger', t.motion.stagger],
+  ['scale', t.motion.scale],
+];
+for (const [prefix, group] of extras)
+  for (const [k, v] of Object.entries(group ?? {})) root.push(`--tk-${prefix}-${k}: ${v};`);
 for (const [k, v] of Object.entries<string>(t.breakpoint)) theme.push(`--breakpoint-${k}: ${v};`);
 for (const [k, v] of Object.entries<string>(t.sizing)) root.push(`--tk-size-${k}: ${v};`);
 
@@ -110,14 +128,26 @@ lines.push(
   '',
   ':root {',
   ...root.map((l) => `  ${l}`),
-  '  /* light theme roles */',
-  ...roleBlock('light').map((l) => `  ${l}`),
-  '}',
-  '',
-  ":root[data-theme='dark'] {",
+  '  /* dark theme roles: the default (ADR 0016) */',
   ...roleBlock('dark').map((l) => `  ${l}`),
+  '  color-scheme: dark;',
   '}',
   '',
+  ":root[data-theme='light'] {",
+  ...roleBlock('light').map((l) => `  ${l}`),
+  '  color-scheme: light;',
+  '}',
+  '',
+  ...(springs.length
+    ? [
+        '@supports (transition-timing-function: linear(0, 1)) {',
+        '  :root {',
+        ...springs.map((l) => `    ${l}`),
+        '  }',
+        '}',
+        '',
+      ]
+    : []),
   '@theme inline {',
   '  --color-*: initial;',
   '  --text-*: initial;',

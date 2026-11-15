@@ -16,7 +16,7 @@ export function Notice({ tone, children }: { tone: Tone; children: ReactNode }) 
   return (
     <div
       role={tone === 'error' ? 'alert' : 'status'}
-      className={`flex items-start gap-2 rounded-md px-3 py-3 text-sm leading-5 font-semibold ${box}`}
+      className={`flex items-start gap-2 rounded-lg px-4 py-3 text-sm leading-5 font-semibold ${box}`}
     >
       <Icon name={icon} small className="mt-0.5" />
       <div>{children}</div>

@@ -9,6 +9,7 @@ import { GeolocationFailure, getCurrentPoint } from '@/lib/geolocation';
 import { useDebounced } from '@/lib/useDebounced';
 import { Button } from '@/ui/Button';
 import { Icon } from '@/ui/Icon';
+import { MiniLoader } from '@/ui/Loader';
 import { Notice } from '@/ui/Notice';
 import { Sheet } from '@/ui/Sheet';
 
@@ -110,7 +111,7 @@ function PickerBody({ onSelect }: { onSelect: (place: Place) => void }) {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder={t('place.search')}
-            className="min-h-12 w-full rounded-md border border-border-strong bg-surface py-3 pr-3 pl-11 text-md"
+            className="control min-h-12 border border-border-strong py-3 pr-3 pl-11"
           />
         </div>
         <p className="text-sm leading-5 text-text-muted">{t('place.hint')}</p>
@@ -151,7 +152,7 @@ function PickerBody({ onSelect }: { onSelect: (place: Place) => void }) {
                     setQ(s);
                     inputRef.current?.focus();
                   }}
-                  className="min-h-11 rounded-full border border-border-strong bg-surface px-4 py-2 font-semibold hover:bg-tint"
+                  className="min-h-11 rounded-full border border-border-strong px-4 py-2 font-semibold hover:bg-tint"
                 >
                   {s}
                 </button>
@@ -161,13 +162,8 @@ function PickerBody({ onSelect }: { onSelect: (place: Place) => void }) {
         )}
 
         {pending && !search.isError && (
-          <div aria-busy="true" className="flex flex-col gap-2">
-            <p role="status" className="sr-only">
-              {t('place.searching')}
-            </p>
-            {[0, 1, 2].map((i) => (
-              <div key={i} className="skeleton h-14" />
-            ))}
+          <div role="status" aria-busy="true" className="grid place-items-center py-4">
+            <MiniLoader label={t('place.searching')} />
           </div>
         )}
 
@@ -200,7 +196,7 @@ function PickerBody({ onSelect }: { onSelect: (place: Place) => void }) {
                       onClick={() => onSelect(p)}
                       className="flex min-h-14 w-full items-center gap-3 px-1 py-2 text-left hover:bg-surface-subtle"
                     >
-                      <Icon name="pin" className="text-primary-700" />
+                      <Icon name="pin" className="text-link" />
                       <span className="min-w-0">
                         <span className="block font-semibold">{p.name}</span>
                         <span className="block text-sm leading-5 text-text-muted">

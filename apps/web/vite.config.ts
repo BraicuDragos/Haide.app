@@ -8,9 +8,21 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 const r = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 
-// Brand colours come from docs/brand/design-tokens.json (primary-900 = hero/dark chrome, primary-500 = action).
-const THEME_COLOUR = '#1E1A52';
-const BACKGROUND_COLOUR = '#F7F7FB';
+// Browser chrome colours come from the tokens file (theme roles: bg), never typed here.
+const tokens = JSON.parse(readFileSync(r('../../docs/brand/design-tokens.json'), 'utf8')) as {
+  theme: { dark: { bg: string }; light: { bg: string } };
+};
+const THEME_DARK = tokens.theme.dark.bg;
+const THEME_LIGHT = tokens.theme.light.bg;
+
+/** Fills the %THEME_*% placeholders in index.html (theme-color meta tags) from the tokens. */
+function themeColour(): Plugin {
+  return {
+    name: 'theme-colour',
+    transformIndexHtml: (html) =>
+      html.replaceAll('%THEME_DARK%', THEME_DARK).replaceAll('%THEME_LIGHT%', THEME_LIGHT),
+  };
+}
 
 /** `vite preview` has no Cloudflare Pages: apply the `/*` block of public/_headers so CSP is exercised locally and in e2e. */
 function pagesHeaders(): Plugin {
@@ -72,6 +84,7 @@ export default defineConfig({
   plugins: [
     react(),
     pagesHeaders(),
+    themeColour(),
     tailwindcss(),
     VitePWA({
       strategies: 'injectManifest',
@@ -88,8 +101,8 @@ export default defineConfig({
         scope: '/',
         display: 'standalone',
         orientation: 'portrait',
-        theme_color: THEME_COLOUR,
-        background_color: BACKGROUND_COLOUR,
+        theme_color: THEME_DARK,
+        background_color: THEME_DARK,
         icons: [
           { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
           { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
