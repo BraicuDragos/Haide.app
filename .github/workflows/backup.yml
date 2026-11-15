@@ -1,0 +1,60 @@
+name: Backup
+
+# Nightly encrypted logical backup (architecture 4.3). Disabled until PROD_API_URL is set.
+# Contains: schema app (without the reseedable gazetteer tables) + auth.users + auth.identities.
+# Encrypted with age to the owner's public key; the 14-day artifact retention is the retention policy.
+on:
+  schedule:
+    - cron: '30 1 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    if: ${{ vars.PROD_API_URL != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Install pg_dump 17 and age
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-common age
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-client-17
+      - name: Link project (gives us the session pooler URL)
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: supabase link --project-ref "${{ vars.SUPABASE_PROJECT_REF }}"
+      - name: Dump, compress, encrypt
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          AGE_PUBLIC_KEY: ${{ vars.BACKUP_AGE_PUBLIC_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          stamp="$(date -u +%Y%m%d-%H%M)"
+          url="$(cat supabase/.temp/pooler-url)"
+          pg_dump=/usr/lib/postgresql/17/bin/pg_dump
+          # pg_dump ignores --schema when --table is given, so this is two dumps in one stream:
+          # 1. the whole app schema (types, functions, tables, data) minus the reseedable gazetteer;
+          # 2. the data of the two auth tables (restore: run migrations first, then this file).
+          {
+            "$pg_dump" "$url" --no-owner --no-privileges \
+              --schema=app --exclude-table=app.areas --exclude-table=app.places
+            "$pg_dump" "$url" --no-owner --no-privileges --data-only \
+              --table=auth.users --table=auth.identities
+          } | gzip -9 | age -r "$AGE_PUBLIC_KEY" > "haide-$stamp.sql.gz.age"
+          ls -l "haide-$stamp.sql.gz.age"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: haide-backup
+          path: haide-*.sql.gz.age
+          retention-days: 14
+          if-no-files-found: error

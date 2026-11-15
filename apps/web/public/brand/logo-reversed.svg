@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 250 80" width="250" height="80" role="img" aria-labelledby="t">
+  <title id="t">Haide</title>
+  <!-- for dark backgrounds (#1B1A2E / #1E1A52 and darker) -->
+  <rect x="0" y="8" width="64" height="64" rx="16" fill="#A9A2E8"/>
+  <g transform="translate(0 8)" fill="none" stroke="#1E1A52" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M20.5 14V50"/>
+    <path d="M20.5 38C20.5 30 25.5 26 31.5 26C37.5 26 41.5 30 41.5 36V44"/>
+  </g>
+  <circle cx="41.5" cy="56" r="5.5" fill="#FFC21A"/>
+  <g transform="translate(87 12.5) scale(1.25)" fill="none" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+    <g><path d="M0 4V40"/><path d="M0 30C0 23 5 20 11 20C17 20 20 24 20 30V40"/></g>
+    <g transform="translate(31 0)"><circle cx="10" cy="30" r="10"/><path d="M20 20V40"/></g>
+    <path d="M62 20V40"/>
+    <g transform="translate(73 0)"><circle cx="10" cy="30" r="10"/><path d="M20 4V40"/></g>
+    <path d="M104 30H124C124 24.5 119.500 20 114 20C108.500 20 104 24.500 104 30C104 35.500 108.500 40 114 40C118 40 121 38.500 123 36"/>
+    <circle cx="62" cy="9" r="3.6" fill="#FFC21A" stroke="none"/>
+  </g>
+</svg>

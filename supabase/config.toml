@@ -1,0 +1,111 @@
+# Supabase CLI configuration (local stack and `supabase config push`).
+# Reference: https://supabase.com/docs/guides/local-development/cli/config
+# Production values come from deploy.md section 4.4 and are applied by deploy.yml.
+
+project_id = "haide"
+
+[api]
+enabled = true
+port = 54321
+# The `app` schema is deliberately NOT exposed through the Data API (data-model 5.1).
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 17
+
+[db.pooler]
+enabled = false
+
+[db.seed]
+enabled = true
+sql_paths = ["./seed.sql"]
+
+[realtime]
+enabled = false
+
+[studio]
+enabled = true
+port = 54323
+
+# Local mail catcher (Mailpit). Magic-link emails land here, UI at http://127.0.0.1:54324.
+# `[local_smtp]` replaced `[inbucket]` (CLI >= 2.108).
+[local_smtp]
+enabled = true
+port = 54324
+
+[storage]
+enabled = true
+file_size_limit = "5MiB"
+
+# Public avatars bucket. Writes happen only through the API with the secret key (no policies
+# for anon/authenticated). Objects are re-encoded 512x512 JPEGs.
+[storage.buckets.avatars]
+public = true
+file_size_limit = "1536KiB"
+allowed_mime_types = ["image/jpeg"]
+
+[auth]
+enabled = true
+site_url = "http://localhost:5173"
+additional_redirect_urls = [
+  "http://localhost:5173/auth/callback",
+  "http://127.0.0.1:5173/auth/callback",
+]
+jwt_expiry = 3600
+enable_refresh_token_rotation = true
+refresh_token_reuse_interval = 10
+enable_signup = true
+enable_anonymous_sign_ins = false
+enable_manual_linking = false
+
+[auth.rate_limit]
+email_sent = 60
+sign_in_sign_ups = 30
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+enable_confirmations = true
+secure_password_change = true
+max_frequency = "60s"
+otp_length = 6
+# Magic link / OTP validity: 15 minutes (deploy.md 4.4).
+otp_expiry = 900
+
+# Google sign-in. Disabled here because the CLI refuses to start with an enabled provider whose
+# env vars are empty. deploy.yml flips `enabled` to true and supplies the two env vars before
+# `supabase config push`. Local developers who want it: set both vars in .env and enable it.
+[auth.external.google]
+enabled = false
+client_id = "env(GOOGLE_CLIENT_ID)"
+secret = "env(GOOGLE_CLIENT_SECRET)"
+skip_nonce_check = false
+
+# Production SMTP (Brevo) is added by deploy.yml, see deploy.md 4.4. Local uses the mail catcher.
+# [auth.email.smtp]
+# host = "smtp-relay.brevo.com"
+# port = 587
+# user = "env(BREVO_SMTP_LOGIN)"
+# pass = "env(BREVO_SMTP_KEY)"
+# admin_email = "no-reply@haide.ro"
+# sender_name = "Haide"
+
+[edge_runtime]
+enabled = true
+policy = "per_worker"
+
+# One fat function serves the whole API under /functions/v1/api/v1/*.
+# verify_jwt = false because public routes must work signed out: the function verifies tokens
+# itself (JWKS) and applies the gates in architecture 8.
+[functions.api]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/api/index.ts"
+import_map = "./functions/deno.json"
+
+[analytics]
+enabled = false

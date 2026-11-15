@@ -1,0 +1,44 @@
+{
+  "name": "@haide/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "node --experimental-strip-types scripts/tokens.ts && tsc --noEmit && vite build",
+    "preview": "vite preview --port 4173 --strictPort",
+    "typecheck": "tsc --noEmit",
+    "tokens": "node --experimental-strip-types scripts/tokens.ts",
+    "icons": "node --experimental-strip-types scripts/icons.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.107.1",
+    "maplibre-gl": "^6.18.0",
+    "pmtiles": "^4.5.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-router": "^7.18.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.3.5",
+    "@testing-library/react": "16.3.3",
+    "@types/node": "^24.19.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "6.3.0",
+    "jsdom": "31.0.1",
+    "tailwindcss": "4.3.5",
+    "typescript": "5.9.3",
+    "vite": "8.3.8",
+    "vite-plugin-pwa": "2.0.0",
+    "vitest": "4.1.12",
+    "workbox-build": "7.4.1",
+    "workbox-core": "7.4.1",
+    "workbox-precaching": "7.4.1",
+    "workbox-range-requests": "7.4.1",
+    "workbox-routing": "7.4.1",
+    "workbox-strategies": "7.4.1",
+    "workbox-window": "7.4.1"
+  }
+}

@@ -1,0 +1,154 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Deno 2 matches the Supabase Edge Runtime (conventions 2).
+  DENO_VERSION: 2.x
+
+jobs:
+  checks:
+    name: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4 # version comes from "packageManager" in package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - name: Unit tests with coverage (domain >= 90 % lines)
+        run: pnpm test
+      - name: Web build
+        run: pnpm build
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: ${{ env.DENO_VERSION }}
+      - name: Deno check and lint (Edge Function, as it runs in production)
+        run: |
+          deno check --config supabase/functions/deno.json supabase/functions/api/index.ts
+          deno lint --config supabase/functions/deno.json --ignore='**/*.test.ts,**/testing.ts' supabase/functions
+      - name: Dependency audit
+        run: pnpm audit --prod --audit-level=high
+
+  integration:
+    name: integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    needs: checks
+    env:
+      API_BASE_URL: http://127.0.0.1:54321/functions/v1/api/v1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Start the local Supabase stack
+        timeout-minutes: 4
+        run: supabase start -x studio,imgproxy,logflare,vector,realtime,postgres-meta
+      - name: Reset database (migrations + seed)
+        timeout-minutes: 2
+        run: supabase db reset
+      - name: pgTAP (grants, RLS, functions, gazetteer search)
+        timeout-minutes: 2
+        run: supabase test db
+      - name: Serve the API function
+        timeout-minutes: 3
+        run: |
+          # Deno's resolver inside the edge runtime fails on Docker DNS names (ENOTFOUND although
+          # getent works), so connect to the DB container by IP on the Supabase network (the same
+          # network the edge runtime joins). Fall back to the name if the lookup yields nothing.
+          DB_HOST=$(docker inspect -f '{{with index .NetworkSettings.Networks "supabase_network_haide"}}{{.IPAddress}}{{end}}' supabase_db_haide 2>/dev/null || true)
+          [ -n "$DB_HOST" ] || DB_HOST=supabase_db_haide
+          echo "DB host for the API: $DB_HOST"
+          # Throwaway values for this job only: nothing here is a real secret.
+          cat > "$RUNNER_TEMP/api.env" <<EOF
+          APP_ENV=test
+          APP_VERSION=${GITHUB_SHA}
+          API_DB_URL=postgresql://haide_api:haide_api_local@${DB_HOST}:5432/postgres
+          CRON_SECRET=$(openssl rand -hex 16)
+          IP_HASH_SALT_SEED=$(openssl rand -hex 16)
+          ROUTING_PROVIDER=fixture
+          EMAIL_PROVIDER=console
+          CORS_ORIGINS=http://localhost:5173
+          EOF
+          echo "CRON_SECRET=$(grep ^CRON_SECRET "$RUNNER_TEMP/api.env" | cut -d= -f2)" >> "$GITHUB_ENV"
+          # Fully detached: own session, no stdin, all output in a log file, so nothing can hold the step open.
+          setsid nohup supabase functions serve api --no-verify-jwt --env-file "$RUNNER_TEMP/api.env" \
+            < /dev/null > "$RUNNER_TEMP/functions.log" 2>&1 &
+          SERVE_PID=$!
+          disown "$SERVE_PID" || true
+          deadline=$((SECONDS + 90))
+          code=000
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --connect-timeout 3 --max-time 5 "$API_BASE_URL/health" || true)
+            if [ "$code" = "200" ]; then echo "API is up"; exit 0; fi
+            if ! kill -0 "$SERVE_PID" 2> /dev/null; then echo "serve process exited early"; break; fi
+            sleep 3
+          done
+          echo "API did not start (last HTTP status: $code)"
+          echo "--- functions.log (tail) ---"; tail -n 80 "$RUNNER_TEMP/functions.log" || true
+          echo "--- docker ps ---"; docker ps -a || true
+          echo "--- docker networks ---"; docker network ls || true
+          echo "--- role login check (inside DB container) ---"
+          docker exec -e PGPASSWORD=haide_api_local supabase_db_haide \
+            psql -h 127.0.0.1 -U haide_api -d postgres -c 'select current_user' 2>&1 || true
+          docker exec supabase_db_haide psql -U postgres -d postgres \
+            -c "select rolname, rolcanlogin, rolpassword is not null as has_pw from pg_roles where rolname='haide_api'" 2>&1 || true
+          echo "--- networks per container ---"
+          for c in $(docker ps --format '{{.Names}}' | grep -i 'haide' || true); do
+            echo "$c: $(docker inspect -f '{{range $k,$v := .NetworkSettings.Networks}}{{$k}}={{$v.IPAddress}} {{end}}' "$c")"
+          done
+          echo "--- DNS/TCP from edge runtime container ---"
+          for c in $(docker ps --format '{{.Names}}' | grep -i edge_runtime || true); do
+            docker exec "$c" getent hosts supabase_db_haide 2>&1 || true
+            docker exec "$c" sh -c 'timeout 3 bash -c "echo > /dev/tcp/supabase_db_haide/5432" && echo tcp-ok' 2>&1 || true
+          done
+          echo "--- health_db_down events ---"; grep health_db_down "$RUNNER_TEMP/functions.log" | tail -n 3 || true
+          for c in $(docker ps -a --format '{{.Names}}' | grep -i edge_runtime || true); do
+            echo "--- logs: $c ---"; docker logs --tail 80 "$c" 2>&1 || true
+          done
+          exit 1
+      - name: API integration tests
+        timeout-minutes: 3
+        run: pnpm test:int
+      - name: Playwright smoke (360x800, axe), once the QA epic adds the config
+        timeout-minutes: 6
+        run: |
+          if [ -f playwright.config.ts ]; then
+            pnpm exec playwright install --with-deps chromium
+            pnpm test:e2e
+          else
+            echo "No playwright.config.ts yet, skipping"
+          fi
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-logs
+          path: |
+            ${{ runner.temp }}/functions.log
+            playwright-report/
+            test-results/
+          retention-days: 7
+          if-no-files-found: ignore
