@@ -6,9 +6,25 @@ import type { AppBindings, TokenVerifier } from '../types.ts';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** Issuer of tokens from the local `supabase start` stack (API port 54321 in config.toml). */
+export const LOCAL_JWT_ISSUER = 'http://127.0.0.1:54321/auth/v1';
+
+/**
+ * Expected `iss` claim. JWT_ISSUER wins. Otherwise production derives it from SUPABASE_URL
+ * (the public project URL) and every other environment uses the local stack default.
+ */
+export function resolveJwtIssuer(env: Pick<Env, 'APP_ENV' | 'SUPABASE_URL' | 'JWT_ISSUER'>) {
+  if (env.JWT_ISSUER) return env.JWT_ISSUER;
+  if (env.APP_ENV === 'production' && env.SUPABASE_URL) {
+    return `${env.SUPABASE_URL.replace(/\/+$/, '')}/auth/v1`;
+  }
+  return LOCAL_JWT_ISSUER;
+}
+
 /**
  * Production: asymmetric tokens verified against the project JWKS (cached by jose).
  * Local development: HS256 with LOCAL_JWT_SECRET when set (never in production).
+ * Both paths check the audience AND the issuer.
  */
 export function createTokenVerifier(env: Env): TokenVerifier {
   const jwks = env.SUPABASE_URL
@@ -21,20 +37,23 @@ export function createTokenVerifier(env: Env): TokenVerifier {
     env.APP_ENV !== 'production' && env.LOCAL_JWT_SECRET
       ? new TextEncoder().encode(env.LOCAL_JWT_SECRET)
       : null;
+  const issuer = resolveJwtIssuer(env);
 
   return async (token) => {
     const { alg } = decodeProtectedHeader(token);
-    const options = { audience: 'authenticated' };
-    let sub: string | undefined;
+    const options = { audience: 'authenticated', issuer, requiredClaims: ['exp', 'sub'] };
+    let payload: { sub?: string; email?: unknown };
     if (alg === 'HS256') {
       if (!localSecret) throw new Error('HS256 tokens are not accepted');
-      sub = (await jwtVerify(token, localSecret, options)).payload.sub;
+      payload = (await jwtVerify(token, localSecret, options)).payload;
     } else {
       if (!jwks) throw new Error('No JWKS configured');
-      sub = (await jwtVerify(token, jwks, options)).payload.sub;
+      payload = (await jwtVerify(token, jwks, options)).payload;
     }
+    const sub = payload.sub;
     if (!sub || !UUID_RE.test(sub)) throw new Error('Token has no valid subject');
-    return { userId: sub };
+    const email = typeof payload.email === 'string' && payload.email ? payload.email : null;
+    return { userId: sub.toLowerCase(), email };
   };
 }
 
@@ -55,7 +74,7 @@ export const authMiddleware: MiddlewareHandler<AppBindings> = async (c, next) =>
   await next();
 };
 
-/** Gate 1 of 6 (api-contract / architecture §8). More gates arrive with E1. */
+/** Gate 1 (api-contract / architecture §8). The other gates live in gates.ts. */
 export const requireAuth: MiddlewareHandler<AppBindings> = async (c, next) => {
   if (!c.get('auth')) throw new AppError('UNAUTHENTICATED', 'Sign in to continue.');
   await next();

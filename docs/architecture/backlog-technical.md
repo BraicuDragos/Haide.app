@@ -65,7 +65,7 @@ Launch-ready = E0–E7. Phase 7 (deploy, [deploy.md](deploy.md)) follows GATE 3.
 2. Gates middleware: `requireAuth`, `requireActive`, `requireConsent`, `requireProfile`, `requireVehicle`, `requireAdmin`.
 3. Endpoints: `GET /legal/current`, `GET /me`, `POST /me/consents`, `PATCH /me/profile`, `PUT /me/photo`, `GET|PUT /me/vehicle`, `GET /users/{id}`.
 4. Domain: `validation.ts`: first name (Unicode letters 1–30), Romanian mobile phone normalisation (`0721 234 567` → `+40721234567`; reject non-`+407`), plate normalisation, bio ≤ 200. Unit tests with diacritics (Ștefan, Țepeș).
-5. Photo pipeline: magic bytes, ≤ 1.5 MB, decode + re-encode 512×512 JPEG (imagescript), upload to `avatars/<uuid>.jpg` with the secret key, delete the previous object. Test: an uploaded JPEG with GPS EXIF comes back without EXIF.
+5. Photo pipeline: magic bytes, ≤ 1.5 MB, decode + re-encode 512×512 JPEG (Jimp), upload to `avatars/<uuid>.jpg` with the secret key, delete the previous object. Test: an uploaded JPEG with GPS EXIF comes back without EXIF.
 
 **FE**
 1. Screens 1.1–1.7 (sign in, check email, agreement, profile setup, car, public profile, own profile) per the prototype and copy.md.

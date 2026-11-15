@@ -54,6 +54,8 @@ site_url = "http://localhost:5173"
 additional_redirect_urls = [
   "http://localhost:5173/auth/callback",
   "http://127.0.0.1:5173/auth/callback",
+  # vite preview, used by the Playwright run in CI
+  "http://localhost:4173/auth/callback",
 ]
 jwt_expiry = 3600
 enable_refresh_token_rotation = true

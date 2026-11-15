@@ -3,32 +3,29 @@
 > Updated by the Orchestrator after every step. Read at the start of every session.
 
 ## Current state
-- **Phase:** 5 — scaffold + CI (E0) built and QA-approved; PR on branch `chore/scaffold`
-- **Open PRs:** E0 scaffold PR (being opened)
-- **Approved gates:** GATE 1 (PR #1), GATE 2 (PR #2) — both merged
+- **Phase:** 6 — features. E1 (accounts) built and QA-approved; PR on branch `feat/accounts`
+- **Open PRs:** E1 PR (being opened)
+- **Approved gates:** GATE 1 (PR #1), GATE 2 (PR #2); E0 merged (PR #3)
 
 ## Done
-- [x] Phase 1 — product strategy (ADRs 0001–0005) — PR #1
-- [x] Phase 2 — brand "Haide" (ADRs 0006–0007) — PR #1
-- [x] Phase 3 — UX + clickable prototype (ADRs 0008–0011) — PR #2
-- [x] Phase 4 — architecture (ADRs 0012–0015) — PR #2
-- [x] Phase 5 — E0 scaffold: pnpm workspace, Supabase baseline migration + gazetteer (22.6k places), Hono API (`/health`, `/places`, ...), PWA shell, place picker, RouteMap, CI workflows (deploy guarded). QA: APPROVED (lint, typecheck, 102 unit tests, 13 Playwright+axe, Lighthouse a11y 100)
+- [x] Phases 1–4: strategy, brand "Haide", UX + prototype, architecture (ADRs 0001–0015)
+- [x] Phase 5 — E0 scaffold + CI (PR #3, merged; CI green incl. integration)
+- [x] E1 — accounts, profile, vehicle: migration `20261116090000_accounts.sql` (6 tables, RLS), gates middleware, account endpoints, photo pipeline (Jimp), JWT iss check, bodyLimit; auth + onboarding + profile screens, policy pages. QA: APPROVED (292 unit tests, 30 mocked Playwright, initial JS 155 KB gzip)
 
 ## Next step
-- Owner merges E0 PR → Phase 6, epic E1 `feat/accounts` (see `docs/architecture/backlog-technical.md`)
+- Owner merges E1 PR → epic **E-DM** (design & motion), brief: `docs/brand/design-direction.md` (starts only after E1 merge; branch `feat/design-motion`) → then E2 (rides + pricing engine)
 
-## Not verified in E0 (no Docker/Supabase CLI/Deno on this machine) — CI must confirm
-- `supabase db reset`, pgTAP, `deno check/lint`, workflow runs, `build-tiles.sh`, real-tile map rendering, hosted-Supabase `bypassrls` role creation, `backup.yml` dump.
+## Not verified locally in E1 — CI must confirm
+- Migration + pgTAP 004, `deno check/lint`, imagescript wasm under Deno, integration tests incl. Storage upload, real magic-link E2E, CI assumptions (`supabase seed buckets`, `supabase status -o env` keys, HS256 local JWT).
+- Production later: create `avatars` bucket on hosted project, pin CSP `img-src` to the project host.
 
-## Carry-forward findings (non-blocking, from QA)
-- E1: check JWT issuer in `auth.ts`; add `bodyLimit` (~64 KB) on public POST routes.
+## Carry-forward findings (non-blocking)
+- E1: imagescript replaced by pure-JS Jimp 1.6.1 (lazy import; native codec failed on Deno Edge Runtime); `PHOTO_MAX_PIXELS` lowered to 8 MP.
 - E4: retention/cleanup for `app.rate_limits` and `app.app_errors` via `/internal/tick`.
 - Every new migration must revoke PUBLIC EXECUTE on new `app` functions.
-- Reverse geocode casts to geography (skips GiST index) — fine at current size.
-- No Lighthouse step in CI yet. conventions.md says MapLibre 5; code uses v6 — update docs.
-- E3: PMTiles offline caching (206 responses) TODO in `sw.ts`.
+- E5 refines rating visibility (7-day / counter-rating); E6 adds `DELETE /me`.
+- No Lighthouse step in CI yet. conventions.md says MapLibre 5; code uses v6. PMTiles offline caching TODO in `sw.ts` (E3).
 
 ## Blockers / what the owner needs to provide
-- Nothing before Gate 3 (batch in `docs/architecture/deploy.md` §3).
-- Stale paths in `.claude/agents/frontend-dev.md`: `docs/ux/screens.md` → `docs/ux/ia-and-flows.md` §4; `assets/brand/design-tokens.json` → `docs/brand/design-tokens.json`. Owner config; briefs give correct paths.
-- `gh` is at `C:\Program Files\GitHub CLI\gh.exe` (not on bash PATH); `pnpm` not on PATH locally (use `npx pnpm`).
+- Nothing before Gate 3 (batch in `docs/architecture/deploy.md` §3). `haide.ro`/`haide.app` are taken; `haide.city`, `gohaide.app` look free — brand-guide domain advice needs updating.
+- `gh` is at `C:\Program Files\GitHub CLI\gh.exe`; `pnpm` not on PATH locally (use `npx pnpm`).

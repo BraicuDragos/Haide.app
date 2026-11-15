@@ -35,6 +35,7 @@
     "fast-check": "4.10.2",
     "globals": "16.5.0",
     "hono": "4.13.18",
+    "jimp": "1.6.1",
     "jose": "6.2.17",
     "polygon-clipping": "0.15.7",
     "postgres": "3.4.9",

@@ -72,6 +72,17 @@ jobs:
       - name: pgTAP (grants, RLS, functions, gazetteer search)
         timeout-minutes: 2
         run: supabase test db
+      - name: Check the avatars storage bucket
+        timeout-minutes: 2
+        run: |
+          # The bucket is declared in supabase/config.toml. `db reset` seeds it; seed again (idempotent)
+          # and fail here, not in an upload test, when it is missing.
+          supabase seed buckets
+          eval "$(supabase status -o env | grep -E '^SERVICE_ROLE_KEY=')"
+          code=$(curl -s -o /dev/null -w '%{http_code}' \
+            -H "authorization: Bearer $SERVICE_ROLE_KEY" \
+            http://127.0.0.1:54321/storage/v1/bucket/avatars || true)
+          [ "$code" = "200" ] || { echo "avatars bucket missing (HTTP $code)"; exit 1; }
       - name: Serve the API function
         timeout-minutes: 3
         run: |
@@ -81,7 +92,14 @@ jobs:
           DB_HOST=$(docker inspect -f '{{with index .NetworkSettings.Networks "supabase_network_haide"}}{{.IPAddress}}{{end}}' supabase_db_haide 2>/dev/null || true)
           [ -n "$DB_HOST" ] || DB_HOST=supabase_db_haide
           echo "DB host for the API: $DB_HOST"
+          # Keys of the throw-away local stack (JWT_SECRET, SERVICE_ROLE_KEY, PUBLISHABLE_KEY / ANON_KEY).
+          eval "$(supabase status -o env | grep -E '^(JWT_SECRET|SERVICE_ROLE_KEY|PUBLISHABLE_KEY|ANON_KEY)=')"
+          [ -n "${JWT_SECRET:-}" ] && [ -n "${SERVICE_ROLE_KEY:-}" ] || { echo "supabase status did not print the local keys"; exit 1; }
+          # Used by the integration tests (mint tokens) and the Playwright build (browser client key).
+          echo "LOCAL_JWT_SECRET=${JWT_SECRET}" >> "$GITHUB_ENV"
+          echo "VITE_SUPABASE_PUBLISHABLE_KEY=${PUBLISHABLE_KEY:-$ANON_KEY}" >> "$GITHUB_ENV"
           # Throwaway values for this job only: nothing here is a real secret.
+          # SUPABASE_URL is injected by the CLI (container-internal address): do not set it here.
           cat > "$RUNNER_TEMP/api.env" <<EOF
           APP_ENV=test
           APP_VERSION=${GITHUB_SHA}
@@ -90,7 +108,10 @@ jobs:
           IP_HASH_SALT_SEED=$(openssl rand -hex 16)
           ROUTING_PROVIDER=fixture
           EMAIL_PROVIDER=console
-          CORS_ORIGINS=http://localhost:5173
+          CORS_ORIGINS=http://localhost:5173,http://localhost:4173
+          LOCAL_JWT_SECRET=${JWT_SECRET}
+          SUPABASE_SERVICE_ROLE_KEY=${SERVICE_ROLE_KEY}
+          AVATAR_PUBLIC_BASE_URL=http://127.0.0.1:54321/storage/v1/object/public
           EOF
           echo "CRON_SECRET=$(grep ^CRON_SECRET "$RUNNER_TEMP/api.env" | cut -d= -f2)" >> "$GITHUB_ENV"
           # Fully detached: own session, no stdin, all output in a log file, so nothing can hold the step open.
@@ -132,8 +153,14 @@ jobs:
       - name: API integration tests
         timeout-minutes: 3
         run: pnpm test:int
-      - name: Playwright smoke (360x800, axe), once the QA epic adds the config
+      - name: Playwright smoke (360x800, axe) and the real magic-link flow
         timeout-minutes: 6
+        env:
+          # e1-magic-link reads the confirmation email from Mailpit. The web build talks to the local
+          # stack (VITE_SUPABASE_PUBLISHABLE_KEY comes from the serve step through GITHUB_ENV).
+          E2E_MAILPIT_URL: http://127.0.0.1:54324
+          VITE_SUPABASE_URL: http://127.0.0.1:54321
+          VITE_API_BASE_URL: http://127.0.0.1:54321/functions/v1/api/v1
         run: |
           if [ -f playwright.config.ts ]; then
             pnpm exec playwright install --with-deps chromium

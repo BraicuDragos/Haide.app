@@ -36,10 +36,16 @@ function pagesHeaders(): Plugin {
         res.setHeader(
           k,
           k === 'Content-Security-Policy'
-            ? v.replace(
-                "connect-src 'self'",
-                "connect-src 'self' http://127.0.0.1:54321 http://localhost:54321",
-              )
+            ? v
+                .replace(
+                  "connect-src 'self'",
+                  "connect-src 'self' http://127.0.0.1:54321 http://localhost:54321",
+                )
+                // Avatars come from the local Storage API (public bucket).
+                .replace(
+                  "img-src 'self'",
+                  "img-src 'self' http://127.0.0.1:54321 http://localhost:54321",
+                )
             : v,
         );
       }

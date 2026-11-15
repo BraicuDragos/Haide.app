@@ -1,8 +1,10 @@
 import { Hono } from 'hono';
 import { authMiddleware } from './middleware/auth.ts';
+import { requestBodyLimit } from './middleware/bodyLimit.ts';
 import { corsMiddleware } from './middleware/cors.ts';
 import { onError, onNotFound } from './middleware/errors.ts';
 import { requestLogging } from './middleware/logging.ts';
+import { accountRoutes } from './routes/account.ts';
 import { placesRoutes } from './routes/places.ts';
 import { systemRoutes } from './routes/system.ts';
 import type { AppBindings, Deps } from './types.ts';
@@ -20,10 +22,12 @@ export function createApp(deps: Deps) {
   });
   app.use('*', requestLogging);
   app.use('*', corsMiddleware);
+  app.use('*', requestBodyLimit);
   app.use('*', authMiddleware);
 
   app.route('/', systemRoutes);
   app.route('/', placesRoutes);
+  app.route('/', accountRoutes);
 
   app.onError(onError);
   app.notFound(onNotFound);

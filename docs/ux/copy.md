@@ -328,6 +328,7 @@ First name, photo, phone required before booking or publishing. Bio optional.
 | `profile.err.phone` | Enter a Romanian mobile number, like 0721 234 567. |
 | `profile.err.photo` | Add a photo so people can recognise you. |
 | `profile.err.photoSize` | This photo is over 5 MB. Choose a smaller JPEG or PNG. |
+| `profile.err.photoInvalid` | We couldn’t read this photo. Choose a JPEG or PNG. |
 | `profile.edit.title` | Edit profile |
 
 ## 18. Vehicle (E1-4)
@@ -732,6 +733,8 @@ Pattern: what happened, then what to do. No apologies, no “Oops”, never “S
 | `error.notFound.body` | The link may be old. Start from Find. |
 | `error.notFound.cta` | Go to Find |
 | `error.fieldRequired` | Fill in this field. |
+| `errors.PHOTO_INVALID` | We couldn’t read this photo. Choose a JPEG or PNG. |
+| `errors.PHOTO_TOO_LARGE` | This photo is too large. Choose a smaller JPEG or PNG. |
 
 ## 34. Notification emails (E4-6)
 

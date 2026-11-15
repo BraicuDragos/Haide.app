@@ -2,6 +2,8 @@
   "imports": {
     "hono": "npm:hono@4.13.18",
     "hono/cors": "npm:hono@4.13.18/cors",
+    "hono/body-limit": "npm:hono@4.13.18/body-limit",
+    "jimp": "npm:jimp@1.6.1",
     "zod": "npm:zod@4.6.7",
     "postgres": "npm:postgres@3.4.9",
     "jose": "npm:jose@6.2.17"

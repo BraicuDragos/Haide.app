@@ -51,6 +51,30 @@ const PATHS = {
       <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
     </>
   ),
+  mail: (
+    <>
+      <rect x="3.5" y="5.5" width="17" height="13" rx="2" />
+      <path d="M4 7l8 6 8-6" />
+    </>
+  ),
+  car: (
+    <>
+      <path d="M4 15v-3l2-5h12l2 5v3z" />
+      <path d="M4 15v2.5M20 15v2.5M6.5 12h11" />
+    </>
+  ),
+  doc: (
+    <>
+      <path d="M7 3.5h7l4 4v13H7z" />
+      <path d="M14 3.5v4h4M9.5 12h6M9.5 15.5h6" />
+    </>
+  ),
+  camera: (
+    <>
+      <path d="M4 8h3l1.5-2.5h7L17 8h3v11H4z" />
+      <circle cx="12" cy="13" r="3.2" />
+    </>
+  ),
   map: <path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2zM9 4v14M15 6v14" />,
 } as const;
 
