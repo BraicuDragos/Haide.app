@@ -1,9 +1,9 @@
 {
   "$meta": {
     "name": "Haide design tokens",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "generated": "2026-11-15",
-    "note": "Single source of truth: docs/brand/design-tokens.json (there is no copy under assets/brand). Contrast ratios for every pair in theme.* are listed in docs/brand/brand-guide.md. Dark theme is optional for the MVP; tokens are provided so it can be added without redesign."
+    "note": "Single source of truth: docs/brand/design-tokens.json (there is no copy under assets/brand). 1.1.0 (epic E-DM, ADR 0016-0019): dark-first palette refinements (night and mist ramps, saffron as the dark-theme action), route/map/glass/price roles, Sora headings, depth tokens, motion tokens (durations, easings incl. linear() springs, distances, stagger, scale, signature map). Contrast of every pair is computed by docs/brand/tools/contrast.mjs and listed in docs/brand/design-direction.md section 8. Dark theme is the primary design target; light is the refined alternative."
   },
   "color": {
     "primary": {
@@ -51,6 +51,18 @@
       "800": "#2C2B41",
       "900": "#1B1A2E"
     },
+    "night": {
+      "500": "#7472A8",
+      "600": "#34336A",
+      "700": "#26254D",
+      "800": "#1C1B3D",
+      "900": "#12112A",
+      "950": "#0B0A1E"
+    },
+    "mist": {
+      "50": "#F2F1FB",
+      "200": "#B4B3D0"
+    },
     "success": {
       "50": "#E6F5EC",
       "500": "#1A7F45",
@@ -81,13 +93,15 @@
       "surface-subtle": "#EFEFF6",
       "text": "#1B1A2E",
       "text-muted": "#55556F",
-      "text-subtle": "#6B6B8A",
+      "text-subtle": "#666684",
       "border": "#E0E0EC",
       "border-strong": "#6B6B8A",
       "action": "#5043C6",
       "action-hover": "#4639B0",
       "action-pressed": "#382E92",
       "on-action": "#FFFFFF",
+      "outline": "#5043C6",
+      "on-outline": "#382E92",
       "accent": "#FFC21A",
       "on-accent": "#1B1A2E",
       "link": "#4639B0",
@@ -103,7 +117,24 @@
       "error": "#A8232F",
       "error-bg": "#FDECEE",
       "info": "#1B4F9E",
-      "info-bg": "#E8F1FD"
+      "info-bg": "#E8F1FD",
+      "bg-deep": "#EFEFF6",
+      "surface-glass": "rgba(255,255,255,0.82)",
+      "border-glass": "rgba(27,26,46,0.10)",
+      "scrim": "rgba(27,26,46,0.48)",
+      "price": "#1B1A2E",
+      "savings": "#0B6F78",
+      "route": "#382E92",
+      "route-core": "#5043C6",
+      "route-glow": "rgba(80,67,198,0.22)",
+      "pulse": "#FFC21A",
+      "pulse-ring": "#382E92",
+      "map-bg": "#EFEFF6",
+      "map-water": "#C5EBEC",
+      "map-park": "#E6F6F6",
+      "map-road": "#FFFFFF",
+      "map-building": "#E0E0EC",
+      "map-label": "#55556F"
     },
     "dark": {
       "bg": "#12112A",
@@ -114,10 +145,12 @@
       "text-subtle": "#B4B3D0",
       "border": "#34336A",
       "border-strong": "#7472A8",
-      "action": "#A9A2E8",
-      "action-hover": "#BDB7F0",
-      "action-pressed": "#8E85E0",
-      "on-action": "#1E1A52",
+      "action": "#FFC21A",
+      "action-hover": "#FFD04F",
+      "action-pressed": "#F2AC00",
+      "on-action": "#1B1A2E",
+      "outline": "#A9A2E8",
+      "on-outline": "#C9C5F2",
       "accent": "#FFC21A",
       "on-accent": "#1B1A2E",
       "link": "#A9A2E8",
@@ -133,19 +166,37 @@
       "error": "#FF8A94",
       "error-bg": "#40161C",
       "info": "#8DB8FF",
-      "info-bg": "#14284A"
+      "info-bg": "#14284A",
+      "bg-deep": "#0E0D26",
+      "surface-glass": "rgba(28,27,61,0.78)",
+      "border-glass": "rgba(242,241,251,0.10)",
+      "scrim": "rgba(8,7,24,0.62)",
+      "price": "#FFC21A",
+      "savings": "#5BC1C6",
+      "route": "#FFC21A",
+      "route-core": "#FFE08A",
+      "route-glow": "rgba(255,194,26,0.30)",
+      "pulse": "#FFF8E1",
+      "pulse-ring": "rgba(255,194,26,0.55)",
+      "map-bg": "#0E0D26",
+      "map-water": "#0F2A3C",
+      "map-park": "#12203A",
+      "map-road": "#262552",
+      "map-building": "#191840",
+      "map-label": "#9F9DC8"
     }
   },
   "font": {
     "family": {
       "base": "'Figtree', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
-      "heading": "'Bricolage Grotesque', 'Figtree', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"
+      "heading": "'Sora', 'Figtree', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif"
     },
     "source": {
       "base": "https://fonts.google.com/specimen/Figtree",
-      "heading": "https://fonts.google.com/specimen/Bricolage+Grotesque"
+      "heading": "https://fonts.google.com/specimen/Sora"
     },
     "weight": {
+      "light": 300,
       "regular": 400,
       "medium": 500,
       "semibold": 600,
@@ -159,7 +210,8 @@
       "xl": "20px",
       "2xl": "24px",
       "3xl": "32px",
-      "4xl": "40px"
+      "4xl": "40px",
+      "5xl": "56px"
     },
     "lineHeight": {
       "tight": 1.15,
@@ -167,40 +219,56 @@
       "normal": 1.5
     },
     "scale": {
+      "numeral": {
+        "family": "heading",
+        "size": "56px",
+        "lineHeight": "56px",
+        "weight": 300,
+        "letterSpacing": "-0.03em",
+        "fontFeature": "tnum"
+      },
+      "numeralSm": {
+        "family": "heading",
+        "size": "24px",
+        "lineHeight": "28px",
+        "weight": 400,
+        "letterSpacing": "-0.02em",
+        "fontFeature": "tnum"
+      },
       "display": {
         "family": "heading",
-        "size": "40px",
-        "lineHeight": "44px",
-        "weight": 700,
-        "letterSpacing": "-0.02em"
+        "size": "36px",
+        "lineHeight": "42px",
+        "weight": 600,
+        "letterSpacing": "-0.03em"
       },
       "h1": {
         "family": "heading",
-        "size": "32px",
-        "lineHeight": "38px",
-        "weight": 700,
-        "letterSpacing": "-0.015em"
+        "size": "28px",
+        "lineHeight": "34px",
+        "weight": 600,
+        "letterSpacing": "-0.025em"
       },
       "h2": {
         "family": "heading",
-        "size": "24px",
-        "lineHeight": "30px",
-        "weight": 700,
-        "letterSpacing": "-0.01em"
+        "size": "22px",
+        "lineHeight": "28px",
+        "weight": 600,
+        "letterSpacing": "-0.02em"
       },
       "h3": {
         "family": "heading",
-        "size": "20px",
-        "lineHeight": "26px",
+        "size": "18px",
+        "lineHeight": "24px",
         "weight": 600,
-        "letterSpacing": "0"
+        "letterSpacing": "-0.01em"
       },
       "price": {
         "family": "heading",
-        "size": "32px",
-        "lineHeight": "36px",
-        "weight": 700,
-        "letterSpacing": "-0.01em",
+        "size": "36px",
+        "lineHeight": "40px",
+        "weight": 400,
+        "letterSpacing": "-0.025em",
         "fontFeature": "tnum"
       },
       "bodyLg": {
@@ -257,21 +325,110 @@
     "sm": "6px",
     "md": "12px",
     "lg": "20px",
+    "xl": "28px",
     "full": "9999px"
   },
   "shadow": {
     "card": "0 1px 2px rgba(30,26,82,0.06), 0 12px 28px -12px rgba(30,26,82,0.18)",
     "raised": "0 2px 4px rgba(30,26,82,0.08), 0 20px 40px -16px rgba(30,26,82,0.28)",
-    "focus": "0 0 0 3px rgba(80,67,198,0.35)"
+    "focus": "0 0 0 3px rgba(80,67,198,0.35)",
+    "glass": "inset 0 1px 0 rgba(255,255,255,0.07), 0 24px 48px -24px rgba(5,4,20,0.70)",
+    "edge": "inset 0 0 0 1px rgba(255,255,255,0.08)",
+    "glow-cta": "0 0 0 1px rgba(255,194,26,0.30), 0 10px 36px -8px rgba(255,194,26,0.40)",
+    "glow-soft": "0 0 32px -4px rgba(255,194,26,0.28)"
+  },
+  "depth": {
+    "blur": {
+      "sm": "8px",
+      "md": "16px",
+      "lg": "28px"
+    },
+    "grain": {
+      "opacity": "0.05",
+      "size": "160px",
+      "image": "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E\")"
+    }
   },
   "motion": {
     "duration": {
+      "instant": "80ms",
       "fast": "120ms",
       "base": "200ms",
-      "slow": "400ms"
+      "moderate": "300ms",
+      "slow": "400ms",
+      "settle": "520ms",
+      "reveal": "700ms",
+      "draw": "900ms",
+      "launch": "900ms",
+      "pulse": "2400ms",
+      "ambient": "6000ms"
     },
     "easing": {
-      "standard": "cubic-bezier(0.2, 0, 0, 1)"
+      "standard": "cubic-bezier(0.2, 0, 0, 1)",
+      "enter": "cubic-bezier(0.05, 0.7, 0.1, 1)",
+      "exit": "cubic-bezier(0.3, 0, 0.8, 0.15)",
+      "momentum": "cubic-bezier(0.35, 0, 0.15, 1)",
+      "departure": "cubic-bezier(0.7, 0, 0.84, 0)",
+      "linear": "linear",
+      "spring-fallback": "cubic-bezier(0.34, 1.3, 0.64, 1)",
+      "spring": "linear(0, 0.032, 0.113, 0.225, 0.352, 0.483, 0.608, 0.721, 0.819, 0.901, 0.965, 1.014, 1.048, 1.069, 1.08, 1.084, 1.081, 1.074, 1.065, 1.054, 1.043, 1.033, 1.023, 1.015, 1.008, 1.003, 0.999, 0.996, 0.994, 0.993, 0.993, 0.993, 1)",
+      "magnet-fallback": "cubic-bezier(0.3, 1.6, 0.5, 1)",
+      "magnet": "linear(0, 0.039, 0.142, 0.286, 0.45, 0.618, 0.776, 0.913, 1.026, 1.11, 1.166, 1.197, 1.205, 1.196, 1.175, 1.145, 1.111, 1.077, 1.044, 1.016, 0.994, 0.977, 0.965, 0.959, 0.958, 0.96, 0.964, 0.971, 0.978, 0.985, 0.991, 0.997, 1.002, 1.005, 1.007, 1.008, 1.009, 1.008, 1.007, 1.006, 1)"
+    },
+    "distance": {
+      "nudge": "4px",
+      "rise": "12px",
+      "sheet": "24px",
+      "far": "48px"
+    },
+    "stagger": {
+      "step": "40ms",
+      "max": "240ms"
+    },
+    "scale": {
+      "press": "0.97",
+      "pop": "1.04"
+    },
+    "signature": {
+      "$doc": "Which shared tokens each signature moment uses. Details, reduced-motion fallbacks and rules: docs/brand/design-direction.md section 5. Only transform and opacity are animated, except the one-shot route draw-in (stroke-dashoffset).",
+      "routeDrawIn": {
+        "duration": "draw",
+        "easing": "momentum",
+        "loop": "pulse",
+        "pulseEasing": "linear"
+      },
+      "match": {
+        "duration": "moderate",
+        "easing": "magnet",
+        "then": "slow"
+      },
+      "seat": {
+        "duration": "moderate",
+        "easing": "magnet",
+        "press": "instant"
+      },
+      "sharedElement": {
+        "duration": "moderate",
+        "easing": "standard"
+      },
+      "priceReveal": {
+        "duration": "reveal",
+        "easing": "spring",
+        "stagger": "step"
+      },
+      "liveTrip": {
+        "duration": "ambient",
+        "easing": "linear"
+      },
+      "launch": {
+        "duration": "launch",
+        "easing": "departure",
+        "settle": "spring"
+      },
+      "loading": {
+        "duration": "pulse",
+        "easing": "linear"
+      }
     }
   },
   "breakpoint": {
@@ -282,7 +439,12 @@
   "sizing": {
     "touchTarget": "44px",
     "controlHeight": "48px",
+    "ctaHeight": "56px",
     "iconSm": "16px",
-    "iconMd": "24px"
+    "iconMd": "24px",
+    "iconStroke": "1.75",
+    "routeCore": "3px",
+    "routeHalo": "9px",
+    "routeAura": "20px"
   }
 }
