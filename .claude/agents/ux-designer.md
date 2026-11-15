@@ -10,6 +10,8 @@ skills:
 color: cyan
 ---
 
+Read docs/brand/design-direction.md before any design or UI work.
+
 You are a senior **UX/UI Designer** specialised in mobile-first marketplace apps.
 
 ## Inputs

@@ -4,6 +4,11 @@ import { PMTiles, Protocol } from 'pmtiles';
 import { useEffect, useRef, useState } from 'react';
 import type { LatLng } from '@/api/types';
 import { t } from '@/i18n';
+import { useSize } from '@/lib/useSize';
+import type { Pt } from '@/motion/core';
+import { curvePath, plainEndpoints, plainStreets, smoothPath } from '@/motion/geometry';
+import { MiniLoader } from './Loader';
+import { RouteOverlay } from './RouteOverlay';
 
 /** Sibiu bounding box, same as the gazetteer and tile build: [west, south, east, north]. */
 export const SIBIU_BOUNDS: [number, number, number, number] = [23.98, 45.68, 24.32, 45.86];
@@ -37,15 +42,17 @@ function ensureProtocol() {
 const css = (name: string) =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
-/** Minimal Protomaps-schema style, coloured from the design tokens (no hard-coded colours). */
+/**
+ * Minimal Protomaps-schema style in the `map-*` theme roles (no hard-coded colours). The route itself is not a map
+ * layer: it is the RouteOverlay above the canvas (design-direction section 6).
+ */
 function buildStyle(): StyleSpecification {
-  const bg = css('--theme-surface-subtle');
-  const water = css('--tk-color-secondary-100');
-  const park = css('--tk-color-secondary-50');
-  const road = css('--theme-surface');
-  const roadCase = css('--theme-border');
-  const building = css('--theme-border');
-  const text = css('--theme-text-muted');
+  const bg = css('--theme-map-bg');
+  const water = css('--theme-map-water');
+  const park = css('--theme-map-park');
+  const road = css('--theme-map-road');
+  const building = css('--theme-map-building');
+  const text = css('--theme-map-label');
   return {
     version: 8,
     glyphs: `${window.location.origin}/glyphs/{fontstack}/{range}.pbf`,
@@ -81,16 +88,6 @@ function buildStyle(): StyleSpecification {
         paint: { 'fill-color': building, 'fill-opacity': 0.6 },
       },
       {
-        id: 'roads-case',
-        type: 'line',
-        source: 'basemap',
-        'source-layer': 'roads',
-        paint: {
-          'line-color': roadCase,
-          'line-width': ['interpolate', ['linear'], ['zoom'], 10, 1, 15, 7],
-        },
-      },
-      {
         id: 'roads',
         type: 'line',
         source: 'basemap',
@@ -112,27 +109,26 @@ function buildStyle(): StyleSpecification {
   };
 }
 
-/** GeoJSON polygon approximating a circle of `radiusM` around a point. */
-type PolygonFeature = {
-  type: 'Feature';
-  properties: Record<string, never>;
-  geometry: { type: 'Polygon'; coordinates: number[][][] };
-};
-function circle(c: LatLng, radiusM: number, steps = 48): PolygonFeature {
-  const dLat = radiusM / 111_320;
+/** Pixel radius of `radiusM` metres around a point at the current zoom. */
+function radiusPx(m: MapLibreMap, c: LatLng, radiusM: number): number {
   const dLng = radiusM / (111_320 * Math.cos((c.lat * Math.PI) / 180));
-  const ring: Array<[number, number]> = Array.from({ length: steps + 1 }, (_, i) => {
-    const a = (i / steps) * 2 * Math.PI;
-    return [c.lng + dLng * Math.cos(a), c.lat + dLat * Math.sin(a)];
-  });
-  return { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [ring] } };
+  const a = m.project([c.lng, c.lat]);
+  const b = m.project([c.lng + dLng, c.lat]);
+  return Math.abs(b.x - a.x);
+}
+
+interface Geometry {
+  path: string;
+  start: Pt;
+  end: Pt;
+  zones: number | undefined;
 }
 
 /**
- * Lazy route map (architecture section 11): MapLibre on a self-hosted PMTiles file, locked to Sibiu.
- * Always paired with a text description (accessibility.md open item 2). If the tile file is missing or unreadable the
- * map area degrades to a message and the text description still tells the whole story.
- * Import through React.lazy so Find and Results never download MapLibre.
+ * Lazy route map (architecture section 11): MapLibre on a self-hosted PMTiles file, locked to Sibiu, with the glowing
+ * route as an SVG overlay (moment 1). Always paired with a text description (accessibility.md open item 2). If the tile
+ * file is missing or unreadable the same overlay draws over the plain `map-bg` background with a note, and the text
+ * description still tells the whole story. Import through React.lazy so Find and Results never download MapLibre.
  */
 export default function RouteMap({
   mode,
@@ -143,7 +139,10 @@ export default function RouteMap({
   className = '',
 }: RouteMapProps) {
   const host = useRef<HTMLDivElement>(null);
+  const frame = useRef<HTMLDivElement>(null);
   const [phase, setPhase] = useState<Phase>('loading');
+  const [projected, setProjected] = useState<Geometry | null>(null);
+  const { w, h } = useSize(frame);
 
   useEffect(() => {
     let map: MapLibreMap | undefined;
@@ -184,82 +183,29 @@ export default function RouteMap({
       m.touchZoomRotate.disableRotation();
 
       m.on('error', () => undefined); // missing glyphs/tiles must never break the page
+      // Re-project the route whenever the view changes (rare: the map is static under cooperative gestures).
+      const reproject = () => {
+        if (cancelled) return;
+        const toPt = (c: LatLng): Pt => {
+          const p = m.project([c.lng, c.lat]);
+          return { x: p.x, y: p.y };
+        };
+        const start = toPt(pickup);
+        const end = toPt(dropoff);
+        const pts = route && route.length > 1 ? route.map(([lng, lat]) => toPt({ lat, lng })) : [];
+        setProjected({
+          path: pts.length > 1 ? smoothPath(pts) : curvePath(start, end),
+          start,
+          end,
+          zones: mode === 'approximate' ? radiusPx(m, pickup, APPROX_RADIUS_M) : undefined,
+        });
+      };
       m.on('load', () => {
-        const primary = css('--theme-action');
-        const accent = css('--theme-accent');
-        const surface = css('--theme-surface');
-        const dark = css('--tk-color-primary-700');
-
-        if (route && route.length > 1) {
-          m.addSource('route', {
-            type: 'geojson',
-            data: {
-              type: 'Feature',
-              properties: {},
-              geometry: { type: 'LineString', coordinates: route },
-            },
-          });
-          m.addLayer({
-            id: 'route',
-            type: 'line',
-            source: 'route',
-            layout: { 'line-cap': 'round', 'line-join': 'round' },
-            paint: { 'line-color': dark, 'line-width': 4 },
-          });
-        }
-        if (mode === 'approximate') {
-          m.addSource('areas', {
-            type: 'geojson',
-            data: {
-              type: 'FeatureCollection',
-              features: [circle(pickup, APPROX_RADIUS_M), circle(dropoff, APPROX_RADIUS_M)],
-            },
-          });
-          m.addLayer({
-            id: 'areas-fill',
-            type: 'fill',
-            source: 'areas',
-            paint: { 'fill-color': primary, 'fill-opacity': 0.18 },
-          });
-          m.addLayer({
-            id: 'areas-line',
-            type: 'line',
-            source: 'areas',
-            paint: { 'line-color': dark, 'line-width': 2, 'line-dasharray': [2, 2] },
-          });
-        } else {
-          m.addSource('points', {
-            type: 'geojson',
-            data: {
-              type: 'FeatureCollection',
-              features: [
-                {
-                  type: 'Feature',
-                  properties: { kind: 'pickup' },
-                  geometry: { type: 'Point', coordinates: [pickup.lng, pickup.lat] },
-                },
-                {
-                  type: 'Feature',
-                  properties: { kind: 'dropoff' },
-                  geometry: { type: 'Point', coordinates: [dropoff.lng, dropoff.lat] },
-                },
-              ],
-            },
-          });
-          m.addLayer({
-            id: 'points',
-            type: 'circle',
-            source: 'points',
-            paint: {
-              'circle-radius': 8,
-              'circle-color': ['match', ['get', 'kind'], 'pickup', accent, surface],
-              'circle-stroke-color': dark,
-              'circle-stroke-width': 3,
-            },
-          });
-        }
+        reproject();
         if (!cancelled) setPhase('ready');
       });
+      m.on('moveend', reproject);
+      m.on('resize', reproject);
     })();
 
     return () => {
@@ -268,31 +214,48 @@ export default function RouteMap({
     };
   }, [mode, pickup.lat, pickup.lng, dropoff.lat, dropoff.lng, route]);
 
+  // Plain background: a fixed layout in the measured box, same overlay.
+  const plain = phase === 'unavailable' && w > 0 && h > 0 ? plainEndpoints(w, h) : null;
+  const geom: Geometry | null =
+    phase === 'ready'
+      ? projected
+      : plain
+        ? {
+            path: curvePath(plain.start, plain.end),
+            start: plain.start,
+            end: plain.end,
+            zones: mode === 'approximate' ? Math.min(w, h) * 0.12 : undefined,
+          }
+        : null;
+
   const label = t(mode === 'approximate' ? 'a11y.map.approx' : 'a11y.map.exact');
 
   return (
     <figure className={`m-0 flex flex-col gap-2 ${className}`}>
-      {phase === 'unavailable' ? (
-        <div
-          className="grid h-52 place-items-center rounded-md border border-border bg-surface-subtle p-4 text-center text-text-muted"
-          role="img"
-          aria-label={label}
-        >
-          <p>{t('map.unavailable')}</p>
-        </div>
-      ) : (
-        <div className="relative h-52 overflow-hidden rounded-md border border-border bg-surface-subtle">
-          <div ref={host} role="img" aria-label={label} className="size-full" />
-          {phase === 'loading' && (
-            <p
-              role="status"
-              className="absolute inset-0 grid place-items-center text-sm text-text-muted"
-            >
-              {t('map.loading')}
-            </p>
-          )}
-        </div>
-      )}
+      <div ref={frame} className="map-frame" role="img" aria-label={label}>
+        {phase !== 'unavailable' && <div ref={host} className="size-full" />}
+        {phase === 'unavailable' && w > 0 && (
+          <svg
+            className="map-plain"
+            viewBox={`0 0 ${w} ${h}`}
+            width={w}
+            height={h}
+            aria-hidden="true"
+            focusable="false"
+          >
+            {plainStreets(w, h).map((d) => (
+              <path key={d} d={d} />
+            ))}
+          </svg>
+        )}
+        {geom && <RouteOverlay {...geom} width={w} height={h} />}
+        {phase === 'loading' && (
+          <div role="status" className="absolute inset-0 grid place-items-center">
+            <MiniLoader label={t('map.loading')} />
+          </div>
+        )}
+        {phase === 'unavailable' && <p className="map-note glass">{t('map.unavailable')}</p>}
+      </div>
       <figcaption className="text-sm leading-5 text-text-muted">
         <span className="font-semibold">
           {t(mode === 'approximate' ? 'common.approx' : 'common.exact')}.

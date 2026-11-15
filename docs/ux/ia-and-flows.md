@@ -370,7 +370,7 @@ What works and stays: the bottom-sheet request flow (context stays visible), the
 
 ## 8. Prototype notes
 
-- One self-contained file, no network. Fonts embedded (latin and latin-ext, so ș ț ă â î render). Strings come from the same keys as [copy.md](copy.md).
+- One self-contained file, no network. Fonts embedded (Sora and Figtree, latin and latin-ext, so ș ț ă â î render). Strings come from the same keys as [copy.md](copy.md). **E-DM update:** the prototype now uses the dark-first "Headlight" look (ADR 0016 to 0020) with all eight motion moments from [motion.md](motion.md). It is built from `prototype/src/*` by `node docs/ux/prototype/tools/build-prototype.mjs`; do not edit `index.html` by hand. The demo panel adds Dark/Light, Reduce motion and Next minute. The flows above are unchanged, except: the request is sent with the launch moment, ride day shows the live trip card (schedule-driven, no GPS), and the driver's screen makes only the next request or rating a primary action.
 - A **Demo controls** button in the top bar switches persona (Visitor, Ioana, Andrei), jumps the clock (06:42, 07:15, 09:40) and triggers what happens next (driver accepts or declines, another passenger joins, driver cancels), plus Offline and Daily limit.
 - Prices are computed in the prototype with the formula and config v1 from [pricing.md](../product/pricing.md) so the screens show correct numbers (Trip B shows 3.10, 2.00, 1.50). The real app computes them **server-side only**.
 - The map is a drawing. Approximate areas are dashed circles, exact points are solid. The build needs a real map with the same two modes.

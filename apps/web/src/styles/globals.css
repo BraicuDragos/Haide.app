@@ -1,24 +1,54 @@
 @import 'tailwindcss';
 @import './tokens.css';
 @import './fonts.css';
+@import './motion.css';
+
+/* Quiet futurism, "Headlight" (ADR 0016): dark first, light is the refined alternative. Every colour, space, radius,
+   shadow, blur, duration and easing comes from tokens.css (generated from docs/brand/design-tokens.json). Nothing
+   in this file types a raw colour. Elevation differs per theme, so it is a small set of aliases below. */
+
+:root {
+  --hair: var(--theme-border-glass);
+  --elev-card: var(--tk-shadow-glass);
+  --elev-cta: var(--tk-shadow-glow-cta);
+  --elev-seat: var(--tk-shadow-glow-soft);
+}
+:root[data-theme='light'] {
+  --hair: var(--theme-border);
+  --elev-card: var(--tk-shadow-card);
+  --elev-cta: var(--tk-shadow-card);
+  --elev-seat: var(--tk-shadow-card);
+}
 
 @layer base {
   html {
     -webkit-text-size-adjust: 100%;
-    background: var(--color-bg);
+    background: var(--theme-bg);
   }
   body {
     margin: 0;
-    background: var(--color-bg);
-    color: var(--color-text);
-    font-family: var(--font-sans);
-    font-size: var(--text-md);
+    background: var(--theme-bg);
+    color: var(--theme-text);
+    font-family: var(--tk-font-base);
+    font-size: var(--tk-text-md);
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
   }
+  /* Fine grain over the whole screen: one static tile (token depth.grain), never animated. */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 90;
+    pointer-events: none;
+    background-image: var(--tk-grain-image);
+    background-size: var(--tk-grain-size);
+    opacity: var(--tk-grain-opacity);
+  }
   h1,
   h2,
-  h3 {
+  h3,
+  p {
     margin: 0;
   }
   /* Programmatic focus target after navigation: no ring on the heading itself. */
@@ -27,15 +57,18 @@
     outline: none;
   }
   :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
-    outline: 3px solid var(--color-focus-ring);
-    outline-offset: 2px;
+    outline: 3px solid var(--theme-focus-ring);
+    outline-offset: 3px;
   }
   button {
     font: inherit;
     color: inherit;
   }
+  a {
+    color: var(--theme-link);
+  }
   ::placeholder {
-    color: var(--color-text-subtle);
+    color: var(--theme-text-muted);
     opacity: 1;
   }
   [hidden] {
@@ -61,7 +94,7 @@
     height: var(--tk-size-iconMd);
     fill: none;
     stroke: currentColor;
-    stroke-width: 2;
+    stroke-width: var(--tk-size-iconStroke);
     stroke-linecap: round;
     stroke-linejoin: round;
     flex: none;
@@ -70,33 +103,337 @@
     width: var(--tk-size-iconSm);
     height: var(--tk-size-iconSm);
   }
-  .skeleton {
-    border-radius: var(--radius-md);
-    background: linear-gradient(
-      90deg,
-      var(--color-surface-subtle) 25%,
-      var(--color-border) 50%,
-      var(--color-surface-subtle) 75%
-    );
-    background-size: 200% 100%;
-    animation: shimmer 1.4s linear infinite;
+
+  /* ---- surfaces ---- */
+  .card {
+    background: var(--theme-surface);
+    border: 1px solid var(--hair);
+    border-radius: var(--tk-radius-lg);
+    box-shadow: var(--elev-card);
   }
+  .group {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    overflow: hidden;
+    background: var(--theme-surface);
+    border: 1px solid var(--hair);
+    border-radius: var(--tk-radius-lg);
+  }
+  .group > li + li {
+    border-top: 1px solid var(--theme-border);
+  }
+  /* The one blurred layer per screen (tab bar, sheet). Opaque surface where blur is unsupported or unwanted. */
+  .glass {
+    background: var(--theme-surface-glass);
+    -webkit-backdrop-filter: blur(var(--tk-blur-md));
+    backdrop-filter: blur(var(--tk-blur-md));
+    border: 1px solid var(--theme-border-glass);
+    box-shadow: var(--elev-card);
+  }
+  :root[data-theme='light'] .glass {
+    border-color: var(--theme-border);
+  }
+  @supports not (backdrop-filter: blur(1px)) {
+    .glass {
+      background: var(--theme-surface);
+    }
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    .glass {
+      background: var(--theme-surface);
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+    }
+  }
+
+  /* ---- Find hero: the night map with one lit route ---- */
+  .hero {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    background: var(--theme-map-bg);
+    padding: var(--tk-space-5) var(--tk-space-4) 144px;
+  }
+  .hero-art {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+  }
+  .hero-art .map-plain {
+    opacity: 0.9;
+  }
+  /* Soft fade into the page so the form card sits on the same night. */
+  .hero::before {
+    content: '';
+    position: absolute;
+    inset: auto 0 0;
+    height: 96px;
+    z-index: 0;
+    pointer-events: none;
+    background: linear-gradient(to bottom, transparent, var(--theme-bg));
+  }
+
+  /* ---- buttons: pills; primary is 56 px (sizing.ctaHeight) and the one saffron action per screen ---- */
+  .btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--tk-space-2);
+    min-height: var(--tk-size-controlHeight);
+    padding: var(--tk-space-3) var(--tk-space-6);
+    border: 1.5px solid transparent;
+    border-radius: var(--tk-radius-full);
+    font: 600 var(--tk-text-md) / 20px var(--tk-font-base);
+    text-align: center;
+    text-decoration: none;
+    cursor: pointer;
+    transition:
+      transform var(--tk-dur-instant) var(--tk-ease-standard),
+      background-color var(--tk-dur-fast) var(--tk-ease-standard),
+      border-color var(--tk-dur-fast) var(--tk-ease-standard);
+  }
+  .btn:active:not([aria-disabled='true']):not(:disabled) {
+    transform: scale(var(--tk-scale-press));
+  }
+  button.btn[disabled],
+  button.btn[aria-disabled='true']:not(.cta) {
+    cursor: not-allowed;
+    background: var(--theme-surface-subtle);
+    color: var(--theme-text-muted);
+    border-color: transparent;
+    box-shadow: none;
+  }
+  .btn-primary {
+    min-height: var(--tk-size-ctaHeight);
+    background: var(--theme-action);
+    color: var(--theme-on-action);
+    box-shadow: var(--elev-cta);
+    overflow: hidden;
+    isolation: isolate;
+  }
+  .btn-primary:hover {
+    background: var(--theme-action-hover);
+  }
+  .btn-primary:active {
+    background: var(--theme-action-pressed);
+  }
+  .btn-secondary {
+    background: transparent;
+    color: var(--theme-on-outline);
+    border-color: var(--theme-outline);
+  }
+  .btn-secondary:hover {
+    background: var(--theme-tint);
+  }
+  .btn-tonal {
+    background: var(--theme-tint);
+    color: var(--theme-on-tint);
+  }
+  .btn-tonal:hover {
+    background: var(--theme-surface-subtle);
+  }
+  .btn-ghost {
+    background: transparent;
+    color: var(--theme-link);
+    min-height: var(--tk-size-touchTarget);
+    padding: var(--tk-space-2) var(--tk-space-3);
+  }
+  .btn-ghost:hover {
+    background: var(--theme-tint);
+  }
+  .btn-danger {
+    background: transparent;
+    color: var(--theme-error);
+    border-color: var(--theme-error);
+  }
+  .btn-danger:hover {
+    background: var(--theme-error-bg);
+  }
+  .btn-block {
+    width: 100%;
+  }
+
+  /* ---- form controls ---- */
+  .control {
+    width: 100%;
+    background: var(--theme-bg-deep);
+    color: var(--theme-text);
+    border-radius: var(--tk-radius-md);
+    padding-inline: var(--tk-space-4);
+    font-size: var(--tk-text-md);
+  }
+
+  /* ---- chips, segmented control, switch ---- */
+  .seg {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+    gap: var(--tk-space-1);
+    padding: var(--tk-space-1);
+    background: var(--theme-bg-deep);
+    border: 1px solid var(--hair);
+    border-radius: var(--tk-radius-full);
+  }
+  .seg label {
+    position: relative;
+    display: grid;
+    place-items: center;
+    min-height: var(--tk-size-touchTarget);
+    padding: var(--tk-space-1) var(--tk-space-2);
+    border: 1px solid transparent;
+    border-radius: var(--tk-radius-full);
+    color: var(--theme-text-muted);
+    font-weight: 600;
+    text-align: center;
+    cursor: pointer;
+  }
+  .seg label:has(input:checked) {
+    background: var(--theme-tint);
+    color: var(--theme-on-tint);
+    border-color: var(--theme-outline);
+  }
+  .seg label:has(input:focus-visible) {
+    outline: 3px solid var(--theme-focus-ring);
+    outline-offset: 3px;
+  }
+  .seg input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+  .switch {
+    appearance: none;
+    flex: none;
+    position: relative;
+    width: 52px;
+    height: 32px;
+    margin: 0;
+    border: 2px solid var(--theme-border-strong);
+    border-radius: var(--tk-radius-full);
+    background: transparent;
+    cursor: pointer;
+    transition:
+      background-color var(--tk-dur-base) var(--tk-ease-standard),
+      border-color var(--tk-dur-base) var(--tk-ease-standard);
+  }
+  .switch::after {
+    content: '';
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--theme-text-muted);
+    transition:
+      transform var(--tk-dur-base) var(--tk-ease-spring),
+      background-color var(--tk-dur-base) var(--tk-ease-standard);
+  }
+  .switch:checked {
+    background: var(--theme-action);
+    border-color: var(--theme-action);
+  }
+  .switch:checked::after {
+    transform: translateX(20px);
+    background: var(--theme-on-action);
+  }
+
+  /* ---- price and numerals ---- */
+  .dot-from {
+    background: var(--theme-accent);
+    box-shadow: 0 0 0 3px var(--theme-pulse-ring);
+  }
+  .dot-to {
+    background: transparent;
+    border: 3px solid var(--theme-route);
+  }
+
+  /* ---- sheets, scrim, toast ---- */
   .sheet-panel {
-    animation: rise var(--tk-dur-base) var(--ease-standard);
+    background: var(--theme-surface-glass);
+    -webkit-backdrop-filter: blur(var(--tk-blur-md));
+    backdrop-filter: blur(var(--tk-blur-md));
+    border: 1px solid var(--theme-border-glass);
+    border-bottom: 0;
+    border-radius: var(--tk-radius-xl) var(--tk-radius-xl) 0 0;
+    box-shadow: var(--elev-card);
+    animation: rise var(--tk-dur-moderate) var(--tk-ease-enter);
+  }
+  :root[data-theme='light'] .sheet-panel {
+    border-color: var(--theme-border);
+  }
+  @supports not (backdrop-filter: blur(1px)) {
+    .sheet-panel {
+      background: var(--theme-surface);
+    }
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    .sheet-panel {
+      background: var(--theme-surface);
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+    }
+  }
+  dialog::backdrop {
+    background: var(--theme-scrim);
+    animation: fade var(--tk-dur-base) var(--tk-ease-standard);
+  }
+  .toast {
+    background: var(--theme-surface-glass);
+    -webkit-backdrop-filter: blur(var(--tk-blur-md));
+    backdrop-filter: blur(var(--tk-blur-md));
+    border: 1px solid var(--theme-border-glass);
+    box-shadow: var(--elev-card);
+    animation: rise var(--tk-dur-moderate) var(--tk-ease-enter);
+  }
+  :root[data-theme='light'] .toast {
+    border-color: var(--theme-border);
+  }
+  @supports not (backdrop-filter: blur(1px)) {
+    .toast {
+      background: var(--theme-surface);
+    }
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    .toast {
+      background: var(--theme-surface);
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+    }
+  }
+  .tabbar {
+    background: var(--theme-surface-glass);
+    -webkit-backdrop-filter: blur(var(--tk-blur-md));
+    backdrop-filter: blur(var(--tk-blur-md));
+    border-top: 1px solid var(--theme-border-glass);
+    view-transition-name: tabbar;
+  }
+  :root[data-theme='light'] .tabbar {
+    border-top-color: var(--theme-border);
+  }
+  @supports not (backdrop-filter: blur(1px)) {
+    .tabbar {
+      background: var(--theme-surface);
+    }
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    .tabbar {
+      background: var(--theme-surface);
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+    }
   }
 }
 
-@keyframes shimmer {
-  from {
-    background-position: 200% 0;
-  }
-  to {
-    background-position: -200% 0;
-  }
-}
 @keyframes rise {
   from {
-    transform: translateY(24px);
+    transform: translateY(var(--tk-travel-sheet));
     opacity: 0;
   }
   to {
@@ -104,20 +441,24 @@
     opacity: 1;
   }
 }
-@keyframes spin {
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
   to {
-    transform: rotate(360deg);
+    opacity: 1;
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .skeleton,
-  .sheet-panel,
-  .spin {
-    animation: none !important;
+@layer components {
+  /* Logo variants: the reversed (light-on-dark) mark in dark, the standard one in light. Both carry alt text; the hidden one is out of the tree. */
+  .logo-lt {
+    display: none;
   }
-  * {
-    scroll-behavior: auto !important;
-    transition-duration: 0.01ms !important;
+  :root[data-theme='light'] .logo-dk {
+    display: none;
+  }
+  :root[data-theme='light'] .logo-lt {
+    display: block;
   }
 }

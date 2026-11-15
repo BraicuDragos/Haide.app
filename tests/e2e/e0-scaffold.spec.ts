@@ -192,7 +192,7 @@ test('PWA: manifest, service worker, installable shape', async ({ page, request 
     name: 'Haide',
     start_url: '/find',
     display: 'standalone',
-    theme_color: '#1E1A52',
+    theme_color: '#12112A',
   });
   const sizes = manifest.icons.map((i: { sizes: string }) => i.sizes);
   expect(sizes).toEqual(expect.arrayContaining(['192x192', '512x512']));

@@ -6,6 +6,7 @@ import { dayOptions } from '@/lib/dates';
 import { Button } from '@/ui/Button';
 import { Icon } from '@/ui/Icon';
 import { Notice } from '@/ui/Notice';
+import { RouteArt } from '@/ui/RouteArt';
 import { PlaceField } from '../components/PlaceField';
 import { PlacePickerSheet, type PickerKind } from '../components/PlacePickerSheet';
 
@@ -64,47 +65,32 @@ export function FindScreen() {
 
   return (
     <>
-      <section className="relative overflow-hidden bg-primary-900 px-4 pt-5 pb-14 text-white">
+      <section className="hero">
+        <RouteArt onceKey="find-hero" />
         <img
           src="/brand/logo-reversed.svg"
           alt={t('app.name')}
           width="100"
           height="32"
-          className="mb-5 h-8 w-auto"
+          className="logo-dk mb-5 h-8 w-auto"
         />
-        <h1 ref={h1} tabIndex={-1} className="type-h1 max-w-[12ch]">
+        <img
+          src="/brand/logo.svg"
+          alt={t('app.name')}
+          width="100"
+          height="32"
+          className="logo-lt mb-5 h-8 w-auto"
+        />
+        <h1 ref={h1} tabIndex={-1} className="type-display">
           {t('find.title')}
         </h1>
-        <p className="mt-1 max-w-[30ch] text-primary-200">{t('find.subtitle')}</p>
-        <svg
-          viewBox="0 0 150 110"
-          aria-hidden="true"
-          focusable="false"
-          className="pointer-events-none absolute right-[-8px] bottom-0 h-[110px] w-[150px] opacity-90"
-        >
-          <path
-            d="M8 102C40 102 52 64 82 58S124 44 138 14"
-            fill="none"
-            stroke="var(--color-primary-400)"
-            strokeWidth="5"
-            strokeLinecap="round"
-          />
-          <circle cx="138" cy="14" r="7" fill="var(--color-accent)" />
-          <circle
-            cx="8"
-            cy="102"
-            r="6"
-            fill="var(--color-primary-900)"
-            stroke="var(--color-primary-300)"
-            strokeWidth="3"
-          />
-        </svg>
+        <p className="mt-2 max-w-[26ch] text-text-muted">{t('find.subtitle')}</p>
       </section>
 
       <form
         onSubmit={submit}
         noValidate
-        className="relative -mt-10 mr-4 mb-4 ml-4 flex flex-col gap-4 rounded-md border border-border bg-surface p-4 shadow-card"
+        className="card relative z-[2] -mt-12 mr-4 mb-4 ml-4 flex flex-col gap-4 p-4"
       >
         <div className="flex flex-col gap-2">
           <div className="relative flex flex-col gap-2">
@@ -128,7 +114,7 @@ export function FindScreen() {
               type="button"
               onClick={swap}
               aria-label={t('find.swap')}
-              className="absolute top-1/2 right-2 z-[1] grid size-11 -translate-y-1/2 place-items-center rounded-full border border-border-strong bg-surface text-primary-700"
+              className="absolute top-1/2 right-2 z-[1] grid size-11 -translate-y-1/2 place-items-center rounded-full border border-border-strong bg-surface text-on-outline"
             >
               <Icon name="swap" />
             </button>
@@ -154,7 +140,7 @@ export function FindScreen() {
               id="find-day"
               value={day}
               onChange={(e) => setDay(e.target.value)}
-              className="min-h-12 w-full rounded-md border border-border-strong bg-surface px-3 text-md"
+              className="control min-h-12 border border-border-strong"
             >
               {days.map((d) => (
                 <option key={d.value} value={d.value}>
@@ -175,7 +161,7 @@ export function FindScreen() {
               onChange={(e) => setTime(e.target.value)}
               aria-invalid={errors.time ? true : undefined}
               aria-describedby={errors.time ? 'time-err' : undefined}
-              className={`min-h-12 w-full rounded-md bg-surface px-3 text-md ${errors.time ? 'border-2 border-error' : 'border border-border-strong'}`}
+              className={`control min-h-12 ${errors.time ? 'border-2 border-error' : 'border border-border-strong'}`}
             />
           </div>
         </div>
@@ -196,7 +182,7 @@ export function FindScreen() {
             {WINDOWS.map((w) => (
               <label
                 key={w}
-                className="relative inline-flex min-h-11 cursor-pointer items-center justify-center gap-1 rounded-full border border-border-strong bg-surface px-1 py-2 font-semibold whitespace-nowrap has-checked:border-action has-checked:bg-tint has-checked:text-on-tint has-focus-visible:outline-3 has-focus-visible:outline-offset-2 has-focus-visible:outline-focus-ring"
+                className="relative inline-flex min-h-11 cursor-pointer items-center justify-center gap-1 rounded-full border border-border-strong px-1 py-2 font-semibold whitespace-nowrap has-checked:border-outline has-checked:bg-tint has-checked:text-on-tint has-focus-visible:outline-3 has-focus-visible:outline-offset-2 has-focus-visible:outline-focus-ring"
               >
                 <input
                   type="radio"

@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router';
 import { t, tp, type MessageKey } from '@/i18n';
+import { useReducedMotion } from '@/lib/prefs';
 import { Badge } from '@/ui/Badge';
 import { Icon, type IconName } from '@/ui/Icon';
 
@@ -21,12 +22,17 @@ function useUpdateCounts(): Record<string, number> {
   return {};
 }
 
+/**
+ * Four tabs on the one blurred layer. Tab changes use a View Transition (a quick crossfade; the bar itself keeps its
+ * `tabbar` name so it does not flash). Instant with reduced motion or without browser support.
+ */
 export function TabBar() {
   const counts = useUpdateCounts();
+  const reduced = useReducedMotion();
   return (
     <nav
       aria-label={t('nav.label')}
-      className="sticky bottom-0 z-10 grid grid-cols-4 border-t border-border bg-surface pb-[env(safe-area-inset-bottom)]"
+      className="tabbar sticky bottom-0 z-10 grid grid-cols-4 pb-[env(safe-area-inset-bottom)]"
     >
       {TABS.map((tab) => {
         const n = counts[tab.to] ?? 0;
@@ -34,19 +40,26 @@ export function TabBar() {
           <NavLink
             key={tab.to}
             to={tab.to}
+            viewTransition={!reduced}
             className={({ isActive }) =>
               [
-                'relative flex min-h-16 flex-col items-center justify-center gap-0.5 px-1 py-2 text-sm leading-[18px] font-semibold no-underline',
-                isActive
-                  ? 'text-primary-700 before:absolute before:inset-x-[20%] before:top-0 before:h-[3px] before:rounded-b-[3px] before:bg-action'
-                  : 'text-text-muted',
+                'relative flex min-h-16 flex-col items-center justify-center gap-0.5 px-1 py-1.5 text-sm leading-[18px] font-semibold no-underline',
+                isActive ? 'text-text' : 'text-text-muted',
               ].join(' ')
             }
           >
-            <Icon name={tab.icon} />
-            <span>{t(tab.label)}</span>
-            <Badge count={n} />
-            {n > 0 && <span className="sr-only">, {tp('nav.updates', n)}</span>}
+            {({ isActive }) => (
+              <>
+                <span
+                  className={`grid h-[30px] w-14 place-items-center rounded-full transition-colors duration-(--tk-dur-base) ease-standard ${isActive ? 'bg-tint text-on-tint' : ''}`}
+                >
+                  <Icon name={tab.icon} />
+                </span>
+                <span>{t(tab.label)}</span>
+                <Badge count={n} />
+                {n > 0 && <span className="sr-only">, {tp('nav.updates', n)}</span>}
+              </>
+            )}
           </NavLink>
         );
       })}

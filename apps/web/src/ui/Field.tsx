@@ -20,7 +20,7 @@ interface Common {
 
 const BORDER = (error?: string) =>
   error ? 'border-2 border-error' : 'border border-border-strong';
-const CONTROL = 'w-full rounded-md bg-surface px-3 text-md';
+const CONTROL = 'control';
 
 function Shell({
   id,

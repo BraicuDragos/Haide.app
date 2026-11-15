@@ -90,3 +90,9 @@ User-entered data (names, Sibiu street addresses) may contain Romanian character
 
 After every completed step, update `docs/PROGRESS.md`: current phase, open PRs, done items,
 next action, blockers. This is the team's shared memory across sessions.
+
+## 8. Design direction
+
+- All brand, UX and UI work must follow `docs/brand/design-direction.md` ("quiet futurism", motion tokens).
+- `qa-reviewer` must check reduced-motion support, WCAG contrast and the bundle budget against it.
+- Initial JS stays within the 200 KB gzip budget; Lighthouse accessibility stays at 100.

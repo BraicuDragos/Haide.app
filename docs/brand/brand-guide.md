@@ -3,6 +3,8 @@
 > Owner: brand-designer · Date: 2026-11-15 · Status: Proposed (accepted when the Phase 1+2 PR is merged)
 > Related: ADRs [0006 name](../decisions/0006-brand-name-haide.md) and [0007 visual identity](../decisions/0007-visual-identity-dusk-indigo-saffron.md) · tokens: [design-tokens.json](design-tokens.json) (single source of truth) · live preview: [preview.html](preview.html) · logos: `assets/brand/`
 >
+> **E-DM update (2026-11-15):** the visual direction was evolved in [design-direction.md](design-direction.md) (addendum) with ADRs [0016](../decisions/0016-visual-direction-quiet-futurism-headlight.md) to [0019](../decisions/0019-motion-no-js-animation-library.md). Where this guide disagrees, the addendum wins: dark theme is primary and default, **Sora replaces Bricolage Grotesque** for headings and numerals (Figtree stays), saffron may be text or a stroke on night surfaces only, dark `action` is saffron with an ink label, motion tokens and the type scale in section 6 are superseded by `design-tokens.json` v1.1.0. Name, logo, ramps and the saffron-dot idea are unchanged. Motion demos: [preview-motion.html](preview-motion.html).
+>
 > **Evidence convention** (same as the strategy docs): **[V]** verified by a search or a computation, **[A]** assumption. Contrast ratios below are computed with the WCAG 2.x relative-luminance formula from the hex values in `design-tokens.json`.
 
 ## 1. Brand idea in one paragraph

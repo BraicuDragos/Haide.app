@@ -20,3 +20,8 @@ Every significant decision (business, brand, UX, architecture) gets a file
 | [0013](0013-hosting-environments-and-ci.md) | Hosting, environments and CI/CD: Cloudflare Pages + Supabase Free (Frankfurt) + Brevo, GitHub Actions with a gated deploy | Infrastructure | Proposed | software-architect |
 | [0014](0014-maps-routing-geocoding-providers.md) | Maps, routing and geocoding: self-hosted Sibiu vector tiles, openrouteservice routing, own Postgres gazetteer | Architecture | Proposed | software-architect |
 | [0015](0015-route-matching-approach.md) | Route matching: PostGIS corridor match with linear referencing on stored route polylines | Architecture | Proposed | software-architect |
+| [0016](0016-visual-direction-quiet-futurism-headlight.md) | Visual direction: "Headlight", dark-first quiet futurism where the route is the light (amends 0007) | Brand | Accepted | brand-designer |
+| [0017](0017-typography-sora-and-figtree.md) | Typography: Sora for headings and numerals, Figtree for UI text (amends 0007) | Brand | Accepted | brand-designer |
+| [0018](0018-icon-set-lucide-vendored.md) | Icon set: Lucide, vendored per icon as inline SVG, stroke 1.75 | Brand | Accepted | brand-designer |
+| [0019](0019-motion-no-js-animation-library.md) | Motion: no JS animation library; CSS, WAAPI, View Transitions and linear() springs | Architecture | Accepted | brand-designer |
+| [0020](0020-haide-wordmark-sanctioned-exclamation.md) | Copy: one sanctioned exclamation mark, the "Haide!" wordmark in the launch moment of Publish and Join | UX | Accepted | ux-designer |

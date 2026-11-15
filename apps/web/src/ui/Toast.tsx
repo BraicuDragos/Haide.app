@@ -47,7 +47,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {msg && (
           <p
             key={msg.id}
-            className="pointer-events-auto max-w-sm rounded-md bg-ink px-4 py-3 text-sm font-semibold text-white shadow-raised"
+            className="toast pointer-events-auto max-w-sm rounded-lg px-4 py-3 text-sm font-semibold text-text"
           >
             {msg.text}
           </p>

@@ -8,6 +8,7 @@ import { t, tp } from '@/i18n';
 import { Avatar } from '@/ui/Avatar';
 import { Button } from '@/ui/Button';
 import { Notice } from '@/ui/Notice';
+import { Loader } from '@/ui/Loader';
 import { PageHeader } from '@/ui/PageHeader';
 
 const monthFmt = new Intl.DateTimeFormat('en-GB', {
@@ -55,12 +56,7 @@ export function PublicProfileScreen() {
     return (
       <>
         <PageHeader title={t('pub.title')} onBack={back} />
-        <div role="status" className="flex flex-col items-center gap-4 p-6">
-          <span className="sr-only">{t('a11y.loading')}</span>
-          <div aria-hidden="true" className="skeleton size-20 rounded-full" />
-          <div aria-hidden="true" className="skeleton h-6 w-40" />
-          <div aria-hidden="true" className="skeleton h-24 w-full" />
-        </div>
+        <Loader />
       </>
     );
 
@@ -76,10 +72,7 @@ export function PublicProfileScreen() {
             <Notice tone="error">{t('error.generic')}</Notice>
           )}
           {gone ? (
-            <Link
-              to="/find"
-              className="inline-flex min-h-12 items-center justify-center rounded-md bg-action px-5 py-3 font-semibold text-on-action no-underline hover:bg-action-hover"
-            >
+            <Link to="/find" className="btn btn-primary">
               {t('error.notFound.cta')}
             </Link>
           ) : (
@@ -126,7 +119,7 @@ export function PublicProfileScreen() {
           </div>
         </div>
 
-        <dl className="m-0 grid grid-cols-1 divide-y divide-border rounded-md border border-border bg-surface">
+        <dl className="m-0 grid grid-cols-1 divide-y divide-border rounded-lg border border-(color:--hair) bg-surface">
           <div className="flex items-center justify-between gap-3 px-4 py-3">
             <dt className="text-text-muted">{t('pub.late')}</dt>
             <dd className="m-0 font-semibold">{u.lateCancellations90d}</dd>

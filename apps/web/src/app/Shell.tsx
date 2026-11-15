@@ -37,10 +37,10 @@ export function Shell() {
   const isRoot = TABS.some((tab) => tab.to === loc.pathname);
 
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-xl flex-col bg-bg md:border-x md:border-border">
+    <div className="mx-auto flex min-h-dvh w-full max-w-xl flex-col bg-bg md:border-x md:border-(color:--hair)">
       <a
         href="#main"
-        className="absolute top-2 left-2 z-50 -translate-y-24 rounded-md bg-surface px-4 py-3 font-semibold text-link shadow-raised focus:translate-y-0"
+        className="absolute top-2 left-2 z-50 -translate-y-24 rounded-full bg-text px-4 py-3 font-semibold text-bg focus:translate-y-0"
       >
         {t('common.skipToMain')}
       </a>

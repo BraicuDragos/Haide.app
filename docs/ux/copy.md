@@ -1,8 +1,8 @@
 # UX copy deck (English)
 
-> Owner: ux-designer · Date: 2026-11-15 · Voice: [brand-guide §7](../brand/brand-guide.md) · Prototype: [prototype/index.html](prototype/index.html) · Decisions: ADRs [0008](../decisions/0008-navigation-and-information-architecture.md)–[0011](../decisions/0011-price-and-money-presentation.md)
+> Owner: ux-designer · Date: 2026-11-15 (E-DM update) · Voice: [brand-guide §7](../brand/brand-guide.md) · Prototype: [prototype/index.html](prototype/index.html) · Decisions: ADRs [0008](../decisions/0008-navigation-and-information-architecture.md)–[0011](../decisions/0011-price-and-money-presentation.md), [0020](../decisions/0020-haide-wordmark-sanctioned-exclamation.md) (the one exclamation mark) · Motion: [motion.md](motion.md)
 >
-> **This file is generated from the same `STR` object that the prototype renders** (keys below = keys in `prototype/index.html`). So the deck and the prototype cannot drift. `frontend-dev` should move these keys into the i18n resource file as they are (flat dotted keys, English only in the MVP).
+> **Keys below = keys in the `STR` object of the prototype** (`prototype/src/strings.js`). `node docs/ux/prototype/tools/check-copy.mjs` fails when the deck and the prototype drift, or when any value other than `launch.haide` contains an exclamation mark. `frontend-dev` should move these keys into the i18n resource file as they are (flat dotted keys, English only in the MVP).
 
 ## 1. Voice in one screen
 
@@ -16,7 +16,8 @@
 | No apology, no hype, no “Oops”, no “Something went wrong” | “We couldn’t load rides. Check your connection and try again.” |
 | Costs are **shared**, never “earned” | “You recover about 4.50 RON of the 6.24 RON fuel cost.” |
 | Never “fare”, “order”, “booking fee”, “trip request” | We say ride, driver, passenger, seat, pickup point |
-| Sentence case, no all caps, no emoji, no exclamation marks | |
+| Sentence case, no all caps, no emoji. **No exclamation marks, with exactly one exception** (ADR 0020): the wordmark `Haide!` (`launch.haide`) flashes inside the launch moment of Publish ride and Request seat, only when the action really left, decorative (`aria-hidden`), never in a toast, status, error, empty state, loader or the screen-reader announcement | The announcement stays plain: “Seat requested”, “Ride published” |
+| Loaders and empty states describe what is happening in one plain line; the animation is decoration | “Looking for rides on your route”, not “Hang tight!” | 
 | Money: `3.90 RON` (non-breaking space, 2 decimals). Time: 24 h `07:30` | |
 | Price is always labelled for what it is | Cards: “Up to 3.80 RON” + “Drops if others join”. After acceptance: “You pay Radu 2.50 RON” |
 | Say who decides | “Radu decides whether to accept.” |
@@ -51,7 +52,9 @@
 | Confirm dialog | Verb question, consequence, verb button vs keep button | “Cancel your seat?” … “Cancel booking” / “Keep my seat” |
 | Late-cancel warning | Plain consequence, no “Warning!” | “Cancelling within 30 minutes of departure counts as a late cancellation on your profile.” |
 | Success toast | Same verb as the button, past tense | “Seat requested”, “Rating sent”, “Report sent” |
-| Loading | Say what is being looked for | “Looking for rides on your route” |
+| Loading | Say what is being looked for, present continuous, no ellipsis, no “please wait”. A small light travels a tiny route; the line is a live status | “Looking for rides on your route” |
+| Empty | Same structure as above. The route waits (one dot breathes) and the one action is the primary button | “No rides yet on this route” |
+| Launch moment | Label, then the wordmark flash (full motion only), then the confirmed text. The confirmed text is the toast text | “Request seat” → “Haide!” → “Seat requested” |
 
 ## 5. App
 
@@ -251,6 +254,33 @@ Request-then-approve. The sheet says who decides, until when, and what stays hid
 | `request.err.full` | This ride just filled up. See other rides on your route. |
 | `request.err.late` | This ride leaves in under 10 minutes, so requests are closed. |
 | `request.err.limit` | You already have a request on this ride. |
+
+## 13a. The Haide moment, match and live trip (E-DM)
+
+Motion moments need a few strings. The launch button shows its label, then (with motion on) the wordmark for about 400 ms, then the confirmed text. Screen readers hear the status line only. See [motion.md](motion.md) moments 2, 6 and 7.
+
+| Key | English |
+|---|---|
+| `launch.haide` | Haide! |
+| `request.saved` | Request saved |
+| `match.fit` | Fits your route. {m} m walk to pickup. |
+| `live.caption` | {driver} leaves at {time}. |
+| `live.leavesIn` | Leaves in {n} min |
+| `live.now` | Leaving now |
+| `live.note` | The light follows the route, not the car. Haide doesn’t track drivers. |
+
+Where the existing keys are used by the launch moment and the branded states (no new strings needed):
+
+| Moment | Keys shown or announced |
+|---|---|
+| Request seat launch | label `request.send`, wordmark `launch.haide`, confirmed `request.sent.toast` (offline: `request.saved`, no wordmark), announced `request.sending` then the toast |
+| Publish ride launch | label `offer.cta`, wordmark `launch.haide`, confirmed `offer.done.title`, announced `offer.publishing` |
+| Results loading | `results.loading` |
+| Route loading on Offer | `offer.route.loading` |
+| Empty: results, My rides, Profile | `results.empty.title`, `rides.empty.riding.title`, `rides.visitor.title`, `me.visitor.title` and their bodies |
+| Price drop | `booking.priceDropped`, `a11y.priceDropped` (the ring pulse is decoration, the sentence is the message) |
+
+`live.note` is deliberate: live GPS tracking is out of the MVP (ADR 0005), so the ambient light on the ride-day card shows the schedule, and the card says so. When tracking exists, revisit this copy together with ADR 0005.
 
 ## 14. Sign in (E1-1)
 
@@ -680,6 +710,13 @@ Rating shows only from 3 ratings. Never phone, plate or surname.
 | `settings.privacy` | Privacy and data |
 | `settings.policy` | Privacy policy |
 | `settings.terms` | Terms of use |
+| `settings.display` | Display |
+| `settings.theme` | Theme |
+| `settings.theme.system` | Auto |
+| `settings.theme.dark` | Dark |
+| `settings.theme.light` | Light |
+| `settings.reduceMotion` | Reduce motion |
+| `settings.reduceMotion.hint` | Stops moving lights and animations. Follows your phone until you change it here. |
 | `settings.data` | Request a copy of my data |
 | `settings.data.toast` | Request sent. We’ll email your data within 30 days. |
 | `settings.delete` | Delete account |

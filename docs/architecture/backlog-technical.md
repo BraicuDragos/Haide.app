@@ -9,7 +9,8 @@
 |---|---|---|---|---|---|
 | E0 | `chore/scaffold` | Scaffold, CI, geo foundations | L | — | G1–G4 groundwork |
 | E1 | `feat/accounts` | Accounts, profile, vehicle | M | E0 | E1-1…E1-6, E6-3 (pages) |
-| E2 | `feat/rides` | Publish and manage rides + pricing | L | E1 | E2-1…E2-6 |
+| E-DM | `feat/design-motion` | Design & motion direction (brief: [design-direction.md](../brand/design-direction.md)) | L | E1 | — (cross-cutting) |
+| E2 | `feat/rides` | Publish and manage rides + pricing | L | E1, E-DM | E2-1…E2-6 |
 | E3 | `feat/search` | Search and matching | L | E2 | E3-1…E3-5 |
 | E4 | `feat/bookings` | Booking lifecycle + notifications | L | E3 | E4-1…E4-7 |
 | E5 | `feat/trust-safety` | Completion, ratings, safety | M | E4 | E5-1…E5-7 |

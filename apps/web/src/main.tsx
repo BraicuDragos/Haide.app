@@ -4,7 +4,10 @@ import { RouterProvider } from 'react-router';
 import { reportError } from '@/api/telemetry';
 import { Providers } from '@/app/providers';
 import { router } from '@/app/router';
+import { initPrefs } from '@/lib/prefs';
 import './styles/globals.css';
+
+initPrefs();
 
 // Uncaught errors outside React (event handlers, promises) also go to /telemetry/error.
 window.addEventListener('error', (e) => reportError(e.error ?? e.message, '/:window'));

@@ -43,7 +43,7 @@ function Check({
   return (
     <div className="flex flex-col gap-1.5">
       <div
-        className={`flex min-h-12 items-start gap-3 rounded-md bg-surface p-3 ${error ? 'border-2 border-error' : 'border border-border-strong'}`}
+        className={`flex min-h-12 items-start gap-3 rounded-md bg-bg-deep p-3 ${error ? 'border-2 border-error' : 'border border-border-strong'}`}
       >
         <input
           id={id}

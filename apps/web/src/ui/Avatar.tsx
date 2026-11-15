@@ -20,7 +20,7 @@ export function Avatar({
   return (
     <span
       aria-hidden="true"
-      className={`inline-grid flex-none place-items-center overflow-hidden rounded-full bg-primary-100 font-bold text-primary-800 ${SIZE[size]}`}
+      className={`inline-grid flex-none place-items-center overflow-hidden rounded-full bg-tint font-heading font-semibold text-on-tint ${SIZE[size]}`}
     >
       {showPhoto ? (
         <img

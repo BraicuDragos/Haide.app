@@ -13,6 +13,9 @@ const DEV_ROUTES = import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEV_ROUTES
 const MapDemoScreen = DEV_ROUTES
   ? lazy(() => import('@/features/common/screens/MapDemoScreen'))
   : null;
+const MotionDemoScreen = DEV_ROUTES
+  ? lazy(() => import('@/features/common/screens/MotionDemoScreen'))
+  : null;
 
 /** Account screens load on demand so the entry chunk stays small (initial JS budget 200 KB gzip). */
 const lazyScreen = <T extends Record<string, unknown>>(
@@ -59,6 +62,18 @@ export const router = createBrowserRouter([
               element: (
                 <Suspense fallback={null}>
                   <MapDemoScreen />
+                </Suspense>
+              ),
+            },
+          ]
+        : []),
+      ...(MotionDemoScreen
+        ? [
+            {
+              path: 'dev/motion',
+              element: (
+                <Suspense fallback={null}>
+                  <MotionDemoScreen />
                 </Suspense>
               ),
             },

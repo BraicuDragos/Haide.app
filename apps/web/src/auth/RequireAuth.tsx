@@ -1,21 +1,17 @@
 import { useEffect, type ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router';
-import { t } from '@/i18n';
+import { Loader } from '@/ui/Loader';
 import { PageHeader } from '@/ui/PageHeader';
 import { useAuth } from './AuthProvider';
 import { saveIntent } from './intent';
 
-/** Loading state shared by account screens: title, skeleton blocks and a screen-reader status. */
+/** Loading state shared by account screens: title plus the branded light on a tiny route (no spinner, no shimmer). */
 export function ScreenSkeleton({ title }: { title: string }) {
   return (
     <>
       <PageHeader title={title} />
-      <div role="status" className="flex flex-col gap-4 p-4">
-        <span className="sr-only">{t('a11y.loading')}</span>
-        <div aria-hidden="true" className="skeleton h-20 w-20 rounded-full" />
-        <div aria-hidden="true" className="skeleton h-12" />
-        <div aria-hidden="true" className="skeleton h-12" />
-        <div aria-hidden="true" className="skeleton h-24" />
+      <div aria-busy="true">
+        <Loader />
       </div>
     </>
   );

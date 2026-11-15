@@ -239,5 +239,22 @@
   "errors.PHOTO_INVALID": "We couldn’t read this photo. Choose a JPEG or PNG.",
   "errors.PHOTO_TOO_LARGE": "This photo is too large. Choose a smaller JPEG or PNG.",
   "errors.ACCOUNT_DELETED": "This account has been deleted.",
-  "common.choose": "Choose"
+  "common.choose": "Choose",
+  "launch.haide": "Haide!",
+  "request.send": "Send request",
+  "request.sending": "Sending request",
+  "request.sent.toast": "Seat requested",
+  "request.saved": "Request saved",
+  "offer.seats": "Free seats",
+  "offer.seats.value.one": "1 seat",
+  "offer.seats.value.other": "{n} seats",
+  "offer.route.loading": "Working out your route",
+  "results.loading": "Looking for rides on your route",
+  "settings.display": "Display",
+  "settings.theme": "Theme",
+  "settings.theme.system": "Auto",
+  "settings.theme.dark": "Dark",
+  "settings.theme.light": "Light",
+  "settings.reduceMotion": "Reduce motion",
+  "settings.reduceMotion.hint": "Stops moving lights and animations. Follows your phone until you change it here."
 }

@@ -33,23 +33,23 @@ export function Sheet({ open, title, onClose, children }: Props) {
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
-      className="m-0 mt-auto h-full max-h-none w-full max-w-none bg-transparent p-0 backdrop:bg-ink/50 open:flex open:flex-col open:justify-end"
+      className="m-0 mt-auto h-full max-h-none w-full max-w-none bg-transparent p-0 open:flex open:flex-col open:justify-end"
     >
       {open && (
-        <div className="sheet-panel mx-auto flex max-h-[92dvh] min-h-[60dvh] w-full max-w-xl flex-col rounded-t-lg bg-surface shadow-raised">
+        <div className="sheet-panel mx-auto flex max-h-[92dvh] min-h-[60dvh] w-full max-w-xl flex-col">
           <div
             aria-hidden="true"
-            className="mx-auto mt-2 h-1 w-10 flex-none rounded-full bg-gray-300"
+            className="mx-auto mt-2 h-1 w-10 flex-none rounded-full bg-border-strong"
           />
           <header className="flex flex-none items-center gap-2 py-2 pr-2 pl-5">
-            <h2 id={titleId} className="type-h3 flex-1">
+            <h2 id={titleId} className="type-h2 flex-1">
               {title}
             </h2>
             <button
               type="button"
               onClick={onClose}
               aria-label={t('common.close')}
-              className="grid size-12 flex-none place-items-center rounded-md hover:bg-surface-subtle"
+              className="grid size-12 flex-none place-items-center rounded-full hover:bg-surface-subtle"
             >
               <Icon name="close" />
             </button>

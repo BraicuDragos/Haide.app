@@ -5,6 +5,7 @@ import { useAdvance } from '@/auth/hooks';
 import { t } from '@/i18n';
 import { Button } from '@/ui/Button';
 import { Notice } from '@/ui/Notice';
+import { Loader } from '@/ui/Loader';
 import { PageHeader } from '@/ui/PageHeader';
 
 type Phase = 'working' | 'expired' | 'failed';
@@ -54,14 +55,7 @@ export function CallbackScreen() {
     return (
       <>
         <PageHeader title={t('auth.callback.title')} />
-        <div role="status" className="flex flex-col items-center gap-4 px-6 py-16 text-center">
-          <span
-            aria-hidden="true"
-            className="spin size-10 rounded-full border-4 border-primary-300 border-r-transparent"
-            style={{ animation: 'spin 0.8s linear infinite' }}
-          />
-          <p>{t('auth.callback.loading')}</p>
-        </div>
+        <Loader label={t('auth.callback.loading')} />
       </>
     );
   }

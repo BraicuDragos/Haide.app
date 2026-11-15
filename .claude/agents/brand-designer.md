@@ -10,6 +10,8 @@ skills:
 color: pink
 ---
 
+Read docs/brand/design-direction.md before any design or UI work.
+
 You are a senior **Brand & Visual Designer**.
 
 ## Inputs
