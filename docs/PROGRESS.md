@@ -3,18 +3,21 @@
 > Updated by the Orchestrator after every step. Read at the start of every session.
 
 ## Current state
-- **Phase:** 1+2 done (product strategy + brand), PR for GATE 1 being opened on `docs/product-strategy`
-- **Open PRs:** — (Gate 1 PR pending creation)
-- **Approved gates:** —
+- **Phase:** 3+4 done (UX + architecture); Gate 2 PR on branch `docs/ux-architecture`
+- **Open PRs:** Gate 2 PR (being opened)
+- **Approved gates:** GATE 1 (PR #1 merged)
 
 ## Done
-- [x] Agent team configured (CLAUDE.md, `.claude/agents`, `.claude/skills`)
-- [x] Phase 1 — product strategy: `docs/product/` (strategy, pricing, mvp-scope, backlog), ADRs 0001–0005
-- [x] Phase 2 — brand: name **Haide**, dusk indigo + saffron; `docs/brand/`, `assets/brand/`, ADRs 0006–0007
+- [x] Agent team configured
+- [x] Phase 1 — product strategy (`docs/product/`, ADRs 0001–0005) — PR #1 merged
+- [x] Phase 2 — brand "Haide" (`docs/brand/`, `assets/brand/`, ADRs 0006–0007) — PR #1 merged
+- [x] Phase 3 — UX: `docs/ux/` incl. clickable prototype, ADRs 0008–0011
+- [x] Phase 4 — architecture: `docs/architecture/`, ADRs 0012–0015 (PWA: React/Vite + Supabase Free + Cloudflare Pages, 0 RON/month)
 
 ## Next step
-- Open Gate 1 PR, wait for owner merge, then Phase 3 (UX) → `ux-designer`
+- Wait for owner to merge Gate 2 PR, then Phase 5 (scaffold + CI = epic E0 in `docs/architecture/backlog-technical.md`)
 
 ## Blockers / what the owner needs to provide
-- Nothing before Gate 3. Later: data controller identity, support email, `haide.ro` domain (see strategy.md "Owner needs" and brand-guide.md).
-- Note: `gh` is at `C:\Program Files\GitHub CLI\gh.exe` (not on bash PATH).
+- Nothing before Gate 3 (batch listed in `docs/architecture/deploy.md` §3).
+- Stale paths in `.claude/agents/frontend-dev.md`: `docs/ux/screens.md` (actual: `docs/ux/ia-and-flows.md` §4) and `assets/brand/design-tokens.json` (actual: `docs/brand/design-tokens.json`). Owner-controlled config; briefs will give correct paths explicitly.
+- `gh` is at `C:\Program Files\GitHub CLI\gh.exe` (not on bash PATH).
