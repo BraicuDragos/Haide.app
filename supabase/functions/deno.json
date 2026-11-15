@@ -1,0 +1,12 @@
+{
+  "imports": {
+    "hono": "npm:hono@4.13.18",
+    "hono/cors": "npm:hono@4.13.18/cors",
+    "zod": "npm:zod@4.6.7",
+    "postgres": "npm:postgres@3.4.9",
+    "jose": "npm:jose@6.2.17"
+  },
+  "compilerOptions": { "strict": true, "noUncheckedIndexedAccess": true },
+  "lint": { "rules": { "tags": ["recommended"] } },
+  "fmt": { "singleQuote": true, "lineWidth": 100 }
+}
