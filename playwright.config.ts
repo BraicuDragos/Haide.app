@@ -27,6 +27,13 @@ export default defineConfig({
     url: `http://localhost:${PORT}/find`,
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,
-    env: { VITE_ENABLE_DEV_ROUTES: 'true' },
+    env: {
+      VITE_ENABLE_DEV_ROUTES: 'true',
+      // E1: auth needs a Supabase URL + publishable key at build time. The placeholder lets the mocked specs run
+      // anywhere; the real-stack spec (e1-magic-link) needs the real key from the local stack (supabase status) in the environment.
+      VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL ?? 'http://127.0.0.1:54321',
+      VITE_SUPABASE_PUBLISHABLE_KEY:
+        process.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? 'e2e-placeholder-key',
+    },
   },
 });
