@@ -40,4 +40,20 @@ export const RATE_LIMITS = {
   places: { max: 60, windowS: 60 },
   telemetry: { max: 20, windowS: 60 },
   search: { max: 30, windowS: 60 },
+  publicRead: { max: 60, windowS: 60 },
+  account: { max: 30, windowS: 60 },
+  photo: { max: 10, windowS: 60 },
 } as const;
+
+// Accounts (E1)
+export const BIO_MAX_CHARS = 200;
+export const FIRST_NAME_MAX_CHARS = 30;
+export const VEHICLE_TEXT_MAX_CHARS = 30;
+export const PHOTO_MAX_BYTES = 1_572_864; // 1.5 MiB upload cap
+export const PHOTO_MAX_PIXELS = 24_000_000; // decode guard against decompression bombs
+export const AVATAR_SIZE_PX = 512;
+export const AVATAR_JPEG_QUALITY = 85;
+
+/** Request body caps (bytes). Photo uploads get their own, larger cap (multipart overhead). */
+export const BODY_LIMIT_DEFAULT_BYTES = 64 * 1024;
+export const BODY_LIMIT_PHOTO_BYTES = PHOTO_MAX_BYTES + 64 * 1024;

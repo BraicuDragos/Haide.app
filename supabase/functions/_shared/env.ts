@@ -31,6 +31,10 @@ export const envSchema = z
     // Injected by Supabase. SUPABASE_URL gives the JWKS endpoint for JWT verification.
     SUPABASE_URL: z.url().optional(),
     SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
+    // Expected JWT `iss`. Default: <SUPABASE_URL>/auth/v1 in production, the local stack URL otherwise.
+    JWT_ISSUER: z.url().optional(),
+    // Browser-reachable storage base. Default: <SUPABASE_URL>/storage/v1/object/public.
+    AVATAR_PUBLIC_BASE_URL: z.url().optional(),
     // Local development only: HS256 fallback when no JWKS is reachable. Ignored in production.
     LOCAL_JWT_SECRET: z.string().min(32).optional(),
   })
