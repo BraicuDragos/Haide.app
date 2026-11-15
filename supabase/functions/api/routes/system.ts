@@ -18,8 +18,19 @@ systemRoutes.get('/health', async (c) => {
   let db: HealthResponse['db'] = 'down';
   try {
     db = (await pingDb(sql)) ? 'ok' : 'down';
-  } catch {
-    log('warn', 'health_db_down', { reqId: c.get('reqId') });
+  } catch (err) {
+    // Scrubbed class/code/message only: never the connection string or password.
+    const e = err as { name?: string; code?: string; message?: string; errno?: string | number };
+    const message = scrubText(String(e?.message ?? err), 300).replace(
+      /postgres(ql)?:\/\/\S+/gi,
+      'postgres://[redacted]',
+    );
+    log('warn', 'health_db_down', {
+      reqId: c.get('reqId'),
+      errName: e?.name ?? 'unknown',
+      errCode: e?.code ?? e?.errno ?? null,
+      errMessage: message,
+    });
   }
   const body: HealthResponse = {
     status: db === 'ok' ? 'ok' : 'degraded',

@@ -103,6 +103,18 @@ jobs:
           echo "API did not start (last HTTP status: $code)"
           echo "--- functions.log (tail) ---"; tail -n 80 "$RUNNER_TEMP/functions.log" || true
           echo "--- docker ps ---"; docker ps -a || true
+          echo "--- docker networks ---"; docker network ls || true
+          echo "--- role login check (inside DB container) ---"
+          docker exec -e PGPASSWORD=haide_api_local supabase_db_haide \
+            psql -h 127.0.0.1 -U haide_api -d postgres -c 'select current_user' 2>&1 || true
+          docker exec supabase_db_haide psql -U postgres -d postgres \
+            -c "select rolname, rolcanlogin, rolpassword is not null as has_pw from pg_roles where rolname='haide_api'" 2>&1 || true
+          echo "--- DNS/TCP from edge runtime container ---"
+          for c in $(docker ps --format '{{.Names}}' | grep -i edge_runtime || true); do
+            docker exec "$c" getent hosts supabase_db_haide 2>&1 || true
+            docker exec "$c" sh -c 'timeout 3 bash -c "echo > /dev/tcp/supabase_db_haide/5432" && echo tcp-ok' 2>&1 || true
+          done
+          echo "--- health_db_down events ---"; grep health_db_down "$RUNNER_TEMP/functions.log" | tail -n 3 || true
           for c in $(docker ps -a --format '{{.Names}}' | grep -i edge_runtime || true); do
             echo "--- logs: $c ---"; docker logs --tail 80 "$c" 2>&1 || true
           done
