@@ -45,12 +45,30 @@ test.describe('magic-link sign-up (real stack)', () => {
     'set E2E_MAILPIT_URL (for example http://127.0.0.1:54324) to run against the local stack',
   );
 
+  const diagSink: { current: () => void } = { current: () => {} };
+  test.afterEach((_fixtures, testInfo) => {
+    if (testInfo.status !== testInfo.expectedStatus) diagSink.current();
+  });
+
   test('sign up, agree, profile, car, sign out, Back shows nothing protected', async ({
     page,
     request,
     baseURL,
   }) => {
     const email = `e2e-${Date.now()}@example.com`;
+
+    // Self-explanatory CI failures: print the URL, the Mailpit link and browser errors if anything below throws.
+    const diag: string[] = [];
+    page.on('console', (m) => {
+      if (m.type() === 'error') diag.push(`console.error: ${m.text()}`);
+    });
+    page.on('pageerror', (e) => diag.push(`pageerror: ${e.message}`));
+    page.on('framenavigated', (f) => {
+      if (f === page.mainFrame()) diag.push(`navigated: ${f.url()}`);
+    });
+    test.info().annotations.push({ type: 'diagnostics', description: 'printed on failure' });
+    diagSink.current = () =>
+      console.log(`E2E diagnostics\ncurrent URL: ${page.url()}\n${diag.join('\n')}`);
 
     // Start as a driver so all four steps run.
     await page.goto('/offer');
@@ -60,7 +78,9 @@ test.describe('magic-link sign-up (real stack)', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Check your email' })).toBeVisible();
 
     // Verify the link without a browser hop, then land on OUR origin: the PKCE verifier lives in this page's storage.
-    const verify = await request.get(await magicLinkFor(request, email), { maxRedirects: 0 });
+    const link = await magicLinkFor(request, email);
+    diag.push(`mailpit link: ${link}`);
+    const verify = await request.get(link, { maxRedirects: 0 });
     expect([302, 303]).toContain(verify.status());
     const target = new URL(verify.headers().location ?? '');
     await page.goto(`${baseURL}/auth/callback${target.search}`);
@@ -114,9 +134,13 @@ test.describe('magic-link sign-up (real stack)', () => {
     await page.getByRole('button', { name: 'Sign out' }).click();
     await expect(page).toHaveURL(/\/find$/);
     await page.goBack();
+    // Which signed-out page Back lands on depends on history (Profile visitor card or the Offer gate); both are fine.
     await expect(
-      page.getByRole('heading', { level: 2, name: 'Join your neighbours' }),
+      page
+        .getByRole('heading', { level: 2, name: 'Join your neighbours' })
+        .or(page.getByRole('heading', { level: 2, name: 'Sign in to offer a ride' })),
     ).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Sign out' })).toHaveCount(0);
     await expect(page.getByText(email)).toHaveCount(0);
   });
 });
