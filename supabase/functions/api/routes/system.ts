@@ -46,7 +46,7 @@ systemRoutes.post('/telemetry/error', rateLimit('telemetry', RATE_LIMITS.telemet
 });
 
 // POST /internal/tick: called by pg_cron through pg_net every minute. Skeleton for E0.
-systemRoutes.post('/internal/tick', async (c) => {
+systemRoutes.post('/internal/tick', (c) => {
   const secret = c.req.header('x-cron-secret') ?? '';
   if (!safeEqual(secret, c.get('deps').env.CRON_SECRET)) {
     // Same answer as an unknown route: do not reveal that the endpoint exists.

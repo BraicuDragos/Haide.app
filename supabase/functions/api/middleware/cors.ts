@@ -6,7 +6,7 @@ import type { AppBindings } from '../types.ts';
  * CORS allow-list from CORS_ORIGINS. `/internal/*` is never exposed to browsers:
  * it gets no CORS headers at all (and preflights are refused).
  */
-export const corsMiddleware: MiddlewareHandler<AppBindings> = async (c, next) => {
+export const corsMiddleware: MiddlewareHandler<AppBindings> = (c, next) => {
   if (c.req.path.includes('/internal/')) return next();
   const allowed = c.get('deps').env.CORS_ORIGINS;
   return cors({
