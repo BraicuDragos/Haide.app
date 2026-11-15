@@ -39,7 +39,7 @@ export function apiBaseUrl(): string {
 type TokenProvider = () => Promise<string | null> | string | null;
 let tokenProvider: TokenProvider = () => null;
 
-/** E1 plugs supabase-js in here. Until then requests go out anonymous (all E0 endpoints are public). */
+/** The auth provider plugs the Supabase session in here. Signed out, requests go out anonymous (public endpoints). */
 export function setTokenProvider(fn: TokenProvider): void {
   tokenProvider = fn;
 }
@@ -61,7 +61,9 @@ export async function apiRequest<T>(path: string, opts: RequestOptions = {}): Pr
   }
 
   const headers: Record<string, string> = { Accept: 'application/json', ...opts.headers };
-  if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
+  const isForm = typeof FormData !== 'undefined' && opts.body instanceof FormData;
+  // multipart: the browser sets the boundary itself.
+  if (opts.body !== undefined && !isForm) headers['Content-Type'] = 'application/json';
   const token = await tokenProvider();
   if (token) headers.Authorization = `Bearer ${token}`;
 
@@ -71,7 +73,8 @@ export async function apiRequest<T>(path: string, opts: RequestOptions = {}): Pr
   let res: Response;
   try {
     const init: RequestInit = { method: opts.method ?? 'GET', headers, signal };
-    if (opts.body !== undefined) init.body = JSON.stringify(opts.body);
+    if (opts.body !== undefined)
+      init.body = isForm ? (opts.body as FormData) : JSON.stringify(opts.body);
     res = await fetch(url, init);
   } catch (err) {
     // Caller aborted (for example a newer keystroke): let it propagate untouched.

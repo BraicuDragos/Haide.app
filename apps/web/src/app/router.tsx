@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, type ComponentType } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router';
 import { FindScreen } from '@/features/find/screens/FindScreen';
 import { NotFoundScreen } from '@/features/common/screens/NotFoundScreen';
@@ -14,6 +14,18 @@ const MapDemoScreen = DEV_ROUTES
   ? lazy(() => import('@/features/common/screens/MapDemoScreen'))
   : null;
 
+/** Account screens load on demand so the entry chunk stays small (initial JS budget 200 KB gzip). */
+const lazyScreen = <T extends Record<string, unknown>>(
+  load: () => Promise<T>,
+  pick: (m: T) => ComponentType,
+) => ({
+  lazy: async () => ({ Component: pick(await load()) }),
+});
+
+const auth = () => import('@/features/auth/screens');
+const form = () => import('@/features/profile/screens/AccountFormScreens');
+const policy = () => import('@/features/policy/screens/PolicyScreen');
+
 export const router = createBrowserRouter([
   {
     element: <Shell />,
@@ -23,6 +35,23 @@ export const router = createBrowserRouter([
       { path: 'offer', element: <OfferScreen /> },
       { path: 'rides', element: <RidesScreen /> },
       { path: 'profile', element: <ProfileScreen /> },
+      { path: 'profile/edit', ...lazyScreen(form, (m) => m.EditProfileScreen) },
+      { path: 'profile/car', ...lazyScreen(form, (m) => () => <m.VehicleScreen mode="edit" />) },
+      { path: 'setup/profile', ...lazyScreen(form, (m) => m.ProfileSetupScreen) },
+      { path: 'setup/vehicle', ...lazyScreen(form, (m) => () => <m.VehicleScreen mode="setup" />) },
+      {
+        path: 'user/:id',
+        ...lazyScreen(
+          () => import('@/features/profile/screens/PublicProfileScreen'),
+          (m) => m.PublicProfileScreen,
+        ),
+      },
+      { path: 'auth', ...lazyScreen(auth, (m) => m.SignInScreen) },
+      { path: 'auth/check', ...lazyScreen(auth, (m) => m.CheckEmailScreen) },
+      { path: 'auth/callback', ...lazyScreen(auth, (m) => m.CallbackScreen) },
+      { path: 'auth/consent', ...lazyScreen(auth, (m) => m.ConsentScreen) },
+      { path: 'policy/terms', ...lazyScreen(policy, (m) => m.TermsScreen) },
+      { path: 'policy/privacy', ...lazyScreen(policy, (m) => m.PrivacyScreen) },
       ...(MapDemoScreen
         ? [
             {
