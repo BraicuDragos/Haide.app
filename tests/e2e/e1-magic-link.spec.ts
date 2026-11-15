@@ -46,7 +46,9 @@ test.describe('magic-link sign-up (real stack)', () => {
   );
 
   const diagSink: { current: () => void } = { current: () => {} };
-  test.afterEach((_fixtures, testInfo) => {
+  // Playwright requires object destructuring for the first (fixtures) argument.
+  // eslint-disable-next-line no-empty-pattern
+  test.afterEach(({}, testInfo) => {
     if (testInfo.status !== testInfo.expectedStatus) diagSink.current();
   });
 
