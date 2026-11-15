@@ -1,0 +1,2 @@
+# SPA fallback: every unknown path serves the app, the router renders the 404 screen.
+/* /index.html 200

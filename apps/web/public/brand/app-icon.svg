@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-labelledby="t">
+  <title id="t">Haide app icon</title>
+  <!-- full-bleed square: the OS applies its own mask. Glyph sits inside the Android adaptive-icon safe zone. -->
+  <rect width="1024" height="1024" fill="#5043C6"/>
+  <g transform="translate(512 512) scale(12) translate(-32 -32)">
+    <g fill="none" stroke="#FFFFFF" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M20.5 14V50"/>
+      <path d="M20.5 38C20.5 30 25.5 26 31.5 26C37.5 26 41.5 30 41.5 36V44"/>
+    </g>
+    <circle cx="41.5" cy="48" r="5.5" fill="#FFC21A"/>
+  </g>
+</svg>
