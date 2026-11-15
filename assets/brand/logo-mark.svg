@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-labelledby="t">
+  <title id="t">Haide</title>
+  <rect width="64" height="64" rx="16" fill="#5043C6"/>
+  <g fill="none" stroke="#FFFFFF" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M20.5 14V50"/>
+    <path d="M20.5 38C20.5 30 25.5 26 31.5 26C37.5 26 41.5 30 41.5 36V44"/>
+  </g>
+  <circle cx="41.5" cy="48" r="5.5" fill="#FFC21A"/>
+</svg>
