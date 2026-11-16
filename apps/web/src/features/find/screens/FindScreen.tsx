@@ -1,4 +1,6 @@
 import { useMemo, useRef, useState, type FormEvent } from 'react';
+import { useNavigate } from 'react-router';
+import { searchPlaces } from '@/api/places';
 import type { Place } from '@/api/types';
 import { useScreenHeading } from '@/app/useScreenHeading';
 import { t } from '@/i18n';
@@ -9,11 +11,19 @@ import { Notice } from '@/ui/Notice';
 import { RouteArt } from '@/ui/RouteArt';
 import { PlaceField } from '../components/PlaceField';
 import { PlacePickerSheet, type PickerKind } from '../components/PlacePickerSheet';
+import { readSearch, saveSearch, type Window } from '../searchState';
 
-type Window = '15' | '30' | '60';
 type Errors = { places?: string; time?: string };
 
 const WINDOWS: Window[] = ['15', '30', '60'];
+
+/** The three launch corridors (strategy section 2). Each end is looked up in the gazetteer by name on tap, so the
+ * coordinates stay server-side data. */
+const CORRIDORS = [
+  { key: 'find.corridor.south', from: 'Cisnădie', to: 'Piața Mare' },
+  { key: 'find.corridor.west', from: 'Șelimbăr', to: 'Zona Industrială Vest' },
+  { key: 'find.corridor.campus', from: 'Hipodrom', to: 'Piața Mare' },
+] as const;
 
 /**
  * Find root (ia-and-flows 4, E3-1). E0 scope: the form, the place picker and validation. The results screen is E3,
@@ -22,15 +32,21 @@ const WINDOWS: Window[] = ['15', '30', '60'];
 export function FindScreen() {
   const h1 = useScreenHeading(t('find.title'));
   const days = useMemo(() => dayOptions(7), []);
+  const navigate = useNavigate();
+  // Coming back from Results ("Edit search") the form shows the last search again.
+  const saved = useMemo(readSearch, []);
 
-  const [from, setFrom] = useState<Place | null>(null);
-  const [to, setTo] = useState<Place | null>(null);
-  const [day, setDay] = useState(days[0]?.value ?? '');
-  const [time, setTime] = useState('');
-  const [win, setWin] = useState<Window>('30');
+  const [from, setFrom] = useState<Place | null>(saved?.from ?? null);
+  const [to, setTo] = useState<Place | null>(saved?.to ?? null);
+  const [day, setDay] = useState(
+    saved && days.some((d) => d.value === saved.day) ? saved.day : (days[0]?.value ?? ''),
+  );
+  const [time, setTime] = useState(saved?.time ?? '');
+  const [win, setWin] = useState<Window>(saved?.win ?? '30');
+  const [corridorBusy, setCorridorBusy] = useState(false);
+  const [corridorErr, setCorridorErr] = useState(false);
   const [picker, setPicker] = useState<PickerKind | null>(null);
   const [errors, setErrors] = useState<Errors>({});
-  const [ready, setReady] = useState(false);
 
   const fromBtn = useRef<HTMLButtonElement>(null);
   const toBtn = useRef<HTMLButtonElement>(null);
@@ -40,14 +56,12 @@ export function FindScreen() {
     if (picker === 'from') setFrom(place);
     else setTo(place);
     setPicker(null);
-    setReady(false);
     setErrors((e) => ({ ...e, places: undefined }));
   }
 
   function swap() {
     setFrom(to);
     setTo(from);
-    setReady(false);
   }
 
   function submit(e: FormEvent) {
@@ -57,10 +71,29 @@ export function FindScreen() {
     else if (from.id === to.id) next.places = t('find.err.same');
     if (!time) next.time = t('find.err.timeMissing');
     setErrors(next);
-    setReady(false);
     if (next.places) (!from ? fromBtn : !to ? toBtn : fromBtn).current?.focus();
     else if (next.time) timeInput.current?.focus();
-    else setReady(true);
+    else if (from && to) {
+      saveSearch({ from, to, day, time, win });
+      void navigate('/results');
+    }
+  }
+
+  async function pickCorridor(c: (typeof CORRIDORS)[number]) {
+    setCorridorBusy(true);
+    setCorridorErr(false);
+    try {
+      const [a, b] = await Promise.all([searchPlaces(c.from), searchPlaces(c.to)]);
+      if (!a[0] || !b[0]) throw new Error('place not found');
+      setFrom(a[0]);
+      setTo(b[0]);
+      setErrors((e) => ({ ...e, places: undefined }));
+      timeInput.current?.focus();
+    } catch {
+      setCorridorErr(true);
+    } finally {
+      setCorridorBusy(false);
+    }
   }
 
   return (
@@ -199,13 +232,33 @@ export function FindScreen() {
           </div>
         </fieldset>
 
-        {ready && <Notice tone="info">{t('find.soon')}</Notice>}
-
         <Button type="submit" block icon={<Icon name="search" />}>
           {t('find.cta')}
         </Button>
         <p className="text-center text-sm leading-5 text-text-muted">{t('find.visitorHint')}</p>
       </form>
+
+      <section aria-labelledby="corridors-h" className="flex flex-col gap-3 px-4 pb-6">
+        <h2 id="corridors-h" className="type-h3">
+          {t('find.corridors')}
+        </h2>
+        <ul className="m-0 flex list-none flex-col gap-2 p-0">
+          {CORRIDORS.map((c) => (
+            <li key={c.key}>
+              <button
+                type="button"
+                disabled={corridorBusy}
+                onClick={() => void pickCorridor(c)}
+                className="card flex min-h-12 w-full items-center gap-3 px-4 py-3 text-left font-semibold"
+              >
+                <Icon name="route" className="text-outline" />
+                <span className="min-w-0 flex-1">{t(c.key)}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+        {corridorErr && <Notice tone="error">{t('find.corridors.err')}</Notice>}
+      </section>
 
       <PlacePickerSheet
         open={picker !== null}

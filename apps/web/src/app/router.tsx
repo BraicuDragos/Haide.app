@@ -29,6 +29,8 @@ const policy = () => import('@/features/policy/screens/PolicyScreen');
 const offer = () => import('@/features/offer/screens/OfferScreen');
 const offerDone = () => import('@/features/offer/screens/OfferDoneScreen');
 const rides = () => import('@/features/rides/screens/RidesScreen');
+const results = () => import('@/features/search/screens/ResultsScreen');
+const rideDetail = () => import('@/features/search/screens/RideDetailScreen');
 const drivingRide = () => import('@/features/rides/screens/DrivingRideScreen');
 
 export const router = createBrowserRouter([
@@ -37,6 +39,8 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <Navigate to="/find" replace /> },
       { path: 'find', element: <FindScreen /> },
+      { path: 'results', ...lazyScreen(results, (m) => m.default) },
+      { path: 'ride/:id', ...lazyScreen(rideDetail, (m) => m.default) },
       { path: 'offer', ...lazyScreen(offer, (m) => m.default) },
       { path: 'offer/done', ...lazyScreen(offerDone, (m) => m.default) },
       { path: 'rides', ...lazyScreen(rides, (m) => m.default) },

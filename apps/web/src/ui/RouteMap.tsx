@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { LatLng } from '@/api/types';
 import { t } from '@/i18n';
 import { useSize } from '@/lib/useSize';
-import type { Pt } from '@/motion/core';
+import { dist, ease, ms, reduced, run, settle, type Pt } from '@/motion/core';
 import { curvePath, plainEndpoints, plainStreets, smoothPath } from '@/motion/geometry';
 import { MiniLoader } from './Loader';
 import { RouteOverlay } from './RouteOverlay';
@@ -24,6 +24,10 @@ export interface RouteMapProps {
   dropoff: LatLng;
   /** Optional route geometry as [lng, lat] pairs. */
   route?: Array<[number, number]>;
+  /** The passenger's own start and end (match moment): their walks snap onto the ride. Client-side only. */
+  you?: { from: LatLng; to: LatLng };
+  /** Chip text for the match moment ("Fits your route. 150 m walk to pickup."). A sibling of the map, so it is in the accessibility tree. */
+  fit?: string;
   /** Text alternative: what the map shows, in words (pickup and drop-off labels). Rendered visibly under the map. */
   description: string;
   className?: string;
@@ -122,6 +126,7 @@ interface Geometry {
   start: Pt;
   end: Pt;
   zones: number | undefined;
+  you?: { from: Pt; to: Pt } | undefined;
 }
 
 /**
@@ -135,6 +140,8 @@ export default function RouteMap({
   pickup,
   dropoff,
   route,
+  you,
+  fit,
   description,
   className = '',
 }: RouteMapProps) {
@@ -167,8 +174,14 @@ export default function RouteMap({
           [SIBIU_BOUNDS[2], SIBIU_BOUNDS[3]],
         ],
         bounds: [
-          [Math.min(pickup.lng, dropoff.lng), Math.min(pickup.lat, dropoff.lat)],
-          [Math.max(pickup.lng, dropoff.lng), Math.max(pickup.lat, dropoff.lat)],
+          [
+            Math.min(pickup.lng, dropoff.lng, you?.from.lng ?? Infinity, you?.to.lng ?? Infinity),
+            Math.min(pickup.lat, dropoff.lat, you?.from.lat ?? Infinity, you?.to.lat ?? Infinity),
+          ],
+          [
+            Math.max(pickup.lng, dropoff.lng, you?.from.lng ?? -Infinity, you?.to.lng ?? -Infinity),
+            Math.max(pickup.lat, dropoff.lat, you?.from.lat ?? -Infinity, you?.to.lat ?? -Infinity),
+          ],
         ],
         fitBoundsOptions: { padding: 48, maxZoom: 15 },
         maxZoom: 15,
@@ -198,6 +211,7 @@ export default function RouteMap({
           start,
           end,
           zones: mode === 'approximate' ? radiusPx(m, pickup, APPROX_RADIUS_M) : undefined,
+          you: you ? { from: toPt(you.from), to: toPt(you.to) } : undefined,
         });
       };
       m.on('load', () => {
@@ -212,7 +226,18 @@ export default function RouteMap({
       cancelled = true;
       map?.remove();
     };
-  }, [mode, pickup.lat, pickup.lng, dropoff.lat, dropoff.lng, route]);
+  }, [
+    mode,
+    pickup.lat,
+    pickup.lng,
+    dropoff.lat,
+    dropoff.lng,
+    route,
+    you?.from.lat,
+    you?.from.lng,
+    you?.to.lat,
+    you?.to.lng,
+  ]);
 
   // Plain background: a fixed layout in the measured box, same overlay.
   const plain = phase === 'unavailable' && w > 0 && h > 0 ? plainEndpoints(w, h) : null;
@@ -225,36 +250,73 @@ export default function RouteMap({
             start: plain.start,
             end: plain.end,
             zones: mode === 'approximate' ? Math.min(w, h) * 0.12 : undefined,
+            you: you
+              ? {
+                  from: { x: plain.start.x - w * 0.1, y: plain.start.y - h * 0.2 },
+                  to: { x: plain.end.x + w * 0.1, y: plain.end.y + h * 0.2 },
+                }
+              : undefined,
           }
         : null;
+
+  // Match chip: springs in after the snap; sits in the corner away from the start marker.
+  const chip = useRef<HTMLParagraphElement>(null);
+  const chipOn = Boolean(fit && geom);
+  useEffect(() => {
+    const el = chip.current;
+    if (!el || !chipOn || reduced()) return;
+    const a = run(
+      el,
+      [
+        { opacity: 0, transform: `translateY(${dist('rise')})` },
+        { opacity: 1, transform: 'none' },
+      ],
+      {
+        duration: ms('slow'),
+        delay: ms('reveal') + settle() + ms('instant'),
+        easing: ease('spring'),
+      },
+    );
+    return () => a?.cancel();
+  }, [chipOn]);
 
   const label = t(mode === 'approximate' ? 'a11y.map.approx' : 'a11y.map.exact');
 
   return (
     <figure className={`m-0 flex flex-col gap-2 ${className}`}>
-      <div ref={frame} className="map-frame" role="img" aria-label={label}>
-        {phase !== 'unavailable' && <div ref={host} className="size-full" />}
-        {phase === 'unavailable' && w > 0 && (
-          <svg
-            className="map-plain"
-            viewBox={`0 0 ${w} ${h}`}
-            width={w}
-            height={h}
-            aria-hidden="true"
-            focusable="false"
+      <div className="relative">
+        <div ref={frame} className="map-frame" role="img" aria-label={label}>
+          {phase !== 'unavailable' && <div ref={host} className="size-full" />}
+          {phase === 'unavailable' && w > 0 && (
+            <svg
+              className="map-plain"
+              viewBox={`0 0 ${w} ${h}`}
+              width={w}
+              height={h}
+              aria-hidden="true"
+              focusable="false"
+            >
+              {plainStreets(w, h).map((d) => (
+                <path key={d} d={d} />
+              ))}
+            </svg>
+          )}
+          {geom && <RouteOverlay {...geom} width={w} height={h} />}
+          {phase === 'loading' && (
+            <div role="status" className="absolute inset-0 grid place-items-center">
+              <MiniLoader label={t('map.loading')} />
+            </div>
+          )}
+          {phase === 'unavailable' && <p className="map-note glass">{t('map.unavailable')}</p>}
+        </div>
+        {fit && geom && (
+          <p
+            ref={chip}
+            className={`match-chip glass ${phase === 'unavailable' ? 'under' : geom.start.y > h / 2 ? 'top' : 'bottom'}`}
           >
-            {plainStreets(w, h).map((d) => (
-              <path key={d} d={d} />
-            ))}
-          </svg>
+            {fit}
+          </p>
         )}
-        {geom && <RouteOverlay {...geom} width={w} height={h} />}
-        {phase === 'loading' && (
-          <div role="status" className="absolute inset-0 grid place-items-center">
-            <MiniLoader label={t('map.loading')} />
-          </div>
-        )}
-        {phase === 'unavailable' && <p className="map-note glass">{t('map.unavailable')}</p>}
       </div>
       <figcaption className="text-sm leading-5 text-text-muted">
         <span className="font-semibold">
