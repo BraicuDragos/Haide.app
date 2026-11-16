@@ -17,8 +17,17 @@ import type {
   RideListItem,
   RideListResponse,
   RideOwnerView,
+  RidePublicView,
   RideStatus,
 } from '@contracts/rides';
+import type {
+  MatchResponse,
+  NotBookableReason,
+  SearchBody,
+  SearchItem,
+  SearchPlace,
+  SearchResponse,
+} from '@contracts/search';
 
 export type { FuelType, LatLng, Place, PublicUser };
 export type Me = MeResponse;
@@ -32,3 +41,10 @@ export type RoutePreviewRequest = PreviewBody;
 export type PublishRideRequest = CreateRideBody;
 export type OwnerRide = RideOwnerView;
 export type RouteLine = GeoLineString;
+
+// Search and matching (E3).
+export type { MatchResponse, NotBookableReason, SearchResponse };
+export type SearchRequest = SearchBody;
+export type SearchResultItem = SearchItem;
+export type RideStopPublic = SearchPlace;
+export type PublicRide = RidePublicView;

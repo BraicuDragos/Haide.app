@@ -281,7 +281,7 @@ UNIQUE `(booking_id, rater_id)`. Immutable (no UPDATE/DELETE grants). Index `(ra
 
 **`reports`**: `id`, `reporter_id`, `reported_id`, `ride_id NULL`, `booking_id NULL`, `reason report_reason`, `details text (≤ 500)`, `reported_snapshot jsonb` (`{firstName, phoneE164}` at report time, for safety follow-up), `status report_status`, `created_at`, `resolved_at`, `resolved_by`. Index `(status, created_at)`. Deleted after 12 months.
 
-**`blocks`**: PK `(blocker_id, blocked_id)`, `created_at`, `CHECK (blocker_id <> blocked_id)`. Index `(blocked_id)` for the reverse lookup.
+**`blocks`**: PK `(blocker_id, blocked_id)`, `created_at`, `CHECK (blocker_id <> blocked_id)`. Index `(blocked_id)` for the reverse lookup. Created in E3 (migration `20261118090000_search.sql`) because the match filter reads it; RLS enabled with no policies, no access for `anon`/`authenticated`. The endpoints that write it arrive with E5.
 
 **`share_links`** (E5-6): `id`, `booking_id`, `token_hash bytea UNIQUE`, `created_by`, `expires_at`, `created_at`.
 
@@ -365,7 +365,7 @@ Legend: ✔ allowed · ✘ denied (404 for resources, 403 for actions) · **own*
 | Function | Volatility | Purpose |
 |---|---|---|
 | `app.immutable_unaccent(text)` | IMMUTABLE | indexable unaccent |
-| `app.match_rides(origin geometry, dest geometry, from_ts, to_ts, desired_ts, searcher uuid, max_walk_m int, ride_id uuid default null, lim int default 50)` | STABLE | matching (ADR 0015). Returns ride id, fractions, walks, `segment_m`, snapped points, ETA, `rate_micro_per_km`, `is_free`, seats left |
+| `app.match_rides(origin, dest geometry, from_ts, to_ts, desired_ts, searcher uuid, now timestamptz, ride_id uuid default null, include_blocked bool default false, exclude_from, exclude_to timestamptz default null, max_walk_m int default 800, min_segment_m int default 1000, lim int default 50)` | STABLE | matching (ADR 0015). The pickup is the route point nearest the origin; the dropoff is searched only on the rest of the route (`ST_LineSubstring`), so loops pick the later pass and the reverse direction fails. Returns ride id, driver id, status, seats, `segment_m`, exact walks (the API rounds them to 50 m), fractions, ETA, `rate_micro_per_km`, `is_free`, 300 m grid-centre points, area names and a `blocked` flag; never an exact snapped point. `ride_id` = single-ride re-check (ignores window, status, seats, ownership). `exclude_from/to` serves the "nearest outside the window" query. EXECUTE revoked from `PUBLIC`, `anon`, `authenticated` |
 | `app.grid_point(p geometry, cell_m int)` | IMMUTABLE | deterministic grid rounding in UTM 35N (300 m public, 1 km coarsening) |
 | `app.trim_route(route geometry, max_m int, max_ratio float)` | IMMUTABLE | public route trimming |
 | `app.area_for(p geometry)` | STABLE | area lookup (point in polygon, nearest fallback) |

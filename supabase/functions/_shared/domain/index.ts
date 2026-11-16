@@ -8,3 +8,5 @@ export * from './time.ts';
 export * from './validation.ts';
 export * from './pricing.ts';
 export * from './rides.ts';
+export * from './corridors.ts';
+export * from './search.ts';

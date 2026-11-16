@@ -12,5 +12,8 @@ export const keys = {
     list: (scope: 'upcoming' | 'past') => ['rides', 'list', scope] as const,
     mine: (id: string) => ['rides', 'mine', id] as const,
   },
+  search: (body: unknown) => ['search', body] as const,
+  ride: (id: string) => ['rides', 'public', id] as const,
+  match: (id: string, body: unknown) => ['rides', 'match', id, body] as const,
   user: (id: string) => ['users', id] as const,
 } as const;

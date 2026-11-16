@@ -48,7 +48,7 @@ jobs:
   integration:
     name: integration
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 20
     needs: checks
     env:
       API_BASE_URL: http://127.0.0.1:54321/functions/v1/api/v1
@@ -151,10 +151,14 @@ jobs:
           done
           exit 1
       - name: API integration tests
-        timeout-minutes: 3
+        timeout-minutes: 5
+        env:
+          # Search p95 gate (500 rides in one window). 1 s is a hard budget well under the 2 s production
+          # budget but tolerant of a slow shared runner (the local default is 300 ms).
+          SEARCH_P95_MS: '1000'
         run: pnpm test:int
       - name: Playwright smoke (360x800, axe) and the real magic-link flow
-        timeout-minutes: 6
+        timeout-minutes: 10
         env:
           # e1-magic-link reads the confirmation email from Mailpit. The web build talks to the local
           # stack (VITE_SUPABASE_PUBLISHABLE_KEY comes from the serve step through GITHUB_ENV).

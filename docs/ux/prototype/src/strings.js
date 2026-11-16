@@ -61,6 +61,7 @@ const STR = {
   'find.err.missing': 'Choose where you start and where you’re going.',
   'find.err.same': 'Start and destination are the same place. Choose two different places.',
   'find.err.timeMissing': 'Choose a time.',
+  'find.corridors.err': 'We couldn’t load that route. Choose the places yourself.',
 
   // ---------- place picker ----------
   'place.title.from': 'Where do you start?',
@@ -98,6 +99,8 @@ const STR = {
   'results.notified': 'Saved. We’ll email you when a matching ride appears.',
   'results.notified.state': 'Alert saved for this route',
   'results.blockedNote': 'Rides from people you’ve blocked are hidden.',
+  'results.notify.soon': 'Ride alerts are coming soon.',
+  'results.list': 'Rides found',
 
   // ---------- ride card ----------
   'card.upTo': 'Up to',
@@ -109,9 +112,11 @@ const STR = {
   'card.rating': 'Rated {r} from {n} ratings',
   'card.outsideWindow': '{n} min from your time',
   'card.free': 'Free ride',
+  'card.pickupAround': 'Pickup around {time}',
 
   // ---------- ride detail (E3-3) ----------
   'detail.title': 'Ride details',
+  'detail.loading': 'Getting the ride details',
   'detail.pickup': 'Pickup',
   'detail.dropoff': 'Drop-off',
   'detail.approx': 'Approximate area. You’ll see the exact point once {driver} accepts.',
@@ -119,7 +124,10 @@ const STR = {
   'detail.walk.from': 'About {m} m on foot to where you’re going',
   'detail.driver': 'Driver',
   'detail.car': 'Car',
+  'detail.car.value': '{colour} {make} {model}',
+  'detail.map.desc': 'Pickup: {pickup}. Drop-off: {dropoff}.',
   'detail.plateLocked': 'Number plate shows after you’re accepted',
+  'detail.plateLocked.why': 'Haide shares the plate only with accepted passengers, so strangers can’t tell where you’ll be.',
   'detail.note': 'Note from {driver}',
   'detail.priceTitle': 'What you pay',
   'detail.priceNote': 'The price drops if others join. Once you’re accepted, it can only go down.',
@@ -135,11 +143,16 @@ const STR = {
   'detail.tooLate': 'Requests close 10 minutes before departure',
   'detail.ownRide': 'This is your ride',
   'detail.alreadyRequested': 'You already have a seat on this ride',
+  'detail.noLongerMatches': 'This ride no longer fits your search. Try a new search.',
   'detail.seatsLeft.one': '1 seat left of {total}',
   'detail.seatsLeft.other': '{n} seats left of {total}',
   'detail.gone': 'This ride is no longer available. It may have been cancelled or already left.',
   'detail.gone.cta': 'Back to results',
   'detail.blocked': 'This ride isn’t available to you.',
+  'detail.needSearch': 'Search with your start and destination to request a seat.',
+  'detail.needSearch.cta': 'Search this route',
+  'detail.requestSoon': 'Requesting a seat opens with the next release.',
+  'detail.err': 'We couldn’t load this ride. Check your connection and try again.',
 
   // ---------- request (E4-1) ----------
   'request.title': 'Request a seat',

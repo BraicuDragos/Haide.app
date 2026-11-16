@@ -7,6 +7,7 @@ import {
   ride,
   run,
   sample,
+  settle,
   translate,
   watch,
   type Pt,
@@ -22,6 +23,8 @@ export interface RouteOverlayProps {
   end: Pt;
   /** Approximate mode: pickup and drop-off areas, radius in px. */
   zones?: number | undefined;
+  /** Match moment (motion.md 2): where the passenger starts and ends, in px. The walk legs snap onto the ride. */
+  you?: { from: Pt; to: Pt } | undefined;
   /** Play the draw-in (once per mount, or once per session when `onceKey` is given). */
   draw?: boolean;
   onceKey?: string;
@@ -42,12 +45,52 @@ export function RouteOverlay({
   start,
   end,
   zones,
+  you,
   draw = true,
   onceKey,
 }: RouteOverlayProps) {
   const wrap = useRef<HTMLDivElement>(null);
   const core = useRef<SVGPathElement>(null);
   const isReduced = useReducedMotion();
+  const matched = useRef(false);
+  const ready = Boolean(width && height && path);
+  const hasYou = Boolean(you);
+
+  // Match (moment 2): the passenger's walks arrive slightly off and rotated, then snap on with a magnetic overshoot,
+  // rings ripple at both ends. Once per mount, after the route has started to draw. Reduced motion: already aligned.
+  useEffect(() => {
+    const el = wrap.current;
+    if (!el || !ready || !hasYou || matched.current || reduced()) return;
+    matched.current = true;
+    const q = (s: string) => el.querySelector<SVGElement>(s);
+    const t0 = ms('reveal');
+    const anims: Array<Animation | null> = [];
+    const pass = q('.pass');
+    if (pass)
+      anims.push(
+        run(
+          pass,
+          [
+            { transform: 'translate(-14px, 22px) rotate(-3deg)', opacity: 0.5 },
+            { transform: 'none', opacity: 1 },
+          ],
+          { duration: settle(), delay: t0, easing: ease('magnet') },
+        ),
+      );
+    el.querySelectorAll<SVGElement>('.snap').forEach((s) =>
+      anims.push(
+        run(
+          s,
+          [
+            { transform: 'scale(0.6)', opacity: 0.9 },
+            { transform: 'scale(2.4)', opacity: 0 },
+          ],
+          { duration: ms('slow'), delay: t0 + settle() + ms('instant'), easing: ease('standard') },
+        ),
+      ),
+    );
+    return () => anims.forEach((a) => a?.cancel());
+  }, [ready, hasYou]);
 
   useEffect(() => {
     const el = wrap.current;
@@ -172,6 +215,18 @@ export function RouteOverlay({
         <path className="rt halo" d={path} pathLength={1} />
         <path ref={core} className="rt core" d={path} pathLength={1} />
         <path className="rt spark" d={path} pathLength={1} />
+        {you && (
+          <>
+            <g className="pass">
+              <path className="walk" d={`M${you.from.x} ${you.from.y}L${start.x} ${start.y}`} />
+              <path className="walk" d={`M${end.x} ${end.y}L${you.to.x} ${you.to.y}`} />
+              <circle className="you" cx={you.from.x} cy={you.from.y} r="6" />
+              <circle className="you" cx={you.to.x} cy={you.to.y} r="6" />
+            </g>
+            <circle className="snap" cx={start.x} cy={start.y} r="10" />
+            <circle className="snap" cx={end.x} cy={end.y} r="10" />
+          </>
+        )}
         <g className="pk" transform={`translate(${start.x} ${start.y})`}>
           <circle className="ring" r="11" />
           <circle className="ping mk" r="11" />

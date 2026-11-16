@@ -7,6 +7,7 @@ import { requestLogging } from './middleware/logging.ts';
 import { accountRoutes } from './routes/account.ts';
 import { placesRoutes } from './routes/places.ts';
 import { rideRoutes } from './routes/rides.ts';
+import { searchRoutes } from './routes/search.ts';
 import { systemRoutes } from './routes/system.ts';
 import type { AppBindings, Deps } from './types.ts';
 
@@ -30,6 +31,7 @@ export function createApp(deps: Deps) {
   app.route('/', placesRoutes);
   app.route('/', accountRoutes);
   app.route('/', rideRoutes);
+  app.route('/', searchRoutes);
 
   app.onError(onError);
   app.notFound(onNotFound);

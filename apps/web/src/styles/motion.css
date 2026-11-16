@@ -164,6 +164,70 @@
     opacity: 1;
   }
 
+  /* ---- match (moment 2): the passenger's walks snap onto the ride; the chip says it in words ---- */
+  .route-fx .pass {
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+  .route-fx .walk {
+    fill: none;
+    stroke: var(--theme-link);
+    stroke-width: 2.5;
+    stroke-linecap: round;
+    stroke-dasharray: 2 6;
+  }
+  .route-fx .you {
+    fill: var(--theme-map-bg);
+    stroke: var(--theme-link);
+    stroke-width: 3;
+  }
+  .route-fx .snap {
+    fill: none;
+    stroke: var(--theme-pulse-ring);
+    stroke-width: 2;
+    opacity: 0;
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+  .match-chip {
+    position: absolute;
+    left: var(--tk-space-3);
+    right: var(--tk-space-3);
+    z-index: 5;
+    margin: 0;
+    width: fit-content;
+    max-width: calc(100% - var(--tk-space-6));
+    padding: var(--tk-space-2) var(--tk-space-3);
+    border-radius: var(--tk-radius-lg);
+    font-size: var(--tk-text-sm);
+    line-height: 20px;
+    font-weight: 600;
+    color: var(--theme-text);
+  }
+  .match-chip.top {
+    top: var(--tk-space-3);
+  }
+  /* Without tiles the map shows its own note in the corner: the chip then sits under the map instead. */
+  .match-chip.under {
+    position: static;
+    margin-top: var(--tk-space-2);
+    max-width: none;
+  }
+  .match-chip.bottom {
+    bottom: var(--tk-space-3);
+  }
+
+  /* ---- shared elements on the details screen: the names the tapped result card also carries (motion.md 4) ---- */
+  .vt-time {
+    view-transition-name: ride-time;
+  }
+  .vt-route {
+    view-transition-name: ride-route;
+  }
+  .vt-price {
+    view-transition-name: ride-price;
+  }
+
   /* ---- loading and empty: one small light on a tiny route, no spinners ---- */
   .loader {
     display: flex;

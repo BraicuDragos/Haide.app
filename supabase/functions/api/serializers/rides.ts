@@ -96,6 +96,8 @@ export function toListItem(row: RideListRow): RideListItem {
 /** Whether this viewer may see the ride at all (404 otherwise, never 403). */
 export function publicRideVisible(row: PublicRideRow, viewerId: string | null): boolean {
   if (row.driver_status === 'suspended') return false;
+  // Blocked either way looks exactly like a missing ride: nobody learns who blocked whom.
+  if (row.blocked) return false;
   const isDriver = viewerId !== null && viewerId === row.driver_id;
   if ((row.status === 'cancelled' || row.status === 'expired') && !isDriver) return false;
   return true;
