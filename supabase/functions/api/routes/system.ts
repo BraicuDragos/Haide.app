@@ -7,6 +7,7 @@ import { RATE_LIMITS } from '../../_shared/domain/rules.ts';
 import { scrubText } from '../../_shared/scrub.ts';
 import { rateLimit } from '../middleware/rateLimit.ts';
 import { pingDb, recordAppError } from '../repo/system.ts';
+import { runTick } from '../services/tick.ts';
 import type { AppBindings } from '../types.ts';
 import { parse, readJson } from '../validate.ts';
 
@@ -56,14 +57,14 @@ systemRoutes.post('/telemetry/error', rateLimit('telemetry', RATE_LIMITS.telemet
   return c.body(null, 204);
 });
 
-// POST /internal/tick: called by pg_cron through pg_net every minute. Skeleton for E0.
-systemRoutes.post('/internal/tick', (c) => {
+// POST /internal/tick: called by pg_cron through pg_net every minute: expire requests, dispatch the
+// outbox (<= 50 per run), purge expired route previews, hourly housekeeping.
+systemRoutes.post('/internal/tick', async (c) => {
   const secret = c.req.header('x-cron-secret') ?? '';
   if (!safeEqual(secret, c.get('deps').env.CRON_SECRET)) {
     // Same answer as an unknown route: do not reveal that the endpoint exists.
     throw new AppError('NOT_FOUND', 'Not found.');
   }
-  // E4 adds: expire requests, dispatch outbox (<= 50 per run), purge expired route previews.
-  const result: TickResponse = { expired: 0, sent: 0, failed: 0 };
+  const result: TickResponse = await runTick(c.get('deps'));
   return c.json(result);
 });

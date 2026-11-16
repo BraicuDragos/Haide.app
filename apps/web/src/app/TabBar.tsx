@@ -3,6 +3,7 @@ import { t, tp, type MessageKey } from '@/i18n';
 import { useReducedMotion } from '@/lib/prefs';
 import { Badge } from '@/ui/Badge';
 import { Icon, type IconName } from '@/ui/Icon';
+import { ridesBadgeCount, useSummary } from '@/features/bookings/useSummary';
 
 interface Tab {
   to: string;
@@ -17,9 +18,10 @@ export const TABS: readonly Tab[] = [
   { to: '/profile', icon: 'user', label: 'nav.profile' },
 ];
 
-/** Badge slot: pending requests (driver) plus unread status changes (passenger). Wired up in E4. */
+/** Badge on My rides: pending requests (driver) plus unseen status changes (passenger), from GET /me/summary. */
 function useUpdateCounts(): Record<string, number> {
-  return {};
+  const summary = useSummary().data;
+  return { '/rides': ridesBadgeCount(summary) };
 }
 
 /**

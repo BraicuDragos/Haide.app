@@ -1,0 +1,146 @@
+import { describe, expect, it } from 'vitest';
+import { OUTBOX_TEMPLATES } from '../domain/outbox.ts';
+import { renderEmail, whenLabel, type TemplateInput } from './templates.ts';
+
+const NOW = new Date('2026-11-16T05:00:00Z'); // 07:00 in Bucharest (EET)
+const ctx = { baseUrl: 'https://haide.ro/', now: NOW };
+const DEP = '2026-11-16T07:30:00.000Z'; // today 09:30
+const LATER = '2026-11-20T05:40:00.000Z'; // Fri 20 Nov, 07:40
+
+const ALL: TemplateInput[] = [
+  {
+    template: 'booking_requested',
+    payload: {
+      bookingId: 'b1',
+      rideId: 'r1',
+      passengerFirstName: 'Ștefan',
+      departureAt: DEP,
+      pickupArea: 'Șelimbăr',
+      dropoffArea: 'Cisnădie',
+      expiresAt: '2026-11-16T05:30:00.000Z',
+    },
+  },
+  {
+    template: 'booking_confirmed',
+    payload: {
+      bookingId: 'b1',
+      driverFirstName: 'Rădulescu',
+      departureAt: DEP,
+      pickupEtaAt: '2026-11-16T07:35:00.000Z',
+      pickupArea: 'Șelimbăr',
+    },
+  },
+  {
+    template: 'booking_rejected',
+    payload: { bookingId: 'b1', driverFirstName: 'Radu', departureAt: DEP },
+  },
+  {
+    template: 'booking_expired',
+    payload: { bookingId: 'b1', driverFirstName: 'Radu', departureAt: LATER },
+  },
+  {
+    template: 'ride_cancelled',
+    payload: {
+      bookingId: 'b1',
+      rideId: 'r1',
+      driverFirstName: 'Radu',
+      departureAt: DEP,
+      pickupArea: 'Turnișor',
+      dropoffArea: 'Piața Mare',
+    },
+  },
+  {
+    template: 'booking_cancelled',
+    payload: { bookingId: 'b1', rideId: 'r1', passengerFirstName: 'Ioana', departureAt: LATER },
+  },
+];
+
+const at = (i: number): TemplateInput => ALL[i] as TemplateInput;
+
+describe('whenLabel', () => {
+  it('shows the clock time today and the date otherwise, in Bucharest time', () => {
+    expect(whenLabel(new Date(DEP), NOW)).toBe('09:30');
+    expect(whenLabel(new Date(LATER), NOW)).toBe('Fri 20 Nov, 07:40');
+  });
+});
+
+describe('renderEmail', () => {
+  it('has a template for every outbox template', () => {
+    expect(ALL.map((i) => i.template).sort()).toEqual([...OUTBOX_TEMPLATES].sort());
+  });
+
+  it('renders subject, text, html and an absolute link for each, with diacritics intact', () => {
+    for (const input of ALL) {
+      const out = renderEmail(input, ctx);
+      expect(out.subject.length, input.template).toBeGreaterThan(5);
+      expect(out.text, input.template).toContain(out.link);
+      expect(out.html, input.template).toContain(`href="${out.link}"`);
+      expect(out.link.startsWith('https://haide.ro/'), input.template).toBe(true);
+      expect(out.link).not.toContain('//booking');
+      expect(`${out.subject}${out.text}`).not.toMatch(/\{\w+\}|undefined|null/);
+    }
+  });
+
+  it('links requests and cancelled seats to the ride, the rest to the booking', () => {
+    const link = (i: number) => renderEmail(at(i), ctx).link;
+    expect(link(0)).toBe('https://haide.ro/driving/r1');
+    expect(link(1)).toBe('https://haide.ro/booking/b1');
+    expect(link(2)).toBe('https://haide.ro/booking/b1');
+    expect(link(3)).toBe('https://haide.ro/booking/b1');
+    expect(link(4)).toBe('https://haide.ro/booking/b1');
+    expect(link(5)).toBe('https://haide.ro/driving/r1');
+  });
+
+  it('uses the copy from docs/ux/copy.md section 34', () => {
+    const req = renderEmail(at(0), ctx);
+    expect(req.subject).toBe('Ștefan wants a seat on your 09:30 ride');
+    expect(req.text).toContain(
+      'Ștefan asked for a seat from Șelimbăr to Cisnădie. Answer by 07:30 or the request expires. Open Haide to decide.',
+    );
+    const acc = renderEmail(at(1), ctx);
+    expect(acc.subject).toBe('Rădulescu accepted your request');
+    expect(acc.text).toContain('Pickup is near Șelimbăr at 09:35.');
+    expect(renderEmail(at(2), ctx).subject).toBe('Radu can’t take you this time');
+    expect(renderEmail(at(3), ctx).subject).toBe(
+      'Your request for the Fri 20 Nov, 07:40 ride expired',
+    );
+    expect(renderEmail(at(4), ctx).subject).toBe('Radu cancelled the 09:30 ride');
+    expect(renderEmail(at(5), ctx).subject).toBe(
+      'Ioana cancelled their seat on your Fri 20 Nov, 07:40 ride',
+    );
+  });
+
+  it('never carries a coordinate, phone, plate or email address', () => {
+    for (const input of ALL) {
+      const out = renderEmail(input, ctx);
+      const all = `${out.subject}\n${out.text}\n${out.html}`;
+      expect(all).not.toMatch(/\d+\.\d{4,}/);
+      expect(all).not.toMatch(/\+40|\b07\d{8}\b/);
+      expect(all).not.toMatch(/\b[A-Z]{1,2}\s?\d{2,3}\s?[A-Z]{3}\b/);
+      expect(all).not.toMatch(/[^\s@]+@[^\s@]+\.[^\s@]+/);
+    }
+  });
+
+  it('survives a payload with missing or hostile fields (it comes from jsonb)', () => {
+    const out = renderEmail(
+      {
+        template: 'booking_requested',
+        payload: { passengerFirstName: '<script>alert(1)</script>' } as never,
+      },
+      ctx,
+    );
+    expect(out.html).not.toContain('<script>');
+    expect(out.text).toContain('Sibiu');
+  });
+
+  it('falls back to neutral names', () => {
+    const out = renderEmail(
+      {
+        template: 'booking_rejected',
+        payload: { bookingId: 'b', driverFirstName: null, departureAt: DEP },
+      },
+      ctx,
+    );
+    expect(out.subject).toBe('Your driver can’t take you this time');
+  });
+});

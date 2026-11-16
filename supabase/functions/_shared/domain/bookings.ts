@@ -1,0 +1,410 @@
+import type { BookingStatus } from '../contracts/rides.ts';
+import type { Clock } from './clock.ts';
+import { DomainError } from './errors.ts';
+import {
+  assertPayloadSafe,
+  type BookingCancelledPayload,
+  type BookingConfirmedPayload,
+  type BookingExpiredPayload,
+  type BookingRejectedPayload,
+  type BookingRequestedPayload,
+  type OutboxRow,
+  type RideCancelledPayload,
+} from './outbox.ts';
+import { relock, seatPriceBani } from './pricing.ts';
+import { CONTACT_WINDOW_H } from './rules.ts';
+import { bookingCutoffPassed, contactWindowOpen, isLateCancel } from './time.ts';
+
+/**
+ * Booking lifecycle rules (E4, e4-bookings-spec §2 to §4). Pure: no I/O, time from the injected
+ * Clock, all pricing through pricing.ts. Server-side only.
+ */
+
+// ---- state machine -----------------------------------------------------------------------------------
+
+/**
+ * Allowed transitions in E4. `completed` and `no_show` are reached in E5 (the completion job and the
+ * no-show endpoints), so nothing leaves or enters them here. Every write is a guarded UPDATE:
+ * `… WHERE id = $1 AND status = <from>`.
+ */
+export const BOOKING_TRANSITIONS: Readonly<Record<BookingStatus, readonly BookingStatus[]>> = {
+  requested: ['confirmed', 'rejected', 'expired', 'cancelled'],
+  confirmed: ['cancelled'],
+  rejected: [],
+  expired: [],
+  cancelled: [],
+  completed: [],
+  no_show: [],
+};
+
+export const ACTIVE_STATUSES: readonly BookingStatus[] = ['requested', 'confirmed'];
+
+export const canTransition = (from: BookingStatus, to: BookingStatus): boolean =>
+  BOOKING_TRANSITIONS[from].includes(to);
+
+export function assertTransition(from: BookingStatus, to: BookingStatus): void {
+  if (!canTransition(from, to)) {
+    throw new DomainError('INVALID_STATE', `A ${from} booking cannot become ${to}.`);
+  }
+}
+
+// ---- request guards (POST /bookings) ------------------------------------------------------------------
+
+export type RequestGuardInput = {
+  viewerId: string;
+  driverId: string;
+  driverActive: boolean;
+  /** A block exists between passenger and driver, in either direction. */
+  blocked: boolean;
+  /** The passenger already has a `requested`, `confirmed` or `rejected` booking on this ride. */
+  hasActiveOrRejected: boolean;
+  ride: { status: string; departureAt: Date; seatsOffered: number; seatsBooked: number };
+  /** The re-run of app.match_rides found the ride for the typed points. */
+  pointsMatch: boolean;
+};
+
+/**
+ * The request checks in their fixed order (idempotency replay happens before this, in the
+ * service): OWN_RIDE, BLOCKED, driver not active (NOT_FOUND), ALREADY_REQUESTED, RIDE_NOT_BOOKABLE,
+ * RIDE_FULL, NO_LONGER_MATCHES. A declined passenger gets ALREADY_REQUESTED, so they cannot spam the
+ * driver; after `cancelled` or `expired` they may ask again.
+ */
+export function assertCanRequest(input: RequestGuardInput, clock: Clock): void {
+  if (input.viewerId === input.driverId) {
+    throw new DomainError('OWN_RIDE', 'You cannot book your own ride.');
+  }
+  if (input.blocked) throw new DomainError('BLOCKED', 'You cannot book this ride.');
+  if (!input.driverActive) throw new DomainError('NOT_FOUND', 'Ride not found.');
+  if (input.hasActiveOrRejected) {
+    throw new DomainError('ALREADY_REQUESTED', 'You already asked for a seat on this ride.');
+  }
+  const { ride } = input;
+  if (ride.status !== 'published' || bookingCutoffPassed(ride.departureAt, clock)) {
+    throw new DomainError('RIDE_NOT_BOOKABLE', 'This ride is not open for requests.');
+  }
+  if (ride.seatsBooked >= ride.seatsOffered) {
+    throw new DomainError('RIDE_FULL', 'This ride is full.');
+  }
+  if (!input.pointsMatch) {
+    throw new DomainError('NO_LONGER_MATCHES', 'This ride no longer fits your trip.');
+  }
+}
+
+// ---- driver decisions (approve, reject) -------------------------------------------------------------------
+
+export type DecisionInput = {
+  booking: { status: BookingStatus; expiresAt: Date };
+  ride: { status: string; seatsOffered: number; seatsBooked: number };
+  blocked: boolean;
+};
+
+/**
+ * Approve guards, in order: ride still published (INVALID_STATE), booking `requested` and not past
+ * its expiry (REQUEST_EXPIRED for a lapsed or expired request, INVALID_STATE for any other state),
+ * block either way (BLOCKED), a free seat (RIDE_FULL). The caller has already proved the driver
+ * owns the ride (404 otherwise).
+ */
+export function assertCanApprove(input: DecisionInput, clock: Clock): void {
+  assertDecidable(input, clock);
+  if (input.blocked) throw new DomainError('BLOCKED', 'You cannot accept this request.');
+  if (input.ride.seatsBooked >= input.ride.seatsOffered) {
+    throw new DomainError('RIDE_FULL', 'This ride is full.');
+  }
+}
+
+/** Reject guards: the same state checks as approve, no block or seat check. */
+export function assertCanReject(input: Omit<DecisionInput, 'blocked'>, clock: Clock): void {
+  assertDecidable({ ...input, blocked: false }, clock);
+}
+
+function assertDecidable(input: DecisionInput, clock: Clock): void {
+  const { booking, ride } = input;
+  if (ride.status !== 'published') {
+    throw new DomainError('INVALID_STATE', 'This ride is no longer open.');
+  }
+  if (booking.status === 'expired') {
+    throw new DomainError('REQUEST_EXPIRED', 'This request has expired.');
+  }
+  if (booking.status !== 'requested') {
+    throw new DomainError('INVALID_STATE', `This request is already ${booking.status}.`);
+  }
+  if (booking.expiresAt.getTime() <= clock.now().getTime()) {
+    throw new DomainError('REQUEST_EXPIRED', 'This request has expired.');
+  }
+}
+
+// ---- passenger cancel ---------------------------------------------------------------------------------------
+
+/**
+ * A passenger can cancel a `requested` or `confirmed` booking until departure (INVALID_STATE
+ * otherwise). Returns whether it counts as a late cancellation: confirmed, 30 minutes or less ahead.
+ */
+export function assertCanPassengerCancel(
+  booking: { status: BookingStatus; departureAt: Date },
+  clock: Clock,
+): { late: boolean } {
+  if (!canTransition(booking.status, 'cancelled')) {
+    throw new DomainError('INVALID_STATE', `A ${booking.status} booking cannot be cancelled.`);
+  }
+  if (booking.departureAt.getTime() <= clock.now().getTime()) {
+    throw new DomainError('INVALID_STATE', 'The ride has already left.');
+  }
+  return { late: booking.status === 'confirmed' && isLateCancel(booking.departureAt, clock) };
+}
+
+// ---- pricing: relock (ADR 0021, pricing.md section 4) --------------------------------------------------------
+
+export type RelockInput = {
+  id: string;
+  segmentM: number;
+  /** The quote at request time. The lock starts here when `lockedBani` is null. */
+  quotedBani: number;
+  lockedBani: number | null;
+};
+
+export type RelockResult = {
+  id: string;
+  lockedBani: number;
+  /** The new lock is lower than the one the booking had before (the passenger gets a badge). */
+  dropped: boolean;
+};
+
+/**
+ * Recomputes every confirmed booking's price with n = the number of confirmed bookings:
+ * `locked = min(old ?? quoted, seatPrice(segment, rate, n))`. A lock never goes up, so this is safe
+ * to run after an approval and after a cancellation alike.
+ */
+export function relockConfirmed(
+  confirmed: readonly RelockInput[],
+  rateMicro: number,
+  isFree: boolean,
+): RelockResult[] {
+  const n = confirmed.length;
+  if (n === 0) return [];
+  return confirmed.map((b) => {
+    const before = b.lockedBani ?? b.quotedBani;
+    const lockedBani = relock(before, seatPriceBani(b.segmentM, rateMicro, n, isFree));
+    return { id: b.id, lockedBani, dropped: lockedBani < before };
+  });
+}
+
+/** What the driver would collect from this request if accepted now: n = confirmed + 1. */
+export function priceIfAcceptedBani(
+  segmentM: number,
+  rateMicro: number,
+  confirmedCount: number,
+  isFree: boolean,
+): number {
+  return seatPriceBani(segmentM, rateMicro, confirmedCount + 1, isFree);
+}
+
+export type BookingPriceInput = {
+  quotedBani: number;
+  lockedBani: number | null;
+  finalBani: number | null;
+};
+
+/**
+ * Price block of the booking view. `finalBani` is the stored final price (E5) or, for a confirmed
+ * or completed booking, the locked price once the ride has departed.
+ */
+export function bookingPrice(
+  b: BookingPriceInput & { status: BookingStatus; departureAt: Date },
+  clock: Clock,
+): {
+  quotedBani: number;
+  lockedBani: number | null;
+  finalBani: number | null;
+  droppedFromBani: number | null;
+} {
+  const departed = clock.now().getTime() >= b.departureAt.getTime();
+  const settles = b.status === 'confirmed' || b.status === 'completed';
+  const finalBani = b.finalBani ?? (departed && settles ? b.lockedBani : null);
+  const dropped = b.lockedBani !== null && b.lockedBani < b.quotedBani;
+  return {
+    quotedBani: b.quotedBani,
+    lockedBani: b.lockedBani,
+    finalBani,
+    droppedFromBani: dropped ? b.quotedBani : null,
+  };
+}
+
+/** The price shown in lists: final ?? locked ?? quoted. */
+export function displayPriceBani(p: BookingPriceInput): number {
+  return p.finalBani ?? p.lockedBani ?? p.quotedBani;
+}
+
+// ---- reveal (ADR 0023) ------------------------------------------------------------------------------------------
+
+/**
+ * The single privacy rule: exact points, the exact own segment, the counterpart's phone and the plate
+ * are exposed only for a confirmed or completed booking, strictly before departure + 24 h.
+ */
+export function revealFor(booking: { status: BookingStatus; departureAt: Date }, clock: Clock) {
+  return (
+    (booking.status === 'confirmed' || booking.status === 'completed') &&
+    contactWindowOpen(booking.departureAt, clock)
+  );
+}
+
+/** End of the reveal window: departure + 24 h. */
+export function revealedUntil(departureAt: Date): Date {
+  return new Date(departureAt.getTime() + CONTACT_WINDOW_H * 3_600_000);
+}
+
+// ---- booking view helpers -------------------------------------------------------------------------------------------
+
+export type TimelineInput = {
+  status: BookingStatus;
+  requestedAt: Date;
+  expiresAt: Date;
+  decidedAt: Date | null;
+  cancelledAt: Date | null;
+  cancelledBy: 'passenger' | 'driver' | 'system' | null;
+};
+
+/** Ordered status history reconstructed from the booking's own timestamps. */
+export function buildTimeline(
+  b: TimelineInput,
+): { status: BookingStatus | 'ride_cancelled'; at: string }[] {
+  const out: { status: BookingStatus | 'ride_cancelled'; at: string }[] = [
+    { status: 'requested', at: b.requestedAt.toISOString() },
+  ];
+  // A decision timestamp exists for confirmed bookings (also those cancelled later) and rejected ones.
+  if (b.decidedAt && b.status !== 'rejected') {
+    out.push({ status: 'confirmed', at: b.decidedAt.toISOString() });
+  }
+  switch (b.status) {
+    case 'rejected':
+      if (b.decidedAt) out.push({ status: 'rejected', at: b.decidedAt.toISOString() });
+      break;
+    case 'expired':
+      out.push({ status: 'expired', at: b.expiresAt.toISOString() });
+      break;
+    case 'cancelled':
+      if (b.cancelledAt) {
+        out.push({
+          status: b.cancelledBy === 'driver' ? 'ride_cancelled' : 'cancelled',
+          at: b.cancelledAt.toISOString(),
+        });
+      }
+      break;
+    default:
+      break;
+  }
+  return out;
+}
+
+/** Passenger-side actions. The E5 flags stay false in E4. */
+export function bookingActions(
+  b: { status: BookingStatus; departureAt: Date; viewerIsPassenger: boolean },
+  clock: Clock,
+) {
+  const canCancel =
+    b.viewerIsPassenger &&
+    canTransition(b.status, 'cancelled') &&
+    b.departureAt.getTime() > clock.now().getTime();
+  return {
+    canCancel,
+    lateCancelIfNow: canCancel && b.status === 'confirmed' && isLateCancel(b.departureAt, clock),
+    canReportDriverNoShow: false,
+    canRate: false,
+    canShare: false,
+    show112: false,
+  };
+}
+
+/** Request seconds between request and decision (analytics `responseSeconds`). */
+export const responseSeconds = (requestedAt: Date, decidedAt: Date): number =>
+  Math.max(0, Math.round((decidedAt.getTime() - requestedAt.getTime()) / 1000));
+
+// ---- outbox builders (labels, first names, ids and times only) -------------------------------------------------------
+
+const guard = <T extends OutboxRow>(row: T): T => {
+  assertPayloadSafe(row.payload);
+  return row;
+};
+
+export const bookingRequestedOutbox = (
+  driverId: string,
+  payload: BookingRequestedPayload,
+): OutboxRow<'booking_requested'> =>
+  guard({ userId: driverId, template: 'booking_requested', payload });
+
+export const bookingConfirmedOutbox = (
+  passengerId: string,
+  payload: BookingConfirmedPayload,
+): OutboxRow<'booking_confirmed'> =>
+  guard({ userId: passengerId, template: 'booking_confirmed', payload });
+
+export const bookingRejectedOutbox = (
+  passengerId: string,
+  payload: BookingRejectedPayload,
+): OutboxRow<'booking_rejected'> =>
+  guard({ userId: passengerId, template: 'booking_rejected', payload });
+
+export const bookingExpiredOutbox = (
+  passengerId: string,
+  payload: BookingExpiredPayload,
+): OutboxRow<'booking_expired'> =>
+  guard({ userId: passengerId, template: 'booking_expired', payload });
+
+export const bookingCancelledOutbox = (
+  driverId: string,
+  payload: BookingCancelledPayload,
+): OutboxRow<'booking_cancelled'> =>
+  guard({ userId: driverId, template: 'booking_cancelled', payload });
+
+/** One `ride_cancelled` row per cancelled booking, each with that passenger's own areas. */
+export function rideCancelledRows(
+  items: readonly { passengerId: string; payload: RideCancelledPayload }[],
+): OutboxRow<'ride_cancelled'>[] {
+  return items.map((i) =>
+    guard({ userId: i.passengerId, template: 'ride_cancelled', payload: i.payload }),
+  );
+}
+
+// ---- analytics (no coordinates, phones or plates: conventions §6) ---------------------------------------------------
+
+export type AnalyticsEvent = {
+  name:
+    | 'booking_requested'
+    | 'booking_confirmed'
+    | 'booking_rejected'
+    | 'booking_expired'
+    | 'booking_cancelled';
+  /** The actor. */
+  userId: string;
+  props: Record<string, string | number | boolean>;
+  at: Date;
+};
+
+export const bookingRequestedEvent = (
+  passengerId: string,
+  p: { bookingId: string; rideId: string; segmentM: number },
+  at: Date,
+): AnalyticsEvent => ({ name: 'booking_requested', userId: passengerId, props: p, at });
+
+export const bookingConfirmedEvent = (
+  driverId: string,
+  p: { bookingId: string; rideId: string; responseSeconds: number },
+  at: Date,
+): AnalyticsEvent => ({ name: 'booking_confirmed', userId: driverId, props: p, at });
+
+export const bookingRejectedEvent = (
+  driverId: string,
+  p: { bookingId: string; rideId: string; responseSeconds: number },
+  at: Date,
+): AnalyticsEvent => ({ name: 'booking_rejected', userId: driverId, props: p, at });
+
+export const bookingExpiredEvent = (
+  passengerId: string,
+  p: { bookingId: string; rideId: string },
+  at: Date,
+): AnalyticsEvent => ({ name: 'booking_expired', userId: passengerId, props: p, at });
+
+export const bookingCancelledEvent = (
+  actorId: string,
+  p: { bookingId: string; rideId: string; by: 'passenger' | 'driver'; late: boolean },
+  at: Date,
+): AnalyticsEvent => ({ name: 'booking_cancelled', userId: actorId, props: p, at });

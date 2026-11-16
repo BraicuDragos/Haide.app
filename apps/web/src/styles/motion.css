@@ -556,3 +556,59 @@ html[data-motion='reduced']::view-transition-new(*) {
     animation: breath calc(var(--tk-dur-pulse) / 2) var(--tk-ease-standard) infinite;
   }
 }
+
+/* ---- E4: passenger pins on the driver map, unseen dot, price-drop ring ---- */
+@layer components {
+  .route-fx .pin {
+    fill: var(--theme-map-bg);
+    stroke: var(--theme-link);
+    stroke-width: 3;
+  }
+  .unseen-dot {
+    width: 10px;
+    height: 10px;
+    flex: none;
+    border-radius: 50%;
+    background: var(--theme-accent);
+    box-shadow: 0 0 0 2px var(--theme-pulse-ring);
+  }
+  /* Price dropped (moment 5): the saffron dot pulses once. Still, with the sentence beside it, under reduced motion. */
+  .drop-dot {
+    position: relative;
+    width: 12px;
+    height: 12px;
+    flex: none;
+    margin-top: 4px;
+    border-radius: 50%;
+    background: var(--theme-accent);
+  }
+  .drop-dot::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 2px solid var(--theme-pulse-ring);
+    animation: drop-ring var(--tk-dur-reveal) var(--tk-ease-standard) 1 both;
+  }
+  @keyframes drop-ring {
+    from {
+      opacity: 0.9;
+      transform: scale(1);
+    }
+    to {
+      opacity: 0;
+      transform: scale(3);
+    }
+  }
+  .timeline-dot {
+    width: 12px;
+    height: 12px;
+    flex: none;
+    border-radius: 50%;
+    background: var(--theme-outline);
+  }
+  .timeline-dot.is-last {
+    background: var(--theme-accent);
+    box-shadow: 0 0 0 3px var(--theme-pulse-ring);
+  }
+}

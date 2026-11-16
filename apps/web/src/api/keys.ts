@@ -15,5 +15,11 @@ export const keys = {
   search: (body: unknown) => ['search', body] as const,
   ride: (id: string) => ['rides', 'public', id] as const,
   match: (id: string, body: unknown) => ['rides', 'match', id, body] as const,
+  bookings: {
+    all: ['bookings'] as const,
+    list: (scope: 'upcoming' | 'past') => ['bookings', 'list', scope] as const,
+    one: (id: string) => ['bookings', 'one', id] as const,
+  },
+  summary: ['summary'] as const,
   user: (id: string) => ['users', id] as const,
 } as const;

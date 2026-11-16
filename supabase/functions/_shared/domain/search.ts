@@ -98,17 +98,19 @@ export type MatchRideState = {
 };
 
 /**
- * Why a passenger cannot request this ride, or null when they can. Priority: own ride, ride not
- * bookable (not published, or departing within 10 minutes), full, then the points no longer fit.
- * Blocked pairs never get here (the API answers 404), and ALREADY_REQUESTED arrives with E4.
+ * Why a passenger cannot request this ride, or null when they can. Priority: own ride, already
+ * requested (an active or rejected booking), ride not bookable (not published, or departing within
+ * 10 minutes), full, then the points no longer fit. Blocked pairs never get here (the API answers 404).
  */
 export function notBookableReason(
   ride: MatchRideState,
   viewerId: string | null,
   clock: Clock,
   pointsMatch: boolean,
+  alreadyRequested = false,
 ): NotBookableReason | null {
   if (viewerId !== null && ride.driverId === viewerId) return 'OWN_RIDE';
+  if (alreadyRequested) return 'ALREADY_REQUESTED';
   if (ride.status !== 'published' || bookingCutoffPassed(ride.departureAt, clock)) {
     return 'RIDE_NOT_BOOKABLE';
   }

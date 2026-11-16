@@ -1,9 +1,12 @@
 import type { PublicUser } from '../../_shared/contracts/account.ts';
 import {
   geoLineStringSchema,
+  type BookingStatus,
   type GeoLineString,
   type RideListItem,
   type RideOwnerView,
+  type RidePassengerItem,
+  type RideRequestItem,
   type RidePublicView,
 } from '../../_shared/contracts/rides.ts';
 import type { Clock } from '../../_shared/domain/clock.ts';
@@ -34,7 +37,16 @@ export function parseLineString(text: string | null): GeoLineString | null {
 
 const SIBIU = 'Sibiu';
 
-export function toOwnerView(row: OwnerRideRow, clock: Clock): RideOwnerView {
+export type OwnerExtras = {
+  requests: RideRequestItem[];
+  passengers: RidePassengerItem[];
+};
+
+export function toOwnerView(
+  row: OwnerRideRow,
+  clock: Clock,
+  extras: OwnerExtras = { requests: [], passengers: [] },
+): RideOwnerView {
   const departureAt = new Date(row.departure_at);
   const ctx = { status: row.status, departureAt };
   const origin = { lat: roundCoord(row.origin_lat), lng: roundCoord(row.origin_lng) };
@@ -68,9 +80,8 @@ export function toOwnerView(row: OwnerRideRow, clock: Clock): RideOwnerView {
     tripCostBani: tripCostBani(row.distance_m, row.rate_micro_per_km),
     fuelType: car.fuelType,
     car: { make: car.make, model: car.model, colour: car.colour, plate: car.plate },
-    // Filled by E4 (bookings).
-    requests: [],
-    passengers: [],
+    requests: extras.requests,
+    passengers: extras.passengers,
     canCancel: canCancelRide(ctx, clock),
     lateCancelIfNow: isLateRideCancel(ctx, clock),
     lateCancel: row.late_cancel,
@@ -88,18 +99,24 @@ export function toListItem(row: RideListRow): RideListItem {
     status: row.status,
     seatsOffered: row.seats_offered,
     seatsBooked: row.seats_booked,
-    // Counted from bookings once E4 lands.
-    pendingRequests: 0,
+    pendingRequests: Number(row.pending_requests ?? 0),
   };
 }
 
 /** Whether this viewer may see the ride at all (404 otherwise, never 403). */
-export function publicRideVisible(row: PublicRideRow, viewerId: string | null): boolean {
+export function publicRideVisible(
+  row: PublicRideRow,
+  viewerId: string | null,
+  /** The viewer has a booking on this ride: a cancelled ride stays visible to its passengers. */
+  isPassenger = false,
+): boolean {
   if (row.driver_status === 'suspended') return false;
   // Blocked either way looks exactly like a missing ride: nobody learns who blocked whom.
   if (row.blocked) return false;
   const isDriver = viewerId !== null && viewerId === row.driver_id;
-  if ((row.status === 'cancelled' || row.status === 'expired') && !isDriver) return false;
+  if ((row.status === 'cancelled' || row.status === 'expired') && !isDriver && !isPassenger) {
+    return false;
+  }
   return true;
 }
 
@@ -107,6 +124,7 @@ export function toPublicView(
   row: PublicRideRow,
   driver: PublicUser,
   viewerId: string | null,
+  viewerBooking: { id: string; status: BookingStatus } | null = null,
 ): RidePublicView {
   const approx = (lat: number, lng: number) => ({
     lat: roundCoord(lat),
@@ -136,8 +154,8 @@ export function toPublicView(
     driver,
     viewer: {
       isDriver: viewerId !== null && viewerId === row.driver_id,
-      bookingId: null,
-      bookingStatus: null,
+      bookingId: viewerBooking?.id ?? null,
+      bookingStatus: viewerBooking?.status ?? null,
       blocked: false,
     },
   };

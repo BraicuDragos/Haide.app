@@ -1,0 +1,160 @@
+import type { Clock } from '../domain/clock.ts';
+import { isOutboxTemplate, type OutboxPayloadMap, type OutboxTemplate } from '../domain/outbox.ts';
+import { sha256Hex } from '../hash.ts';
+import type { Logger } from '../log.ts';
+import type { EmailProvider, SendResult } from '../providers/email/types.ts';
+import { scrubText } from '../scrub.ts';
+import { renderEmail, type TemplateInput } from './templates.ts';
+
+/**
+ * Outbox dispatcher (ADR 0022, e4-bookings-spec §6.2). Pure orchestration: the database and the
+ * email provider are ports, the clock is injected, so tests drive time and failures.
+ *
+ * Per run: stop when the UTC day's cap is reached, claim at most `batch` rows with a lease
+ * (`send_after` pushed 5 minutes ahead, so an overlapping run cannot take the same row), look up
+ * recipients, send `concurrency` at a time, then mark each row sent, rescheduled or failed.
+ */
+
+export const DISPATCH_BATCH = 50;
+export const DISPATCH_CONCURRENCY = 4;
+export const LEASE_MIN = 5;
+export const MAX_ATTEMPTS = 5;
+/** Retry delay in minutes after attempt 1, 2, 3, 4. Attempt 5 that fails is final. */
+export const BACKOFF_MIN = [1, 2, 4, 8] as const;
+export const LAST_ERROR_MAX = 300;
+
+const MIN_MS = 60_000;
+
+export type OutboxRecord = {
+  id: string;
+  userId: string;
+  template: string;
+  payload: unknown;
+  /** Already incremented by the claim. */
+  attempts: number;
+};
+
+/** Storage port, implemented over postgres in api/repo/outbox.ts. */
+export interface OutboxStore {
+  /** Emails sent since `since` (UTC midnight): the daily cap counter. */
+  countSentSince(since: Date): Promise<number>;
+  /** Claims up to `limit` due pending rows: attempts + 1, send_after = leaseUntil, FOR UPDATE SKIP LOCKED. */
+  claim(now: Date, leaseUntil: Date, limit: number): Promise<OutboxRecord[]>;
+  /** user id to email address, active users only. Missing ids have no recipient. */
+  recipients(userIds: readonly string[]): Promise<Map<string, string>>;
+  markSent(id: string, at: Date): Promise<void>;
+  markFailed(id: string, error: string): Promise<void>;
+  reschedule(id: string, sendAfter: Date, error: string): Promise<void>;
+}
+
+export type DispatchDeps = {
+  store: OutboxStore;
+  provider: EmailProvider;
+  clock: Clock;
+  log: Logger;
+  /** EMAIL_DAILY_CAP (default 280, the Brevo free tier is 300). */
+  dailyCap: number;
+  baseUrl: string;
+  batch?: number;
+  concurrency?: number;
+};
+
+export type DispatchResult = {
+  sent: number;
+  /** Rows that reached the final `failed` state in this run. */
+  failed: number;
+  /** Rows put back with a backoff. */
+  retried: number;
+};
+
+export function utcMidnight(at: Date): Date {
+  return new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth(), at.getUTCDate()));
+}
+
+export function backoffAfter(attempts: number, now: Date): Date | null {
+  if (attempts >= MAX_ATTEMPTS) return null;
+  const minutes = BACKOFF_MIN[Math.max(0, attempts - 1)] ?? BACKOFF_MIN[BACKOFF_MIN.length - 1];
+  return new Date(now.getTime() + (minutes ?? 8) * MIN_MS);
+}
+
+const clean = (e: string): string => scrubText(e, LAST_ERROR_MAX);
+
+export async function dispatchOutbox(deps: DispatchDeps): Promise<DispatchResult> {
+  const { store, provider, clock, log } = deps;
+  const result: DispatchResult = { sent: 0, failed: 0, retried: 0 };
+  const now = clock.now();
+
+  const sentToday = await store.countSentSince(utcMidnight(now));
+  const remaining = deps.dailyCap - sentToday;
+  if (remaining <= 0) {
+    log('warn', 'outbox_daily_cap_reached', { sentToday, cap: deps.dailyCap });
+    return result;
+  }
+
+  const limit = Math.min(deps.batch ?? DISPATCH_BATCH, remaining);
+  const leaseUntil = new Date(now.getTime() + LEASE_MIN * MIN_MS);
+  const rows = await store.claim(now, leaseUntil, limit);
+  if (rows.length === 0) return result;
+
+  const emails = await store.recipients([...new Set(rows.map((r) => r.userId))]);
+
+  const handle = async (row: OutboxRecord): Promise<void> => {
+    if (!isOutboxTemplate(row.template)) {
+      await store.markFailed(row.id, 'unknown_template');
+      result.failed++;
+      return;
+    }
+    const to = emails.get(row.userId);
+    if (!to) {
+      await store.markFailed(row.id, 'no_recipient');
+      result.failed++;
+      return;
+    }
+
+    let outcome: SendResult;
+    try {
+      const rendered = renderEmail(toInput(row.template, row.payload), {
+        baseUrl: deps.baseUrl,
+        now: clock.now(),
+      });
+      outcome = await provider.send({
+        to,
+        subject: rendered.subject,
+        text: rendered.text,
+        html: rendered.html,
+        tag: row.template,
+        ref: (await sha256Hex(row.userId)).slice(0, 12),
+      });
+    } catch (e) {
+      // A provider that throws is treated as a transient failure.
+      outcome = { ok: false, permanent: false, error: e instanceof Error ? e.name : 'error' };
+    }
+
+    if (outcome.ok) {
+      await store.markSent(row.id, clock.now());
+      result.sent++;
+      return;
+    }
+    const error = clean(outcome.error);
+    const retryAt = outcome.permanent ? null : backoffAfter(row.attempts, clock.now());
+    if (retryAt) {
+      await store.reschedule(row.id, retryAt, error);
+      result.retried++;
+    } else {
+      await store.markFailed(row.id, error);
+      result.failed++;
+      log('warn', 'outbox_failed', { template: row.template, attempts: row.attempts });
+    }
+  };
+
+  const size = deps.concurrency ?? DISPATCH_CONCURRENCY;
+  for (let i = 0; i < rows.length; i += size) {
+    await Promise.all(rows.slice(i, i + size).map(handle));
+  }
+  return result;
+}
+
+/** The payload comes from jsonb: the templates read it defensively, so a cast is enough here. */
+function toInput(template: OutboxTemplate, payload: unknown): TemplateInput {
+  return { template, payload: payload as OutboxPayloadMap[typeof template] } as TemplateInput;
+}

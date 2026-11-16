@@ -7,6 +7,12 @@ import type {
   PublicUser,
   VehicleResponse,
 } from '@contracts/account';
+import type {
+  BookingListItem,
+  BookingListResponse,
+  BookingView,
+  SummaryResponse,
+} from '@contracts/bookings';
 import type { LatLng, Place } from '@contracts/geo';
 import type {
   CreateRideBody,
@@ -48,3 +54,12 @@ export type SearchRequest = SearchBody;
 export type SearchResultItem = SearchItem;
 export type RideStopPublic = SearchPlace;
 export type PublicRide = RidePublicView;
+
+// Bookings (E4).
+export type { BookingListItem, BookingListResponse, BookingView, SummaryResponse };
+export type {
+  BookingStatus,
+  ExactOrApproxPoint,
+  RidePassengerItem,
+  RideRequestItem,
+} from '@contracts/rides';

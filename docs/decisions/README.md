@@ -25,3 +25,6 @@ Every significant decision (business, brand, UX, architecture) gets a file
 | [0018](0018-icon-set-lucide-vendored.md) | Icon set: Lucide, vendored per icon as inline SVG, stroke 1.75 | Brand | Accepted | brand-designer |
 | [0019](0019-motion-no-js-animation-library.md) | Motion: no JS animation library; CSS, WAAPI, View Transitions and linear() springs | Architecture | Accepted | brand-designer |
 | [0020](0020-haide-wordmark-sanctioned-exclamation.md) | Copy: one sanctioned exclamation mark, the "Haide!" wordmark in the launch moment of Publish and Join | UX | Accepted | ux-designer |
+| [0021](0021-booking-concurrency-ride-row-lock.md) | Booking concurrency: the ride row lock is the single serialization point | Architecture | Proposed | software-architect |
+| [0022](0022-notification-delivery-outbox-tick-brevo.md) | Notification delivery: transactional outbox, per-minute tick with leased claims, Brevo HTTP API | Infrastructure | Proposed | software-architect |
+| [0023](0023-confirmed-booking-reveal-scope.md) | Reveal scope for confirmed bookings: own segment only, serializer-enforced 24 h window | Architecture | Proposed | software-architect |

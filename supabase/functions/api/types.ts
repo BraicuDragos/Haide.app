@@ -3,6 +3,7 @@ import type { Clock } from '../_shared/domain/clock.ts';
 import type { Db } from '../_shared/db.ts';
 import type { Env } from '../_shared/env.ts';
 import type { Logger } from '../_shared/log.ts';
+import type { EmailProvider } from '../_shared/providers/email/types.ts';
 import type { RoutingProvider } from '../_shared/providers/routing/types.ts';
 
 export type AuthInfo = { userId: string; email: string | null } | null;
@@ -31,6 +32,8 @@ export type Deps = {
   encodeAvatar: AvatarEncoder;
   /** Car routing (openrouteservice, or the fixture provider in dev and CI). */
   routing: RoutingProvider;
+  /** Transactional email (Brevo, or the console provider in dev and CI). Used by the tick dispatcher. */
+  email: EmailProvider;
 };
 
 /** The caller's account, loaded once per request by the gates. */

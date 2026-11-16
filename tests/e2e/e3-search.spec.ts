@@ -139,8 +139,8 @@ test.describe('signed in: return to the same ride', () => {
     await page.getByRole('checkbox', { name: /I accept the/ }).check();
     await page.getByRole('button', { name: 'Agree and continue' }).click();
     await expect(page).toHaveURL(new RegExp(`/ride/${RIDE_ID}`));
-    await expect(heading(page, 'Ride details')).toBeVisible();
-    await expect(page.getByText('Requesting a seat opens with the next release.')).toBeVisible();
+    // E4: the request sheet opens by itself once the gate is cleared.
+    await expect(page.getByRole('dialog', { name: 'Request a seat' })).toBeVisible();
   });
 
   test('onboarded passenger: the tap goes ahead', async ({ page }) => {
@@ -156,7 +156,7 @@ test.describe('signed in: return to the same ride', () => {
     await searchTripB(page);
     await page.getByRole('link', { name: /Up to 3\.10 RON/ }).click();
     await page.getByRole('button', { name: 'Request seat' }).click();
-    await expect(page.getByText('Requesting a seat opens with the next release.')).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Request a seat' })).toBeVisible();
     await expect(page).toHaveURL(new RegExp(`/ride/${RIDE_ID}$`));
   });
 });

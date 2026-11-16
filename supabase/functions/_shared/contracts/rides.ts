@@ -116,9 +116,19 @@ export type CreateRideBody = z.input<typeof createRideBodySchema>;
 export type CreateRideRequest = z.output<typeof createRideBodySchema>;
 
 // ---- Owner view: POST /rides (201), GET /me/rides/{id}, POST /rides/{id}/cancel (200) -----------
-// `requests` and `passengers` stay empty until E4 (bookings).
+// E4: `requests` (open requests, never any point) and `passengers` (confirmed bookings) are filled.
 
 const ownerPlaceSchema = z.object({ point: latLngSchema, label: z.string() });
+
+/**
+ * A booking point: exact (5 decimals) only inside the reveal window of a confirmed booking
+ * (ADR 0023), else the 300 m grid centre with `approx: true`. The approx branch comes first so a
+ * grid point is never parsed (and stripped) as an exact one.
+ */
+export const exactOrApproxPointSchema = z.union([approxPointSchema, latLngSchema]);
+export type ExactOrApproxPoint = z.infer<typeof exactOrApproxPointSchema>;
+
+const bookingPlaceSchema = z.object({ point: exactOrApproxPointSchema, label: z.string() });
 
 export const rideRequestItemSchema = z.object({
   bookingId: z.uuid(),
@@ -136,9 +146,10 @@ export const ridePassengerItemSchema = z.object({
   bookingId: z.uuid(),
   status: bookingStatusSchema,
   passenger: publicUserSchema,
-  pickup: ownerPlaceSchema,
-  dropoff: ownerPlaceSchema,
-  /** Present only inside the contact window. */
+  /** `label` is an area name. `point` is exact inside the reveal window, else approximate. */
+  pickup: bookingPlaceSchema,
+  dropoff: bookingPlaceSchema,
+  /** Present only inside the contact window (confirmed or completed, before departure + 24 h). */
   phoneE164: z.string().nullable(),
   priceLockedBani: z.number().int().nullable(),
   finalPriceBani: z.number().int().nullable(),
@@ -195,7 +206,7 @@ export const rideListItemSchema = z.object({
   status: rideStatusSchema,
   seatsOffered: z.number().int(),
   seatsBooked: z.number().int(),
-  /** Always 0 until E4. */
+  /** Open requests (`requested`, not past their expiry). */
   pendingRequests: z.number().int(),
 });
 export type RideListItem = z.infer<typeof rideListItemSchema>;
