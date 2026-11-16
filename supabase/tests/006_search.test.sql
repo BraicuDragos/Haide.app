@@ -166,20 +166,20 @@ select ok(
 -- a3 is the same road 230 m east with the perfect time, so it comes last: walk first, then time.
 select is(pg_temp.ids('o', 't', '00000000-0000-4000-8000-000000000403'), 'a2,a1,e1,a3',
   'Trip A matches Shopping City to Piata Mare, ordered by walk then by time (window end is inclusive)');
-select unlike(pg_temp.ids('o', 't', '00000000-0000-4000-8000-000000000403'), 'f1', 'a full ride is excluded');
-select unlike(pg_temp.ids('o', 't', '00000000-0000-4000-8000-000000000403'), 'c1', 'a cancelled ride is excluded');
-select unlike(pg_temp.ids('o', 't', '00000000-0000-4000-8000-000000000403'), '5a', 'a suspended driver is excluded');
-select unlike(pg_temp.ids('o', 't', '00000000-0000-4000-8000-000000000403'), 'ee', 'a ride outside the time window is excluded');
-select unlike(pg_temp.ids('o', 't', '00000000-0000-4000-8000-000000000403'), '0a', 'a ride without a stored route is excluded');
-select unlike(pg_temp.ids('o', 't', '00000000-0000-4000-8000-000000000403'), 'b1', 'a driver the searcher blocked is excluded');
-select unlike(pg_temp.ids('o', 't', '00000000-0000-4000-8000-000000000403'), 'b2', 'a driver who blocked the searcher is excluded');
+select doesnt_match(pg_temp.ids('o', 't', '00000000-0000-4000-8000-000000000403'), 'f1', 'a full ride is excluded');
+select doesnt_match(pg_temp.ids('o', 't', '00000000-0000-4000-8000-000000000403'), 'c1', 'a cancelled ride is excluded');
+select doesnt_match(pg_temp.ids('o', 't', '00000000-0000-4000-8000-000000000403'), '5a', 'a suspended driver is excluded');
+select doesnt_match(pg_temp.ids('o', 't', '00000000-0000-4000-8000-000000000403'), 'ee', 'a ride outside the time window is excluded');
+select doesnt_match(pg_temp.ids('o', 't', '00000000-0000-4000-8000-000000000403'), '0a', 'a ride without a stored route is excluded');
+select doesnt_match(pg_temp.ids('o', 't', '00000000-0000-4000-8000-000000000403'), 'b1', 'a driver the searcher blocked is excluded');
+select doesnt_match(pg_temp.ids('o', 't', '00000000-0000-4000-8000-000000000403'), 'b2', 'a driver who blocked the searcher is excluded');
 select is(pg_temp.ids('o', 't', '00000000-0000-4000-8000-000000000401'), 'b1,b2,a2,a3',
   'own rides are excluded (driver 401 searching); equal walk and time fall back to the ride id');
 select is(pg_temp.ids('o', 't'), 'b1,b2,a2,a1,e1,a3',
   'signed out (no searcher): nobody is hidden for ownership or blocks');
 select is(pg_temp.ids('t', 'o', '00000000-0000-4000-8000-000000000403'), '',
   'the reverse direction (Piata Mare to Shopping City) does not match');
-select unlike(pg_temp.ids('o900', 't', '00000000-0000-4000-8000-000000000403'), '(a1|a2|e1)',
+select doesnt_match(pg_temp.ids('o900', 't', '00000000-0000-4000-8000-000000000403'), '(a1|a2|e1)',
   'a pickup 900 m from the road does not match (800 m limit)');
 select like(pg_temp.ids('o660', 't', '00000000-0000-4000-8000-000000000403'), '%a2%',
   'a pickup about 650 m from the road matches');
@@ -235,9 +235,9 @@ select is(
        '00000000-0000-4000-8000-000000000403', '2026-11-20T04:00:00Z', null, false,
        '2026-11-20T05:00:00Z', '2026-11-20T06:00:00Z') m),
   'ee', 'a whole-day window minus the requested window leaves only the ride outside it (nearest-rides query)');
-select unlike(pg_temp.ids('o', 't', '00000000-0000-4000-8000-000000000403', '2026-11-20T05:00:00Z', '2026-11-20T05:59:59Z'),
+select doesnt_match(pg_temp.ids('o', 't', '00000000-0000-4000-8000-000000000403', '2026-11-20T05:00:00Z', '2026-11-20T05:59:59Z'),
   'e1', 'a ride one second after the window end is excluded');
-select unlike(pg_temp.ids('o', 't', '00000000-0000-4000-8000-000000000403', '2026-11-20T03:00:00Z', '2026-11-20T06:00:00Z'),
+select doesnt_match(pg_temp.ids('o', 't', '00000000-0000-4000-8000-000000000403', '2026-11-20T03:00:00Z', '2026-11-20T06:00:00Z'),
   'd1', 'a ride that has already departed is excluded even when the window covers it');
 select is(
   (select string_agg(right(m.ride_id::text, 2), ',')
