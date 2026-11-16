@@ -3,6 +3,7 @@ import type { Db } from '../_shared/db.ts';
 import { fixedClock } from '../_shared/domain/clock.ts';
 import { parseEnv, type Env } from '../_shared/env.ts';
 import { silentLogger } from '../_shared/log.ts';
+import { createFixtureProvider } from '../_shared/providers/routing/fixture.ts';
 import { createApp } from './app.ts';
 import { LOCAL_JWT_ISSUER, createTokenVerifier } from './middleware/auth.ts';
 import type { AvatarEncoder, AvatarStorage, Deps } from './types.ts';
@@ -43,6 +44,8 @@ export function fakeSql(handlers: Handler[] = []) {
     if (q.text.includes('app.rate_limit_hit')) return [{ allowed: true }];
     return [];
   };
+  // sql.begin(cb): the same recording fake stands in for the transaction handle.
+  (fn as unknown as { begin: unknown }).begin = (cb: (tx: unknown) => unknown) => cb(fn);
   return { sql: fn as unknown as Db, calls };
 }
 
@@ -82,6 +85,7 @@ export function makeApp(
     verifyToken: createTokenVerifier(env),
     storage: store.storage,
     encodeAvatar: passThroughEncoder,
+    routing: createFixtureProvider(),
     ...overrides,
   };
   return { app: createApp(deps), calls, deps, uploaded: store.uploaded, removed: store.removed };

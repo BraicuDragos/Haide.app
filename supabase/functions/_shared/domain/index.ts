@@ -6,3 +6,5 @@ export * from './privacy.ts';
 export * from './rules.ts';
 export * from './time.ts';
 export * from './validation.ts';
+export * from './pricing.ts';
+export * from './rides.ts';

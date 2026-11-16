@@ -3,6 +3,7 @@ import type { Clock } from '../_shared/domain/clock.ts';
 import type { Db } from '../_shared/db.ts';
 import type { Env } from '../_shared/env.ts';
 import type { Logger } from '../_shared/log.ts';
+import type { RoutingProvider } from '../_shared/providers/routing/types.ts';
 
 export type AuthInfo = { userId: string; email: string | null } | null;
 
@@ -28,6 +29,8 @@ export type Deps = {
   verifyToken: TokenVerifier;
   storage: AvatarStorage;
   encodeAvatar: AvatarEncoder;
+  /** Car routing (openrouteservice, or the fixture provider in dev and CI). */
+  routing: RoutingProvider;
 };
 
 /** The caller's account, loaded once per request by the gates. */

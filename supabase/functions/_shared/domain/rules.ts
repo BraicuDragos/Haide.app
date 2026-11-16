@@ -43,6 +43,9 @@ export const RATE_LIMITS = {
   publicRead: { max: 60, windowS: 60 },
   account: { max: 30, windowS: 60 },
   photo: { max: 10, windowS: 60 },
+  // Rides (E2): previews call the router (2,000/day free). Publishes are also capped by the daily limit.
+  ridePreview: { max: 20, windowS: 3600 },
+  ridePublish: { max: 20, windowS: 3600 },
 } as const;
 
 // Accounts (E1)
