@@ -764,7 +764,7 @@ States the consequences before the button.
 
 ## 32. Policy pages (E6-3)
 
-Short summaries only. The legal text comes from the owner and counsel; the controller line is a placeholder until launch.
+Superseded by E6: the pages now render the full v1.1 text from `apps/web/src/features/policy/content/{terms,privacy}.en.ts` (lazy chunk, one `PolicyDoc` per document, locale suffix `.en`). Only the page chrome below lives in `en.json`; the legal text itself is not copy-deck material and changes only as a new version (see section 38). The short summaries listed here (`policy.privacy.p1` to `p4`, `policy.terms.p1` to `p4`, `policy.controller`, `policy.effective`) were removed from `en.json`.
 
 | Key | English |
 |---|---|
@@ -885,3 +885,29 @@ The driver ride screen (`/driving/:id`) reuses the keys of sections 23 to 27: `r
 Notes: `driverRide.pax.noShow.label` is the accessible name of the Mark no-show button; it starts with the visible text so voice control works. A no-show passenger shows no price and no phone. The "also block" choice lives in the Report sheet (`report.alsoBlock`); the separate Block button is for blocking without a report.
 
 Also in this pass: the share button uses the Lucide `share` icon (was `swap`), and the rating confirmation keeps its heading (`<h2>`) inside a `role="status"` wrapper.
+
+
+## 38. E6 additions (privacy and compliance)
+
+Policy text (v1.1, effective 21 November 2026) lives in the content files named in section 32, marked "pending owner/counsel review". It covers, for the Terms: what Haide is, eligibility (18+, one account, driver licence and RCA), cost sharing (own trip, share of fuel or energy cost, no profit, pay at most the shown amount, no extra payments or tips, free rides allowed), ride limits (4 rides a day, 4 passengers, Sibiu area), bookings and ratings, conduct and 112, liability (counsel placeholder), account deletion, changes, Romanian law. For the Privacy policy: controller (placeholder), data collected, purposes and lawful bases, who sees what, processors and transfers, retention, rights, ANSPDCP contact, age, changes. Each file also carries a `changes` list shown on the updated-terms screen.
+
+| Key | English |
+|---|---|
+| `consent.update.title` | We’ve updated our terms |
+| `consent.update.body` | Read what changed, then accept to keep using Haide. |
+| `consent.update.changes` | What changed |
+| `consent.update.accept` | I accept the updated Terms of use and Privacy policy |
+| `consent.update.err` | Accept the updated terms to continue. |
+| `consent.update.readTerms` | Read the full Terms of use |
+| `consent.update.readPrivacy` | Read the full Privacy policy |
+| `consent.update.delete` | I’d rather delete my account |
+| `consent.update.signOut` | Sign out |
+| `delete.error` | We couldn’t delete your account. Try again. |
+| `errors.ACCOUNT_DELETED` | This account was deleted. |
+| `errors.CONFIRMATION_REQUIRED` | Confirm to continue. |
+| `errors.TEMPORARILY_UNAVAILABLE` | We’re busy right now. Try again in a moment. |
+| `settings.data.pending` | Request sent on {date}. We’ll reply by {due}. |
+| `policy.toc` | Contents |
+| `policy.loadError` | We couldn’t load this page. Check your connection and try again. |
+
+Notes: the consent update mode (1.3b) shows no age checkbox; the button reuses `consent.cta`. `settings.data.pending` is shown in the Request row after a request and in the toast when the server returns an older open request (dates as "21 November 2026"). `errors.ACCOUNT_DELETED` was reworded from "has been deleted" to match the E6 spec. `delete.*`, `settings.data`, `settings.data.toast` and `settings.delete` are unchanged from sections 30 and 31; `settings.delete` is also the label of the Suspended screen link.

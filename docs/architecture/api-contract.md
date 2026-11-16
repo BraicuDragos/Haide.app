@@ -38,7 +38,7 @@
 | 409 | `DAILY_RIDE_LIMIT` (4 per day), `RIDE_FULL`, `RIDE_NOT_BOOKABLE` (cancelled/completed/departing in < 10 min), `OWN_RIDE`, `BLOCKED`, `ALREADY_REQUESTED`, `NO_LONGER_MATCHES`, `INVALID_STATE` (transition not allowed), `REQUEST_EXPIRED`, `WINDOW_CLOSED` (rating/no-show window over), `ALREADY_RATED`, `ALERT_LIMIT` (E8), `LARGE_CHANGE` (admin energy price ±30 %) |
 | 422 | `ROUTE_NOT_FOUND` (router found no route) |
 | 429 | `RATE_LIMITED` |
-| 502/503 | `ROUTING_UNAVAILABLE`, `UPSTREAM_ERROR` |
+| 502/503 | `ROUTING_UNAVAILABLE`, `UPSTREAM_ERROR`, `TEMPORARILY_UNAVAILABLE` (E6: `DELETE /me` lost a lock race twice; retry) |
 | 500 | `INTERNAL` (no details leaked) |
 
 ### 1.2 Shared types
@@ -124,12 +124,14 @@ Implemented in E3: `seatsLeft` is added (0 when full). The endpoint never return
 ```json
 { "id": "…", "email": "…", "firstName": "Ioana", "phoneE164": "+40721234567", "bio": null, "photoUrl": "…",
   "status": "active", "role": "user",
-  "consent": { "upToDate": true, "required": [] /* e.g. ["terms"] after a version bump */ },
+  "consent": { "upToDate": true, "required": [] /* e.g. ["terms"] after a version bump */, "reaccept": false /* E6 */ },
   "profileComplete": true, "hasVehicle": false, "createdAt": "…" }
 ```
 
 ### `POST /me/consents`
 Body `{ "age18": true, "termsVersion": "1.0", "privacyVersion": "1.0" }`. Gated routes answer `403 CONSENT_REQUIRED` with `fields` naming what is outstanding (`age18`, `terms`, `privacy`). Bodies are capped at 64 KB (photo: ~1.6 MB), over the cap is `400` (`VALIDATION_FAILED` with `fields._ = body_too_large`, or `PHOTO_TOO_LARGE`). All are required and versions must be current, otherwise `400 VALIDATION_FAILED`. Writes 3 `consents` rows. `204`. Declining is client-side: sign out.
+
+Implemented in E6 (e6-privacy-spec §4): `age18` is optional when an `age_18` consent already exists (a user re-accepting updated terms); for a first acceptance it is still required (`fields.age18 = required`). The versions must still be the current ones (`fields.termsVersion` / `privacyVersion = not_current`). A re-acceptance writes only the `terms` and `privacy` rows. `GET /me` adds `consent.reaccept`: true when the user accepted an older version of terms or privacy than the current one (a user who never accepted anything is a first-time user, not a re-accepting one). `GET /legal/current` adds `publishedAt` (ISO) to each document. A published version's text never changes: an edit is a new version, a migration row and a web content file. Version 1.1 (migration `20261121090000_privacy.sql`) becomes current on 2026-11-21.
 
 ### `PATCH /me/profile`
 Body (any subset) `{ "firstName": "Ștefan", "phone": "0721 234 567", "bio": "…" }`. The phone is normalised to E.164 and must be a Romanian mobile (`+407…`). `200` returns the `/me` shape. Requires consent.
@@ -153,8 +155,12 @@ Implemented in E4: 1 to 50 uuids (else `400`). Sets `seen_by_passenger_at = now`
 ### `DELETE /me`
 Body `{ "confirm": "DELETE" }`, otherwise `400 CONFIRMATION_REQUIRED`. Cancels future rides and bookings (notifies counterparts), scrubs personal data, deletes the auth user. `204`. The client then signs out.
 
+Implemented in E6 (ADR 0029, `routes/privacy.ts`, `services/accountDeletion.ts`): the gate is authentication plus a loaded account, nothing else, so a suspended user or one who has not accepted the new terms may delete. Rate limit `account` (30/min). **One transaction** (`SET LOCAL statement_timeout = 5s`): lock the profile row, cancel every published future ride of the user (`cancelRideTx`, `by: system`, so each passenger gets `ride_cancelled` with the neutral wording and `seats_booked` becomes 0), cancel every `requested`/`confirmed` booking of the user on a ride that has not departed (`systemCancelBookingTx`, reason `account_deleted`: the driver gets `booking_cancelled` for a confirmed one, a freed seat is relocked), then `app.scrub_account(user, now)`. Names for the emails are read before the scrub in the same transaction. A deadlock (`40P01`) is retried once, then `503 TEMPORARILY_UNAVAILABLE` (new code, additive). A second call, from a double tap or another device, waits on the profile lock, finds `status = deleted`, changes nothing and answers `204`. **After the commit** `services/accountPurge.ts` removes the avatar object (`storage.removeStrict`, 404 = done) and the auth user (`authAdmin.deleteUser`, `DELETE /auth/v1/admin/users/{id}` with the secret key, 404 = done); each success sets its `*_done_at` on `app.account_deletions`, both set `completed_at`. A failure never fails the response: it records `attempts + 1`, a scrubbed `last_error` and `next_attempt_at` (+1 min, 5 min, 30 min, 2 h, 12 h, then daily) and the tick finishes it. Afterwards every gate answers `403 ACCOUNT_DELETED` for the old token, `GET /users/{id}` returns `firstName`, `photoUrl`, `bio` and `rating` as `null` ("Deleted user"), and ratings, reports about the user (with snapshot, 12 months) and the incoming blocks of others stay. Avatar uploads are now cached for 7 days (`max-age=604800`, was 1 year).
+
 ### `POST /me/data-export-request` (Should, E6-4)
 Inserts an outbox email to the support address with the user id. `202`.
+
+Implemented in E6 (ADR 0031, `services/dataRequests.ts`): authenticated, `active` or `suspended` (deleted is `403 ACCOUNT_DELETED`), rate limit `dataRequest` (3 per day), body `{}` (unknown fields are `400`). Under the profile row lock: an unfulfilled request from the last 30 days is returned as it is (`202`, no new row, no new emails); otherwise one transaction inserts `app.data_requests (kind = export)`, queues `data_export_requested` (payload `{ requestId, userId, requestedAt }`, `user_id` = the requester; the dispatcher sends it to `EMAIL_SUPPORT_TO`, not to the user) and `data_export_ack` (to the user: "we will email it within 30 days"). `202 { requestId, requestedAt, dueBy }` with `dueBy = requestedAt + 30 d`. There is **no export endpoint**: the owner runs `select app.export_user_data('<uuid>');` in the SQL editor (deploy.md §6). The payloads carry ids and a time only; the payload scan covers both templates.
 
 ## 4. Rides (E2)
 
@@ -311,6 +317,8 @@ Header `x-cron-secret: <CRON_SECRET>`. Called by pg_cron through pg_net every mi
 Implemented in E4 (every minute, each step in its own try/catch; a failure is logged and recorded in `app_errors`, the next step still runs): (1) `app.expire_requests(now)` turns every `requested` booking past `expires_at` into `expired` and queues `booking_expired` + analytics in one transaction; (2) the outbox dispatcher (claim with `FOR UPDATE SKIP LOCKED` and a 5 minute lease, 4 sends at a time through Brevo or the console provider, backoff 1/2/4/8 min, final after 5 attempts or a permanent 4xx, stops at `EMAIL_DAILY_CAP` per UTC day); (3) deletes expired `route_previews`; (4) at minute 0 UTC also deletes `rate_limits` older than 2 days, `app_errors` older than 14 days and finished `outbox` rows older than 30 days. `purged` is the number of rows deleted by steps 3 and 4. `sent`/`failed` count rows that reached `sent`/`failed` in this run.
 
 Implemented in E5 (ADR 0024, 0027): the order is now (1) expire, (2) **complete** rides, (3) **safety sweep**, (4) dispatch, (5) purge previews and `share_links` past `expires_at`, (6) hourly housekeeping. Step 2 runs `app.complete_rides(now, now − 2 h, 200)` in one transaction: confirmed bookings become `completed` with `final_price_bani = price_locked_bani`, the ride becomes `completed` (or `expired` when no booking was completed), a `rating_prompt` email is queued per completed booking and one `rating_prompt_driver` per ride, and `ride_completed` is logged. Rides locked by a concurrent writer are skipped (`SKIP LOCKED`) until the next tick. Step 3 (at most 50 per query, one transaction per item, re-checked under the ride lock) cancels future rides of suspended drivers (`ride_cancelled`, `by: system`), active bookings of suspended passengers and active bookings between blocked pairs. The response is `{ expired, completed, swept, sent, failed, purged }`: `completed` counts rides moved to `completed` or `expired`, `swept` bookings cancelled by the sweep, `purged` also counts expired share links.
+
+Implemented in E6 (ADR 0029, 0030): the order is (1) expire, (2) complete, (3) safety sweep (its two status queries now match `p.status IN ('suspended', 'deleted')`, so a write that raced an account deletion is cancelled at the next tick), (4) dispatch (`data_export_requested` goes to `EMAIL_SUPPORT_TO`), (5) purge previews and share links, (6) **coarsen** `app.coarsen_locations(now, 500)`, (7) **account purge** (at most 10 due `account_deletions` rows: storage object and auth user, with backoff), (8) hourly housekeeping at minute 0 UTC: `select app.run_retention()` (replaces the E4 inline deletes) plus one `app_errors` row `account_purge_overdue` per deletion open for more than 7 days (user id hashed). The response adds `coarsened` (rides plus bookings coarsened) and `accountsPurged` (deletions completed in this run); `purged` now also sums the rows `run_retention` deleted. Each step keeps its own try/catch.
 
 ## 11. Analytics events written by the API (E7-1)
 
