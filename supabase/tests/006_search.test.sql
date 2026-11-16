@@ -181,7 +181,7 @@ select is(pg_temp.ids('t', 'o', '00000000-0000-4000-8000-000000000403'), '',
   'the reverse direction (Piata Mare to Shopping City) does not match');
 select doesnt_match(pg_temp.ids('o900', 't', '00000000-0000-4000-8000-000000000403'), '(a1|a2|e1)',
   'a pickup 900 m from the road does not match (800 m limit)');
-select like(pg_temp.ids('o660', 't', '00000000-0000-4000-8000-000000000403'), '%a2%',
+select alike(pg_temp.ids('o660', 't', '00000000-0000-4000-8000-000000000403'), '%a2%',
   'a pickup about 650 m from the road matches');
 select is(pg_temp.ids('o', 'tshort', '00000000-0000-4000-8000-000000000403'), '',
   'a segment under 1 km does not match');
