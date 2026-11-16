@@ -26,8 +26,10 @@ import {
   revealFor,
   revealedUntil,
   rideCancelledRows,
+  type ActionsInput,
   type DecisionInput,
   type RequestGuardInput,
+  type TimelineInput,
 } from './bookings.ts';
 import type { DomainError } from './errors.ts';
 import { assertPayloadSafe } from './outbox.ts';
@@ -65,6 +67,9 @@ describe('BOOKING_TRANSITIONS', () => {
       'requested>expired',
       'requested>cancelled',
       'confirmed>cancelled',
+      'confirmed>completed',
+      'confirmed>no_show',
+      'completed>no_show',
     ]);
     for (const from of ALL_STATUSES) {
       for (const to of ALL_STATUSES) {
@@ -74,7 +79,7 @@ describe('BOOKING_TRANSITIONS', () => {
   });
 
   it('terminal states have no way out', () => {
-    for (const s of ['rejected', 'expired', 'cancelled', 'completed', 'no_show'] as const) {
+    for (const s of ['rejected', 'expired', 'cancelled', 'no_show'] as const) {
       expect(BOOKING_TRANSITIONS[s]).toEqual([]);
     }
   });
@@ -501,7 +506,16 @@ describe('revealFor (ADR 0023)', () => {
 describe('buildTimeline', () => {
   const requestedAt = at('2026-11-16T05:00:00Z');
   const expiresAt = at('2026-11-16T05:30:00Z');
-  const base = { requestedAt, expiresAt, decidedAt: null, cancelledAt: null, cancelledBy: null };
+  const base = {
+    requestedAt,
+    expiresAt,
+    decidedAt: null,
+    cancelledAt: null,
+    cancelledBy: null,
+    rideStatus: 'published' as const,
+    completedAt: null,
+    noShowAt: null,
+  };
 
   it('requested only', () => {
     expect(buildTimeline({ ...base, status: 'requested' }).map((t) => t.status)).toEqual([
@@ -542,19 +556,34 @@ describe('buildTimeline', () => {
       }).map((t) => t.status),
     ).toEqual(['requested', 'confirmed', 'cancelled']);
     expect(
-      buildTimeline({ ...base, status: 'cancelled', cancelledAt, cancelledBy: 'driver' }).map(
-        (t) => t.status,
-      ),
+      buildTimeline({
+        ...base,
+        status: 'cancelled',
+        cancelledAt,
+        cancelledBy: 'driver',
+        rideStatus: 'cancelled',
+      }).map((t) => t.status),
     ).toEqual(['requested', 'ride_cancelled']);
   });
 });
 
 describe('bookingActions', () => {
   const dep = (m: number) => minutesFromNow(m);
+  const act = (o: {
+    status: BookingStatus;
+    departureAt: Date;
+    viewerIsPassenger: boolean;
+  }): ActionsInput => ({
+    rideStatus: 'published',
+    completedAt: null,
+    viewerRated: false,
+    anyRated: false,
+    ...o,
+  });
   it('passenger can cancel a live booking; the late flag follows the 30 minute rule', () => {
     expect(
       bookingActions(
-        { status: 'confirmed', departureAt: dep(120), viewerIsPassenger: true },
+        act({ status: 'confirmed', departureAt: dep(120), viewerIsPassenger: true }),
         clock,
       ),
     ).toMatchObject({
@@ -562,38 +591,49 @@ describe('bookingActions', () => {
       lateCancelIfNow: false,
     });
     expect(
-      bookingActions({ status: 'confirmed', departureAt: dep(20), viewerIsPassenger: true }, clock),
+      bookingActions(
+        act({ status: 'confirmed', departureAt: dep(20), viewerIsPassenger: true }),
+        clock,
+      ),
     ).toMatchObject({
       canCancel: true,
       lateCancelIfNow: true,
     });
     expect(
-      bookingActions({ status: 'requested', departureAt: dep(20), viewerIsPassenger: true }, clock),
+      bookingActions(
+        act({ status: 'requested', departureAt: dep(20), viewerIsPassenger: true }),
+        clock,
+      ),
     ).toMatchObject({
       canCancel: true,
       lateCancelIfNow: false,
     });
   });
 
-  it('the driver, departed rides and terminal states cannot cancel; the E5 flags stay false', () => {
+  it('the driver, departed rides and terminal states cannot cancel; before departure the E5 flags are off', () => {
     const a = bookingActions(
-      { status: 'confirmed', departureAt: dep(120), viewerIsPassenger: false },
+      act({ status: 'confirmed', departureAt: dep(120), viewerIsPassenger: false }),
       clock,
     );
     expect(a.canCancel).toBe(false);
     expect(
-      bookingActions({ status: 'confirmed', departureAt: dep(-1), viewerIsPassenger: true }, clock)
-        .canCancel,
+      bookingActions(
+        act({ status: 'confirmed', departureAt: dep(-1), viewerIsPassenger: true }),
+        clock,
+      ).canCancel,
     ).toBe(false);
     expect(
-      bookingActions({ status: 'cancelled', departureAt: dep(120), viewerIsPassenger: true }, clock)
-        .canCancel,
+      bookingActions(
+        act({ status: 'cancelled', departureAt: dep(120), viewerIsPassenger: true }),
+        clock,
+      ).canCancel,
     ).toBe(false);
     expect(a).toMatchObject({
       canReportDriverNoShow: false,
       canRate: false,
       canShare: false,
       show112: false,
+      canMarkNoShow: false,
     });
   });
 });
@@ -697,5 +737,136 @@ describe('outbox builders', () => {
   it('responseSeconds is the whole seconds between request and decision', () => {
     expect(responseSeconds(at('2026-11-16T05:00:00Z'), at('2026-11-16T05:02:30.400Z'))).toBe(150);
     expect(responseSeconds(at('2026-11-16T05:00:10Z'), at('2026-11-16T05:00:00Z'))).toBe(0);
+  });
+});
+
+describe('bookingActions (E5)', () => {
+  const dep = (m: number) => minutesFromNow(m);
+  const completedAt = minutesFromNow(-60);
+  const act = (o: Partial<ActionsInput>): ActionsInput => ({
+    status: 'confirmed',
+    departureAt: dep(120),
+    viewerIsPassenger: true,
+    rideStatus: 'published',
+    completedAt: null,
+    viewerRated: false,
+    anyRated: false,
+    ...o,
+  });
+
+  it('no-show flags go to the right role, from departure on, and never after a rating', () => {
+    const departed = { departureAt: dep(-10) };
+    expect(bookingActions(act({ ...departed }), clock)).toMatchObject({
+      canReportDriverNoShow: true,
+      canMarkNoShow: false,
+    });
+    expect(bookingActions(act({ ...departed, viewerIsPassenger: false }), clock)).toMatchObject({
+      canReportDriverNoShow: false,
+      canMarkNoShow: true,
+    });
+    // not before departure
+    expect(bookingActions(act({ departureAt: dep(1) }), clock).canReportDriverNoShow).toBe(false);
+    // not once either side has rated
+    expect(bookingActions(act({ ...departed, anyRated: true }), clock).canReportDriverNoShow).toBe(
+      false,
+    );
+    // not 24 h after departure
+    expect(bookingActions(act({ departureAt: dep(-24 * 60) }), clock).canReportDriverNoShow).toBe(
+      false,
+    );
+  });
+
+  it('canRate only for a completed, unrated booking inside the 7 day window', () => {
+    const done = { status: 'completed' as const, completedAt, departureAt: dep(-180) };
+    expect(bookingActions(act(done), clock).canRate).toBe(true);
+    expect(bookingActions(act({ ...done, viewerRated: true }), clock).canRate).toBe(false);
+    expect(bookingActions(act({ ...done, status: 'no_show' }), clock).canRate).toBe(false);
+    expect(
+      bookingActions(act({ ...done, completedAt: minutesFromNow(-7 * 24 * 60) }), clock).canRate,
+    ).toBe(false);
+    expect(
+      bookingActions(act({ ...done, completedAt: minutesFromNow(-7 * 24 * 60 + 1) }), clock)
+        .canRate,
+    ).toBe(true);
+  });
+
+  it('Call 112 shows from 15 min before departure until 2 h after, for accepted bookings only', () => {
+    const show = (m: number, status: BookingStatus = 'confirmed') =>
+      bookingActions(act({ status, departureAt: dep(m) }), clock).show112;
+    expect(show(16)).toBe(false);
+    expect(show(15)).toBe(true);
+    expect(show(-119)).toBe(true);
+    expect(show(-120)).toBe(false);
+    expect(show(0, 'requested')).toBe(false);
+    expect(show(0, 'cancelled')).toBe(false);
+    expect(bookingActions(act({ status: 'requested' }), clock).call112Window).toBeNull();
+    expect(bookingActions(act({ departureAt: dep(60) }), clock).call112Window).toEqual({
+      from: dep(45).toISOString(),
+      until: dep(180).toISOString(),
+    });
+  });
+
+  it('canShare: passenger only, accepted, ride not cancelled, until departure + 24 h', () => {
+    const can = (o: Partial<ActionsInput>) => bookingActions(act(o), clock).canShare;
+    expect(can({})).toBe(true);
+    expect(can({ viewerIsPassenger: false })).toBe(false);
+    expect(can({ status: 'requested' })).toBe(false);
+    expect(can({ rideStatus: 'cancelled' })).toBe(false);
+    expect(can({ departureAt: dep(-24 * 60 + 1), status: 'completed' })).toBe(true);
+    expect(can({ departureAt: dep(-24 * 60), status: 'completed' })).toBe(false);
+  });
+});
+
+describe('buildTimeline (E5)', () => {
+  const requestedAt = at('2026-11-16T05:00:00Z');
+  const base = {
+    requestedAt,
+    expiresAt: at('2026-11-16T05:30:00Z'),
+    decidedAt: at('2026-11-16T05:05:00Z'),
+    cancelledAt: null,
+    cancelledBy: null,
+    rideStatus: 'completed' as const,
+    completedAt: at('2026-11-16T09:30:00Z'),
+    noShowAt: null,
+  };
+  const steps = (o: Partial<TimelineInput>) =>
+    buildTimeline({ ...base, status: 'completed', ...o }).map((t) => t.status);
+
+  it('completed shows the completion step', () => {
+    expect(steps({})).toEqual(['requested', 'confirmed', 'completed']);
+  });
+
+  it('a no-show reported after completion shows both steps, one reported first shows only the no-show', () => {
+    expect(steps({ status: 'no_show', noShowAt: at('2026-11-16T10:00:00Z') })).toEqual([
+      'requested',
+      'confirmed',
+      'completed',
+      'no_show',
+    ]);
+    expect(steps({ status: 'no_show', noShowAt: at('2026-11-16T08:00:00Z') })).toEqual([
+      'requested',
+      'confirmed',
+      'no_show',
+    ]);
+  });
+
+  it('a ride cancelled by the system reads ride_cancelled, a passenger cancel stays cancelled', () => {
+    const cancelledAt = at('2026-11-16T06:00:00Z');
+    expect(
+      steps({ status: 'cancelled', rideStatus: 'cancelled', cancelledAt, cancelledBy: 'system' }),
+    ).toEqual(['requested', 'confirmed', 'ride_cancelled']);
+    // passenger cancelled first, the driver cancelled the ride later
+    expect(
+      steps({
+        status: 'cancelled',
+        rideStatus: 'cancelled',
+        cancelledAt,
+        cancelledBy: 'passenger',
+      }),
+    ).toEqual(['requested', 'confirmed', 'cancelled']);
+    // a block cascade on a ride that stays published
+    expect(
+      steps({ status: 'cancelled', rideStatus: 'published', cancelledAt, cancelledBy: 'system' }),
+    ).toEqual(['requested', 'confirmed', 'cancelled']);
   });
 });

@@ -9,6 +9,9 @@ export const LATE_CANCEL_MIN = 30;
 export const CONTACT_WINDOW_H = 24; // phone/plate/exact points until departure + 24 h
 export const RATING_WINDOW_DAYS = 7;
 export const COMPLETE_AFTER_H = 2;
+export const NO_SHOW_WINDOW_H = 24; // a no-show can be reported from departure until departure + 24 h
+export const CALL_112_BEFORE_MIN = 15; // the "Call 112" button shows from 15 min before departure
+export const CALL_112_AFTER_H = 2; // ... until 2 h after it
 export const RELIABILITY_WINDOW_DAYS = 90;
 export const COARSEN_AFTER_DAYS = 90;
 export const ROUTE_PREVIEW_TTL_MIN = 30;
@@ -23,6 +26,11 @@ export const MIN_SEGMENT_M = 1000;
 export const MAX_WALK_M = 800;
 export const WALK_ROUND_M = 50;
 export const MIN_RATINGS_TO_SHOW = 3;
+
+// Tick batches (E5)
+export const COMPLETE_BATCH = 200; // rides completed per tick
+export const SWEEP_BATCH = 50; // rides or bookings handled per sweep query per tick
+export const SHARE_TOKEN_BYTES = 16; // 128-bit share-link token
 
 // Search (E3)
 export const MIN_SEARCH_SEPARATION_M = 1000; // from and to at least 1 km apart
@@ -58,6 +66,10 @@ export const RATE_LIMITS = {
   // Bookings (E4). `GET /me/summary` reuses `account`.
   bookingRequest: { max: 10, windowS: 3600 },
   bookingAction: { max: 30, windowS: 60 },
+  // Trust and safety (E5). `shareView` is per IP (the page is public).
+  report: { max: 10, windowS: 86400 },
+  block: { max: 30, windowS: 3600 },
+  shareView: { max: 30, windowS: 60 },
 } as const;
 
 // Accounts (E1)

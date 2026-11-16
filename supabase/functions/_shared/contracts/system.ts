@@ -18,9 +18,13 @@ export type TelemetryErrorBody = z.infer<typeof telemetryErrorBodySchema>;
 
 export const tickResponseSchema = z.object({
   expired: z.number().int(),
+  /** Rides moved to `completed` or `expired` by the completion step (E5). */
+  completed: z.number().int(),
+  /** Bookings cancelled by the safety sweep: blocks and suspensions (E5). */
+  swept: z.number().int(),
   sent: z.number().int(),
   failed: z.number().int(),
-  /** Route previews plus hourly housekeeping rows deleted (E4, additive). */
+  /** Route previews, expired share links and hourly housekeeping rows deleted. */
   purged: z.number().int(),
 });
 export type TickResponse = z.infer<typeof tickResponseSchema>;

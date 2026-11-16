@@ -115,11 +115,16 @@ function parts(input: TemplateInput, ctx: RenderContext): Parts {
     }
     case 'ride_cancelled': {
       const p = input.payload;
+      const subjectVars = {
+        driver: str(p.driverFirstName, t('email.fallback.driver')),
+        time: whenLabel(date(p.departureAt), ctx.now),
+      };
       return {
-        subject: t('email.rideCancelled.subject', {
-          driver: str(p.driverFirstName, t('email.fallback.driver')),
-          time: whenLabel(date(p.departureAt), ctx.now),
-        }),
+        // A system cancellation (suspension) gets the neutral wording: it never says why.
+        subject:
+          p.by === 'system'
+            ? t('email.rideCancelled.system.subject', subjectVars)
+            : t('email.rideCancelled.subject', subjectVars),
         body: t('email.rideCancelled.body', {
           pickup: str(p.pickupArea, SIBIU),
           dropoff: str(p.dropoffArea, SIBIU),
@@ -136,6 +141,52 @@ function parts(input: TemplateInput, ctx: RenderContext): Parts {
         }),
         body: t('email.bookingCancelled.body'),
         path: `/driving/${encodeURIComponent(str(p.rideId, ''))}`,
+      };
+    }
+    case 'rating_prompt': {
+      const p = input.payload;
+      const driver = str(p.driverFirstName, t('email.fallback.driver'));
+      return {
+        subject: t('email.ratePrompt.subject', { driver }),
+        body: t('email.ratePrompt.body', { driver }),
+        path: `/rate/${encodeURIComponent(str(p.bookingId, ''))}`,
+      };
+    }
+    case 'rating_prompt_driver': {
+      const p = input.payload;
+      return {
+        subject: t('email.ratePromptDriver.subject', {
+          time: whenLabel(date(p.departureAt), ctx.now),
+        }),
+        body: t('email.ratePromptDriver.body'),
+        path: `/driving/${encodeURIComponent(str(p.rideId, ''))}`,
+      };
+    }
+    case 'no_show_reported': {
+      const p = input.payload;
+      const reporterIsDriver = p.reporterRole === 'driver';
+      return {
+        subject: t('email.noShow.subject', {
+          name: str(
+            p.reporterFirstName,
+            t(reporterIsDriver ? 'email.fallback.driver' : 'email.fallback.passenger'),
+          ),
+          time: whenLabel(date(p.departureAt), ctx.now),
+        }),
+        body: t('email.noShow.body'),
+        // The absent party is the other one: a passenger opens the booking, a driver the ride.
+        path: reporterIsDriver
+          ? `/booking/${encodeURIComponent(str(p.bookingId, ''))}`
+          : `/driving/${encodeURIComponent(str(p.rideId, ''))}`,
+      };
+    }
+    case 'report_received': {
+      const p = input.payload;
+      return {
+        subject: t('email.report.subject', { reason: str(p.reason, 'other') }),
+        body: t('email.report.body'),
+        // E7 adds the reports queue. Until then the link is the app root.
+        path: '',
       };
     }
   }

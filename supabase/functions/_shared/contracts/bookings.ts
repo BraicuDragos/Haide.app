@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { publicUserSchema } from './account.ts';
 import { latLngSchema } from './geo.ts';
+import { call112WindowSchema, ratingGivenSchema } from './ratings.ts';
 import {
   bookingStatusSchema,
   carPublicSchema,
@@ -11,7 +12,8 @@ import {
 
 /**
  * Booking contracts (E4): POST /bookings, GET /me/bookings, GET /bookings/{id},
- * POST /bookings/{id}/approve|reject|cancel, GET /me/summary, POST /me/summary/seen.
+ * POST /bookings/{id}/approve|reject|cancel, GET /me/summary, POST /me/summary/seen. E5 adds the
+ * completion, rating, no-show and share fields (additive); its endpoints live in safety.ts.
  * Shared with the web app (import through @contracts). STABLE: additive changes only.
  *
  * Money is integer bani, distances metres, times ISO 8601 UTC. The client never sends a price.
@@ -102,11 +104,18 @@ export const bookingActionsSchema = z.object({
   canCancel: z.boolean(),
   /** Cancelling right now would be a late cancellation (confirmed, 30 min or less to departure). */
   lateCancelIfNow: z.boolean(),
-  /** E5 fills the next five. Always false in E4. */
+  /** Passenger viewer: "the driver didn't show" is allowed right now (E5). */
   canReportDriverNoShow: z.boolean(),
+  /** Driver viewer: "mark the passenger as a no-show" is allowed right now (E5). */
+  canMarkNoShow: z.boolean(),
+  /** Completed, inside the 7-day window, and the viewer has not rated yet. */
   canRate: z.boolean(),
+  /** Passenger viewer: a share-trip link can be created now. */
   canShare: z.boolean(),
+  /** `call112Window.from <= now < call112Window.until` at the time of the response. */
   show112: z.boolean(),
+  /** Null unless the booking is confirmed or completed. The client toggles the button at the bounds. */
+  call112Window: call112WindowSchema.nullable(),
 });
 export type BookingActions = z.infer<typeof bookingActionsSchema>;
 
@@ -158,6 +167,14 @@ export const bookingViewSchema = z.object({
   /** Passenger viewer only (false for the driver): an update the passenger has not opened yet. */
   unseen: z.boolean(),
   actions: bookingActionsSchema,
+  /** When the ride was completed (E5), else null. */
+  completedAt: z.string().nullable(),
+  /** Who reported the no-show, when `status` is `no_show`. */
+  noShowBy: z.enum(['driver', 'passenger']).nullable(),
+  /** The viewer's own rating only. `rateUntil` is completedAt + 7 days, null until completion. */
+  rating: z.object({ given: ratingGivenSchema.nullable(), rateUntil: z.string().nullable() }),
+  /** Passenger viewer only: whether a share link is live. Null for the driver. */
+  share: z.object({ active: z.boolean(), expiresAt: z.string().nullable() }).nullable(),
 });
 export type BookingView = z.infer<typeof bookingViewSchema>;
 
@@ -184,6 +201,10 @@ export const bookingListItemSchema = z.object({
   /** final ?? locked ?? quoted. */
   priceBani: z.number().int().min(0),
   unseen: z.boolean(),
+  /** With `rideStatus`: a cancelled ride not cancelled by the passenger reads "ride cancelled". */
+  cancelledBy: cancelledBySchema.nullable(),
+  /** The passenger can still rate the driver (the "Rate" chip). */
+  canRate: z.boolean(),
 });
 export type BookingListItem = z.infer<typeof bookingListItemSchema>;
 

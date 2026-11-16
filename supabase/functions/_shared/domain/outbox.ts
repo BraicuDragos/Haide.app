@@ -41,6 +41,8 @@ export type RideCancelledPayload = {
   departureAt: string;
   pickupArea: string;
   dropoffArea: string;
+  /** E5: who cancelled. Absent on rows written before E5 (read as `driver`). `system` uses a neutral subject. */
+  by?: 'driver' | 'system';
 };
 
 export type BookingCancelledPayload = {
@@ -50,6 +52,35 @@ export type BookingCancelledPayload = {
   departureAt: string;
 };
 
+/** E5: to each passenger of a completed ride (link `/rate/{bookingId}`). */
+export type RatingPromptPayload = {
+  bookingId: string;
+  driverFirstName: string | null;
+  departureAt: string;
+};
+
+/** E5: to the driver of a completed ride, once per ride (link `/driving/{rideId}`). */
+export type RatingPromptDriverPayload = {
+  rideId: string;
+  passengerCount: number;
+  departureAt: string;
+};
+
+/** E5: to the party who did not show. `reporterRole` is who reported it. */
+export type NoShowReportedPayload = {
+  bookingId: string;
+  rideId: string;
+  reporterFirstName: string | null;
+  reporterRole: 'driver' | 'passenger';
+  departureAt: string;
+};
+
+/** E5: to each active admin. The reported user is never told and the report text is not copied. */
+export type ReportReceivedPayload = {
+  reportId: string;
+  reason: string;
+};
+
 export type OutboxPayloadMap = {
   booking_requested: BookingRequestedPayload;
   booking_confirmed: BookingConfirmedPayload;
@@ -57,6 +88,10 @@ export type OutboxPayloadMap = {
   booking_expired: BookingExpiredPayload;
   ride_cancelled: RideCancelledPayload;
   booking_cancelled: BookingCancelledPayload;
+  rating_prompt: RatingPromptPayload;
+  rating_prompt_driver: RatingPromptDriverPayload;
+  no_show_reported: NoShowReportedPayload;
+  report_received: ReportReceivedPayload;
 };
 
 export type OutboxTemplate = keyof OutboxPayloadMap;
@@ -68,6 +103,10 @@ export const OUTBOX_TEMPLATES = [
   'booking_expired',
   'ride_cancelled',
   'booking_cancelled',
+  'rating_prompt',
+  'rating_prompt_driver',
+  'no_show_reported',
+  'report_received',
 ] as const satisfies readonly OutboxTemplate[];
 
 /** One row to insert into app.outbox. Distributes over the template so payload and name stay paired. */
