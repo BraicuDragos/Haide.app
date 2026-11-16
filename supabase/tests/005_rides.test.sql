@@ -62,7 +62,7 @@ select is(
   (select count(*) from app.energy_prices where effective_from = '2026-11-15T00:00:00Z'),
   5::bigint, 'five energy price rows in v1');
 select is(
-  (select string_agg(fuel_type || ':' || price_milli || ':' || consumption_centi || ':' || unit, ',' order by fuel_type)
+  (select string_agg(fuel_type || ':' || price_milli || ':' || consumption_centi || ':' || unit, ',' order by fuel_type::text)
      from app.energy_prices where effective_from = '2026-11-15T00:00:00Z'),
   'diesel:10850:600:l,electric:1400:1700:kWh,hybrid:9810:500:l,lpg:4760:900:l,petrol:9810:700:l',
   'v1 prices and reference consumptions match pricing.md');
