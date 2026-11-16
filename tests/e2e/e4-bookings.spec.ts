@@ -401,8 +401,11 @@ test.describe('riding list (4.4) and badges (4.6)', () => {
     await expect(page).toHaveURL(new RegExp(`/booking/${BOOKING_ID}$`));
 
     await page.goBack();
+    await expect(cards).toHaveCount(2);
     await page.getByRole('tab', { name: 'Past' }).click();
-    await expect(page.getByRole('link', { name: /Șelimbăr/ })).toContainText('Declined');
+    await expect(page).toHaveURL(/when=past/);
+    await expect(page.locator('a[href="/booking/b-3"]')).toContainText('Declined');
+    await expect(cards).toHaveCount(1);
 
     bk.past = [];
     await page.reload();
