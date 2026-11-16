@@ -1,6 +1,6 @@
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BookingListItem, BookingView, RidePassengerItem } from '@/api/types';
 import { PassengerCard } from '@/features/rides/components/PassengerCard';
 import { BookingCard } from './components/BookingCard';
@@ -88,19 +88,70 @@ describe('PassengerCard', () => {
     finalPriceBani: null,
     canMarkNoShow: false,
     canRate: false,
+    noShowBy: null,
+    rateUntil: null,
+    ratingGiven: null,
     ...over,
   });
 
   it('shows Call and WhatsApp while the phone is revealed', () => {
-    render(<PassengerCard passenger={pax()} />);
+    render(<PassengerCard passenger={pax()} onAction={vi.fn()} />);
     expect(screen.getByRole('link', { name: 'Call Ioana' })).toBeTruthy();
     expect(screen.getByText('Pays 2.00 RON')).toBeTruthy();
   });
 
   it('shows a locked note instead of links once the phone is hidden', () => {
-    render(<PassengerCard passenger={pax({ phoneE164: null })} />);
+    render(<PassengerCard passenger={pax({ phoneE164: null })} onAction={vi.fn()} />);
     expect(screen.queryByRole('link')).toBeNull();
     expect(screen.getByText('Phone number hidden')).toBeTruthy();
+  });
+
+  it('offers Mark no-show only when the server allows it, and reports the tap', () => {
+    const onAction = vi.fn();
+    const p = pax({ canMarkNoShow: true });
+    const { rerender } = render(<PassengerCard passenger={p} onAction={onAction} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Mark no-show for Ioana' }));
+    expect(onAction).toHaveBeenCalledWith('noshow', p);
+    rerender(<PassengerCard passenger={pax()} onAction={onAction} />);
+    expect(screen.queryByRole('button', { name: /Mark no-show/ })).toBeNull();
+  });
+
+  it('links to the Rate screen while canRate, and shows the stars once rated', () => {
+    const wrap = (p: RidePassengerItem) => (
+      <MemoryRouter>
+        <PassengerCard passenger={p} onAction={vi.fn()} />
+      </MemoryRouter>
+    );
+    const { rerender } = render(wrap(pax({ status: 'completed', canRate: true })));
+    expect(screen.getByRole('link', { name: 'Rate Ioana' }).getAttribute('href')).toBe('/rate/b-1');
+    expect(screen.getByText('Ride completed')).toBeTruthy();
+    rerender(
+      wrap(
+        pax({
+          status: 'completed',
+          ratingGiven: { stars: 4, tags: [], createdAt: '2026-11-17T08:00:00Z' },
+        }),
+      ),
+    );
+    expect(screen.queryByRole('link', { name: 'Rate Ioana' })).toBeNull();
+    expect(screen.getByText('You rated Ioana')).toBeTruthy();
+    expect(screen.getByText('4 out of 5')).toBeTruthy();
+  });
+
+  it('shows the no-show state without a price or phone, and keeps report and block', () => {
+    const onAction = vi.fn();
+    const p = pax({ status: 'no_show', noShowBy: 'driver', phoneE164: null, finalPriceBani: null });
+    render(<PassengerCard passenger={p} onAction={onAction} />);
+    expect(screen.getByText('Marked as a no-show')).toBeTruthy();
+    expect(screen.queryByText(/^Pays/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Report Ioana' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Block Ioana' }));
+    expect(onAction.mock.calls.map((c) => c[0])).toEqual(['report', 'block']);
+  });
+
+  it('offers no report or block before the request is accepted', () => {
+    render(<PassengerCard passenger={pax({ status: 'requested' })} onAction={vi.fn()} />);
+    expect(screen.queryByRole('button', { name: 'Report Ioana' })).toBeNull();
   });
 });
 
@@ -117,6 +168,8 @@ describe('BookingCard', () => {
     driver: user,
     priceBani: 310,
     unseen: true,
+    cancelledBy: null,
+    canRate: false,
     ...over,
   });
 

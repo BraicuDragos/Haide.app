@@ -1,12 +1,17 @@
 import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { getUser } from '@/api/account';
 import { ApiError } from '@/api/client';
 import { keys } from '@/api/keys';
 import { useBack } from '@/app/useBack';
+import { useAuth } from '@/auth/AuthProvider';
+import { useMe } from '@/auth/hooks';
+import { LazyBlockSheet, LazyReportSheet } from '@/features/safety/sheets';
 import { t, tp } from '@/i18n';
 import { Avatar } from '@/ui/Avatar';
 import { Button } from '@/ui/Button';
+import { Icon } from '@/ui/Icon';
 import { Notice } from '@/ui/Notice';
 import { Loader } from '@/ui/Loader';
 import { PageHeader } from '@/ui/PageHeader';
@@ -51,6 +56,9 @@ export function PublicProfileScreen() {
     queryFn: ({ signal }) => getUser(id, signal),
     enabled: id.length > 0,
   });
+  const { status } = useAuth();
+  const me = useMe();
+  const [sheet, setSheet] = useState<'report' | 'block' | null>(null);
 
   if (q.isPending)
     return (
@@ -140,7 +148,47 @@ export function PublicProfileScreen() {
         )}
 
         <p className="text-sm leading-5 text-text-muted">{t('pub.private')}</p>
+
+        {status === 'signedIn' && me.data && me.data.id !== u.id && (
+          <section aria-labelledby="pub-safety" className="flex flex-col gap-2">
+            <h2 id="pub-safety" className="type-h3">
+              {t('pub.safety')}
+            </h2>
+            <ul className="group">
+              <li>
+                <button
+                  type="button"
+                  onClick={() => setSheet('report')}
+                  className="flex min-h-14 w-full items-center gap-3 px-4 text-left"
+                >
+                  <Icon name="alert" className="text-link" />
+                  <span className="font-semibold">{t('pub.menu.report', { name })}</span>
+                </button>
+              </li>
+              <li>
+                <button
+                  type="button"
+                  onClick={() => setSheet('block')}
+                  className="flex min-h-14 w-full items-center gap-3 px-4 text-left"
+                >
+                  <Icon name="close" className="text-link" />
+                  <span className="font-semibold">{t('pub.menu.block', { name })}</span>
+                </button>
+              </li>
+            </ul>
+          </section>
+        )}
       </div>
+      <LazyReportSheet
+        open={sheet === 'report'}
+        onClose={() => setSheet(null)}
+        user={{ id: u.id, firstName: u.firstName }}
+      />
+      <LazyBlockSheet
+        open={sheet === 'block'}
+        onClose={() => setSheet(null)}
+        user={{ id: u.id, firstName: u.firstName }}
+      />
     </>
   );
 }

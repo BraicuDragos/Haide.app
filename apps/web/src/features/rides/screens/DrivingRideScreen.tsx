@@ -4,9 +4,11 @@ import { Link, useParams } from 'react-router';
 import { ApiError } from '@/api/client';
 import { keys } from '@/api/keys';
 import { getMyRide, postRideCancel } from '@/api/rides';
-import type { OwnerRide } from '@/api/types';
+import type { OwnerRide, RidePassengerItem } from '@/api/types';
 import { useBack } from '@/app/useBack';
 import { RequireAuth } from '@/auth/RequireAuth';
+import { Call112Button } from '@/features/safety/Call112Button';
+import { LazyBlockSheet, LazyNoShowSheet, LazyReportSheet } from '@/features/safety/sheets';
 import { t, tError, tp } from '@/i18n';
 import { dayLabel } from '@/lib/dates';
 import { formatRon, formatTime } from '@/lib/format';
@@ -20,7 +22,7 @@ import { SeatStrip } from '@/ui/SeatPicker';
 import { Sheet } from '@/ui/Sheet';
 import { useToast } from '@/ui/Toast';
 import { OwnerMap } from '../components/OwnerMap';
-import { PassengerCard } from '../components/PassengerCard';
+import { PassengerCard, type PassengerAction } from '../components/PassengerCard';
 import { PriceTable } from '../components/PriceTable';
 import { RequestCard } from '../components/RequestCard';
 import { RideStops } from '../components/RideStops';
@@ -87,17 +89,49 @@ function Ride() {
 
 function RideDetail({ ride, back }: { ride: OwnerRide; back: () => void }) {
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [sheet, setSheet] = useState<{
+    action: PassengerAction;
+    passenger: RidePassengerItem;
+  } | null>(null);
   const n = ride.seatsBooked;
   const open = ride.status === 'published';
   const row = ride.priceTable.find((r) => r.passengers === Math.max(n, 1));
   const fuel = formatRon(ride.tripCostBani);
   const km = (ride.distanceM / 1000).toFixed(1);
+  const reportedBy = ride.passengers.find(
+    (p) => p.status === 'no_show' && p.noShowBy === 'passenger',
+  );
+  const markedByYou = ride.passengers.find(
+    (p) => p.status === 'no_show' && p.noShowBy === 'driver',
+  );
+  const rode = ride.passengers.some((p) => p.status === 'completed');
+  const who = sheet?.passenger;
+  const whoName = who?.passenger.firstName ?? '-';
+  const close = () => setSheet(null);
 
   return (
     <>
       <PageHeader title={t('driverRide.title')} onBack={back} />
       <div className="flex flex-col gap-5 px-4 pt-4 pb-6">
         {ride.status === 'cancelled' && <Notice tone="info">{t('driverRide.cancelled')}</Notice>}
+
+        {ride.status === 'completed' && (
+          <Notice tone="success">
+            {rode ? t('driverRide.completed') : t('driverRide.completed.none')}
+          </Notice>
+        )}
+        {reportedBy && (
+          <Notice tone="warning">
+            {t('driverRide.noShow.byPassenger', { name: reportedBy.passenger.firstName ?? '-' })}
+          </Notice>
+        )}
+        {markedByYou && !reportedBy && (
+          <Notice tone="info">
+            {t('driverRide.noShow.byYou', { name: markedByYou.passenger.firstName ?? '-' })}
+          </Notice>
+        )}
+
+        <Call112Button window={ride.call112Window} />
 
         <div className="flex items-end justify-between gap-3">
           <div>
@@ -201,7 +235,11 @@ function RideDetail({ ride, back }: { ride: OwnerRide; back: () => void }) {
             <>
               <ul className="m-0 flex list-none flex-col gap-3 p-0">
                 {ride.passengers.map((p) => (
-                  <PassengerCard key={p.bookingId} passenger={p} />
+                  <PassengerCard
+                    key={p.bookingId}
+                    passenger={p}
+                    onAction={(action, passenger) => setSheet({ action, passenger })}
+                  />
                 ))}
               </ul>
               <p className="text-sm leading-5 text-text-muted">{t('driverRide.pax.hiddenAfter')}</p>
@@ -217,6 +255,31 @@ function RideDetail({ ride, back }: { ride: OwnerRide; back: () => void }) {
       </div>
 
       <CancelSheet ride={ride} open={cancelOpen} onClose={() => setCancelOpen(false)} />
+      {who && (
+        <>
+          <LazyNoShowSheet
+            open={sheet?.action === 'noshow'}
+            onClose={close}
+            bookingId={who.bookingId}
+            rideId={ride.id}
+            as="driver"
+            name={whoName}
+          />
+          <LazyReportSheet
+            open={sheet?.action === 'report'}
+            onClose={close}
+            user={{ id: who.passenger.id, firstName: who.passenger.firstName }}
+            bookingId={who.bookingId}
+            rideId={ride.id}
+          />
+          <LazyBlockSheet
+            open={sheet?.action === 'block'}
+            onClose={close}
+            user={{ id: who.passenger.id, firstName: who.passenger.firstName }}
+            stayOnPage
+          />
+        </>
+      )}
     </>
   );
 }

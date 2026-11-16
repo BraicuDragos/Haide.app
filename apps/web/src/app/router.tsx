@@ -33,8 +33,13 @@ const results = () => import('@/features/search/screens/ResultsScreen');
 const rideDetail = () => import('@/features/search/screens/RideDetailScreen');
 const drivingRide = () => import('@/features/rides/screens/DrivingRideScreen');
 const booking = () => import('@/features/bookings/screens/BookingScreen');
+const rate = () => import('@/features/ratings/screens/RateScreen');
+const blocked = () => import('@/features/profile/screens/BlockedPeopleScreen');
+const sharedTrip = () => import('@/features/share/screens/SharedTripScreen');
 
 export const router = createBrowserRouter([
+  // The public share page lives outside the shell: no tab bar, no account calls (e5 spec 5.5b).
+  { path: 's/:token', ...lazyScreen(sharedTrip, (m) => m.default) },
   {
     element: <Shell />,
     children: [
@@ -47,6 +52,8 @@ export const router = createBrowserRouter([
       { path: 'rides', ...lazyScreen(rides, (m) => m.default) },
       { path: 'booking/:id', ...lazyScreen(booking, (m) => m.default) },
       { path: 'driving/:id', ...lazyScreen(drivingRide, (m) => m.default) },
+      { path: 'rate/:bookingId', ...lazyScreen(rate, (m) => m.default) },
+      { path: 'settings/blocked', ...lazyScreen(blocked, (m) => m.default) },
       { path: 'profile', element: <ProfileScreen /> },
       { path: 'profile/edit', ...lazyScreen(form, (m) => m.EditProfileScreen) },
       { path: 'profile/car', ...lazyScreen(form, (m) => () => <m.VehicleScreen mode="edit" />) },

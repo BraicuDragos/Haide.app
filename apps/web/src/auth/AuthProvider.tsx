@@ -11,6 +11,7 @@ import {
 } from 'react';
 import { setTokenProvider } from '@/api/client';
 import { clearPending } from '@/features/bookings/pendingRequest';
+import { clearAllShares } from '@/features/safety/shareStore';
 import { authClient, authConfigured, callbackUrl } from './client';
 
 export type AuthStatus = 'loading' | 'signedOut' | 'signedIn';
@@ -62,6 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // also fires for a sign-out in another tab. A queued seat request belongs to the person who made it.
         qc.clear();
         clearPending();
+        clearAllShares();
       }
       apply(session);
     });
@@ -119,6 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     qc.clear();
     clearPending();
+    clearAllShares();
     setState({ status: 'signedOut', session: null });
   }, [qc]);
 

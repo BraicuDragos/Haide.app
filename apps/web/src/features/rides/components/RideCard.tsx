@@ -22,6 +22,11 @@ export function RideCard({ ride }: { ride: RideListItem }) {
             {tp('rides.requests', ride.pendingRequests)}
           </span>
         )}
+        {(ride.toRate ?? 0) > 0 && (
+          <span className="rounded-full bg-tint px-3 text-sm leading-7 font-semibold text-on-tint">
+            {t('rides.toRate', { n: ride.toRate ?? 0 })}
+          </span>
+        )}
         <span className="ml-auto text-sm leading-5 text-text-muted">
           {t('rides.seatsTaken', { booked: ride.seatsBooked, total: ride.seatsOffered })}
         </span>

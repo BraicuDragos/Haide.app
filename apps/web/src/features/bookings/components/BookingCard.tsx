@@ -22,7 +22,16 @@ export function BookingCard({ booking }: { booking: BookingListItem }) {
       </div>
       <RideStops from={booking.pickupLabel} to={booking.dropoffLabel} />
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <BookingStatusPill status={booking.status} rideStatus={booking.rideStatus} />
+        <BookingStatusPill
+          status={booking.status}
+          rideStatus={booking.rideStatus}
+          cancelledBy={booking.cancelledBy}
+        />
+        {booking.canRate && (
+          <span className="rounded-full bg-tint px-3 text-sm leading-7 font-semibold text-on-tint">
+            {t('rides.rateChip', { name: driver })}
+          </span>
+        )}
         {booking.unseen && (
           <span className="inline-flex items-center gap-1.5 text-sm leading-5 font-semibold text-text">
             <span aria-hidden="true" className="unseen-dot" />
