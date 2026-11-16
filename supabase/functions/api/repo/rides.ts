@@ -373,12 +373,15 @@ export type PublicRideRow = {
   origin_area: string | null;
   destination_area: string | null;
   route_public: string | null;
+  /** A block exists between the viewer and the driver, in either direction (false when signed out). */
+  blocked: boolean;
 };
 
 /** Public projection: 300 m grid points, area names, trimmed route. No plate, no exact points. */
 export async function selectPublicRide(
   sql: Db,
   rideId: string,
+  viewerId: string | null,
 ): Promise<PublicRideRow | undefined> {
   const rows = await sql<PublicRideRow[]>`
     select r.id, r.status, r.departure_at, r.duration_s, r.distance_m, r.seats_offered,
@@ -393,7 +396,12 @@ export async function selectPublicRide(
       ST_Y(app.grid_point(r.destination, 300)) as destination_lat,
       ST_X(app.grid_point(r.destination, 300)) as destination_lng,
       oa.name as origin_area, da.name as destination_area,
-      ST_AsGeoJSON(app.public_route(r.route), 5) as route_public
+      ST_AsGeoJSON(app.public_route(r.route), 5) as route_public,
+      exists (
+        select 1 from app.blocks bl
+        where (bl.blocker_id = ${viewerId}::uuid and bl.blocked_id = r.driver_id)
+           or (bl.blocker_id = r.driver_id and bl.blocked_id = ${viewerId}::uuid)
+      ) as blocked
     from app.rides r
     join app.profiles p on p.id = r.driver_id
     left join app.areas oa on oa.id = r.origin_area_id

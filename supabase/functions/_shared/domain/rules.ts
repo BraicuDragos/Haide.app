@@ -24,6 +24,15 @@ export const MAX_WALK_M = 800;
 export const WALK_ROUND_M = 50;
 export const MIN_RATINGS_TO_SHOW = 3;
 
+// Search (E3)
+export const MIN_SEARCH_SEPARATION_M = 1000; // from and to at least 1 km apart
+export const SEARCH_MAX_RESULTS = 50;
+export const NEAREST_OUTSIDE_MAX = 3; // "nearest rides" in the empty state
+export const ETA_ROUND_MIN = 5; // pickup ETA shown in 5 minute steps
+export const SEARCH_WINDOWS_MIN = [15, 30, 60] as const;
+export const SEARCH_DATE_PAST_DAYS = 1; // yesterday still allowed (midnight clock skew)
+export const SEARCH_DATE_AHEAD_DAYS = 30;
+
 // Pricing granularity (data-model: price_bani % 10 = 0)
 export const PRICE_STEP_BANI = 10;
 

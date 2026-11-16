@@ -53,10 +53,10 @@ import type { Account, Deps } from '../types.ts';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DAY_MS = 86_400_000;
 
-const notFound = () => new AppError('NOT_FOUND', 'Ride not found.');
+export const notFound = () => new AppError('NOT_FOUND', 'Ride not found.');
 
 /** Resource ids that are not UUIDs are simply unknown (404), never a validation error. */
-function asRideId(id: string): string {
+export function asRideId(id: string): string {
   if (!UUID_RE.test(id)) throw notFound();
   return id.toLowerCase();
 }
@@ -291,7 +291,7 @@ export async function getPublicRide(
   id: string,
 ): Promise<RidePublicView> {
   const { sql, clock, env } = deps;
-  const row = await selectPublicRide(sql, asRideId(id));
+  const row = await selectPublicRide(sql, asRideId(id), viewerId);
   if (!row || !publicRideVisible(row, viewerId)) throw notFound();
   const since = new Date(clock.now().getTime() - RELIABILITY_WINDOW_DAYS * DAY_MS);
   const profile = await getPublicProfile(sql, row.driver_id, since);
