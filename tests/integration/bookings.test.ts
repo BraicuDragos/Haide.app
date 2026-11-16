@@ -763,7 +763,7 @@ describe.skipIf(!BASE || !SECRET || DB_SKIP)('bookings against the database', ()
       user('Vlad', '0755 222 333'),
     ]);
     const l = lane();
-    const ride = await publish(driver, l, departure(), 4);
+    const ride = await publish(driver, l, departure(), 3);
     const trip = middle(l);
     const bRequested = await book(p, ride.id, trip);
     const bRejected = await book(p2, ride.id, trip);
