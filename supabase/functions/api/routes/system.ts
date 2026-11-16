@@ -57,8 +57,9 @@ systemRoutes.post('/telemetry/error', rateLimit('telemetry', RATE_LIMITS.telemet
   return c.body(null, 204);
 });
 
-// POST /internal/tick: called by pg_cron through pg_net every minute: expire requests, dispatch the
-// outbox (<= 50 per run), purge expired route previews, hourly housekeeping.
+// POST /internal/tick: called by pg_cron through pg_net every minute: expire requests, complete rides,
+// safety sweep, dispatch the outbox (<= 50 per run), purge expired previews and share links, hourly
+// housekeeping.
 systemRoutes.post('/internal/tick', async (c) => {
   const secret = c.req.header('x-cron-secret') ?? '';
   if (!safeEqual(secret, c.get('deps').env.CRON_SECRET)) {

@@ -8,7 +8,9 @@ import { accountRoutes } from './routes/account.ts';
 import { bookingRoutes } from './routes/bookings.ts';
 import { placesRoutes } from './routes/places.ts';
 import { rideRoutes } from './routes/rides.ts';
+import { safetyRoutes } from './routes/safety.ts';
 import { searchRoutes } from './routes/search.ts';
+import { shareRoutes } from './routes/share.ts';
 import { systemRoutes } from './routes/system.ts';
 import type { AppBindings, Deps } from './types.ts';
 
@@ -34,6 +36,8 @@ export function createApp(deps: Deps) {
   app.route('/', rideRoutes);
   app.route('/', searchRoutes);
   app.route('/', bookingRoutes);
+  app.route('/', safetyRoutes);
+  app.route('/', shareRoutes);
 
   app.onError(onError);
   app.notFound(onNotFound);

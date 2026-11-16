@@ -11,7 +11,9 @@ import {
   purgeHousekeeping,
   purgeRoutePreviews,
 } from '../repo/outbox.ts';
+import { purgeShareLinks } from '../repo/shareLinks.ts';
 import { recordAppError } from '../repo/system.ts';
+import { completeFinishedRides, runSafetySweep } from './safety.ts';
 import type { Deps } from '../types.ts';
 
 /**
@@ -21,7 +23,14 @@ import type { Deps } from '../types.ts';
  */
 export async function runTick(deps: Deps): Promise<TickResponse> {
   const { sql, clock, log, env } = deps;
-  const result: TickResponse = { expired: 0, sent: 0, failed: 0, purged: 0 };
+  const result: TickResponse = {
+    expired: 0,
+    completed: 0,
+    swept: 0,
+    sent: 0,
+    failed: 0,
+    purged: 0,
+  };
   const now = clock.now();
 
   const failStep = async (step: string, e: unknown) => {
@@ -69,7 +78,21 @@ export async function runTick(deps: Deps): Promise<TickResponse> {
     await failStep('expire', e);
   }
 
-  // 2. Dispatch the outbox (at most 50 rows, 4 at a time, daily cap).
+  // 2. Complete rides that departed 2 h ago or more and queue the rating prompts (ADR 0024).
+  try {
+    result.completed = await completeFinishedRides(deps);
+  } catch (e) {
+    await failStep('complete', e);
+  }
+
+  // 3. Safety sweep: cancel what a suspension or a block left behind (ADR 0027, 0028).
+  try {
+    result.swept = await runSafetySweep(deps);
+  } catch (e) {
+    await failStep('sweep', e);
+  }
+
+  // 4. Dispatch the outbox (at most 50 rows, 4 at a time, daily cap).
   try {
     const sent = await dispatchOutbox({
       store: createOutboxStore(sql),
@@ -85,14 +108,19 @@ export async function runTick(deps: Deps): Promise<TickResponse> {
     await failStep('dispatch', e);
   }
 
-  // 3. Route previews past their expiry.
+  // 5. Route previews and share links past their expiry.
   try {
     result.purged += await purgeRoutePreviews(sql, now);
   } catch (e) {
     await failStep('purge_previews', e);
   }
+  try {
+    result.purged += await purgeShareLinks(sql, now);
+  } catch (e) {
+    await failStep('purge_share_links', e);
+  }
 
-  // 4. Hourly housekeeping (minute 0 UTC).
+  // 6. Hourly housekeeping (minute 0 UTC).
   if (now.getUTCMinutes() === 0) {
     try {
       result.purged += await purgeHousekeeping(sql, now);

@@ -13,6 +13,7 @@ import type { Clock } from '../../_shared/domain/clock.ts';
 import { priceTable, tripCostBani } from '../../_shared/domain/pricing.ts';
 import { roundCoord } from '../../_shared/domain/privacy.ts';
 import { canCancelRide, isLateRideCancel } from '../../_shared/domain/rides.ts';
+import { call112Window, call112WindowDto, show112 } from '../../_shared/domain/safety.ts';
 import type { OwnerRideRow, PublicRideRow, RideListRow } from '../repo/rides.ts';
 
 /**
@@ -63,6 +64,10 @@ export function toOwnerView(
     ],
   };
   const car = row.vehicle_snapshot;
+  // Call 112 is for a ride that has a confirmed or completed passenger.
+  const window = extras.passengers.some((p) => p.status === 'confirmed' || p.status === 'completed')
+    ? call112Window({ status: 'confirmed', departureAt })
+    : null;
   return {
     id: row.id,
     status: row.status,
@@ -87,6 +92,9 @@ export function toOwnerView(
     lateCancel: row.late_cancel,
     cancelledAt: row.cancelled_at ? iso(row.cancelled_at) : null,
     createdAt: iso(row.created_at),
+    completedAt: row.completed_at ? iso(row.completed_at) : null,
+    show112: show112(window, clock),
+    call112Window: call112WindowDto(window),
   };
 }
 
@@ -100,6 +108,7 @@ export function toListItem(row: RideListRow): RideListItem {
     seatsOffered: row.seats_offered,
     seatsBooked: row.seats_booked,
     pendingRequests: Number(row.pending_requests ?? 0),
+    toRate: Number(row.to_rate ?? 0),
   };
 }
 

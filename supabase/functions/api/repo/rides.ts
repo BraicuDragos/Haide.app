@@ -2,6 +2,7 @@ import type { Db } from '../../_shared/db.ts';
 import type { FuelType } from '../../_shared/contracts/account.ts';
 import type { LatLng } from '../../_shared/contracts/geo.ts';
 import type { RideStatus } from '../../_shared/contracts/rides.ts';
+import { RATING_WINDOW_DAYS } from '../../_shared/domain/rules.ts';
 
 /**
  * SQL for rides (E2). postgres.js tagged templates only. Columns are listed explicitly (no
@@ -215,6 +216,7 @@ export type OwnerRideRow = {
   late_cancel: boolean;
   cancelled_at: Date | string | null;
   created_at: Date | string;
+  completed_at: Date | string | null;
 };
 
 /** The driver's own ride (exact points and route). `forUpdate` locks the row in a transaction. */
@@ -233,7 +235,8 @@ export async function selectOwnerRide(
           round(ST_X(r.destination)::numeric, 5)::float8 as destination_lng,
           ST_AsGeoJSON(r.route, 5) as route_geojson,
           r.distance_m, r.duration_s, r.seats_offered, r.seats_booked, r.note, r.is_free,
-          r.rate_micro_per_km, r.vehicle_snapshot, r.late_cancel, r.cancelled_at, r.created_at
+          r.rate_micro_per_km, r.vehicle_snapshot, r.late_cancel, r.cancelled_at, r.created_at,
+          r.completed_at
         from app.rides r
         where r.id = ${rideId} and r.driver_id = ${driverId}
         for update of r`
@@ -245,11 +248,15 @@ export async function selectOwnerRide(
           round(ST_X(r.destination)::numeric, 5)::float8 as destination_lng,
           ST_AsGeoJSON(r.route, 5) as route_geojson,
           r.distance_m, r.duration_s, r.seats_offered, r.seats_booked, r.note, r.is_free,
-          r.rate_micro_per_km, r.vehicle_snapshot, r.late_cancel, r.cancelled_at, r.created_at
+          r.rate_micro_per_km, r.vehicle_snapshot, r.late_cancel, r.cancelled_at, r.created_at,
+          r.completed_at
         from app.rides r
         where r.id = ${rideId} and r.driver_id = ${driverId}`;
   return rows[0];
 }
+
+/** A ride completed after this instant can still be rated (completion + 7 days > now). */
+const ratingCutoff = (now: Date): Date => new Date(now.getTime() - RATING_WINDOW_DAYS * 86_400_000);
 
 export type RideListRow = {
   id: string;
@@ -261,6 +268,8 @@ export type RideListRow = {
   seats_booked: number;
   /** Open requests: requested and not past their expiry. */
   pending_requests: number;
+  /** Completed passengers the driver can still rate (E5). */
+  to_rate: number;
 };
 
 /**
@@ -277,11 +286,16 @@ export async function listUpcomingRides(
   const hasCursor = after !== null;
   const cursorAt = after?.departureAt ?? now;
   const cursorId = after?.id ?? '00000000-0000-0000-0000-000000000000';
+  const rateCutoff = ratingCutoff(now);
   return await sql<RideListRow[]>`
     select r.id, r.departure_at, r.origin_label, r.destination_label, r.status,
            r.seats_offered, r.seats_booked,
            (select count(*)::int from app.bookings b
-             where b.ride_id = r.id and b.status = 'requested' and b.expires_at > ${now}) as pending_requests
+             where b.ride_id = r.id and b.status = 'requested' and b.expires_at > ${now}) as pending_requests,
+           (select count(*)::int from app.bookings b
+             where b.ride_id = r.id and b.status = 'completed' and r.completed_at > ${rateCutoff}
+               and not exists (select 1 from app.ratings x
+                 where x.booking_id = b.id and x.rater_id = r.driver_id)) as to_rate
     from app.rides r
     where r.driver_id = ${driverId} and r.status = 'published' and r.departure_at >= ${now}
       and (not ${hasCursor}::boolean or (r.departure_at, r.id) > (${cursorAt}::timestamptz, ${cursorId}::uuid))
@@ -300,11 +314,16 @@ export async function listPastRides(
   const hasCursor = after !== null;
   const cursorAt = after?.departureAt ?? now;
   const cursorId = after?.id ?? 'ffffffff-ffff-ffff-ffff-ffffffffffff';
+  const rateCutoff = ratingCutoff(now);
   return await sql<RideListRow[]>`
     select r.id, r.departure_at, r.origin_label, r.destination_label, r.status,
            r.seats_offered, r.seats_booked,
            (select count(*)::int from app.bookings b
-             where b.ride_id = r.id and b.status = 'requested' and b.expires_at > ${now}) as pending_requests
+             where b.ride_id = r.id and b.status = 'requested' and b.expires_at > ${now}) as pending_requests,
+           (select count(*)::int from app.bookings b
+             where b.ride_id = r.id and b.status = 'completed' and r.completed_at > ${rateCutoff}
+               and not exists (select 1 from app.ratings x
+                 where x.booking_id = b.id and x.rater_id = r.driver_id)) as to_rate
     from app.rides r
     where r.driver_id = ${driverId} and (r.status <> 'published' or r.departure_at < ${now})
       and (not ${hasCursor}::boolean or (r.departure_at, r.id) < (${cursorAt}::timestamptz, ${cursorId}::uuid))

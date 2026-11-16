@@ -1,7 +1,7 @@
 import type { Db } from '../../_shared/db.ts';
 import type { LatLng } from '../../_shared/contracts/geo.ts';
 import { MAX_WALK_M, MIN_SEGMENT_M } from '../../_shared/domain/rules.ts';
-import type { PublicProfileRow } from './accounts.ts';
+import { selectPublicProfiles, type PublicProfileRow } from './ratingSummary.ts';
 
 /**
  * SQL for search and matching (E3). Everything geometric happens in app.match_rides (ADR 0015):
@@ -71,24 +71,16 @@ export async function matchRides(sql: Db, a: MatchArgs): Promise<MatchRow[]> {
 }
 
 /**
- * Public profiles of several drivers in one round trip (same columns as getPublicProfile, never
- * phone or plate). `ids` must not be empty.
+ * Public profiles of several drivers in one round trip (never phone or plate). `ids` must not be
+ * empty. The query is shared with every other profile read (ratingSummary.ts).
  */
 export async function getPublicProfiles(
   sql: Db,
   ids: readonly string[],
   since: Date,
+  now: Date,
 ): Promise<PublicProfileRow[]> {
-  return await sql<PublicProfileRow[]>`
-    select p.id, p.first_name, p.bio, p.photo_path, p.status, p.created_at,
-      (select count(*)::int from app.ratings r where r.ratee_id = p.id) as rating_count,
-      (select avg(r.stars)::float8 from app.ratings r where r.ratee_id = p.id) as rating_avg,
-      (select count(*)::int from app.reliability_events e
-        where e.user_id = p.id and e.kind = 'late_cancellation' and e.occurred_at > ${since}) as late_cancellations,
-      (select count(*)::int from app.reliability_events e
-        where e.user_id = p.id and e.kind = 'no_show' and e.occurred_at > ${since}) as no_shows
-    from app.profiles p
-    where p.id in ${sql([...ids])}`;
+  return await selectPublicProfiles(sql, ids, since, now);
 }
 
 export type SearchEventProps = {
