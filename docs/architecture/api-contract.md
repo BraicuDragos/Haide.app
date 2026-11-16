@@ -86,10 +86,11 @@ Body `{ "point": LatLng }` → `200 { "place": Place }` (nearest address/street 
     "segmentM": 11500, "priceUpToBani": 390, "isFree": false, "seatsLeft": 2,
     "driver": { "id": "…", "firstName": "Radu", "photoUrl": "…", "rating": { "average": 4.8, "count": 23 } }
   } ],
-  "nearestOutsideWindow": [ /* same item shape, max 3, same day; only when items is empty */ ],
+  "nearestOutsideWindow": [ /* same item shape, max 3, same day, outside the window; always present, [] unless items is empty */ ],
   "hiddenBlockedCount": 0 }
 ```
-Sorted by `pickup.walkM + dropoff.walkM`, then `|departureAt − desired|`. Logs `search_performed` (results count, corridor/area labels).
+Sorted by `pickup.walkM + dropoff.walkM` (rounded to 50 m), then `|departureAt − desired|`. Logs `search_performed` (results count, corridor/area labels, never coordinates).
+Implemented in E3: `nearestOutsideWindow` is **always present** (an empty array unless `items` is empty, then nearest in time first). `from`/`to` outside the Sibiu box → `400 VALIDATION_FAILED` (`fields.from|to = outside_coverage`); closer than 1 km → `400 SAME_PLACE` (`fields.to = too_close`); date earlier than yesterday or later than 30 days ahead → `400 VALIDATION_FAILED` (`fields.date = out_of_range`). Every point is a 300 m grid centre (`approx: true`), walks are rounded to 50 m, `pickupEtaAt` to 5 minutes. `priceUpToBani` is computed on the matched segment from the ride's own rate snapshot (`quoteUpTo`, n = 1), the client never sends a price. `hiddenBlockedCount` counts in-window rides hidden because of a block in either direction; nothing says who blocked whom. Locations travel in the POST body only (never in URLs or logs).
 
 ### `GET /rides/{id}`: Public
 The generic public detail.
@@ -103,12 +104,13 @@ The generic public detail.
   "viewer": { "isDriver": false, "bookingId": null, "bookingStatus": null, "blocked": false } }
 ```
 `404` if the ride is cancelled/expired and the viewer is not a party, the driver is blocked either way, or the driver is suspended. Malformed ids are `404` too.
-Implemented in E2: `origin.label` and `destination.label` are **area names** (the gazetteer area, `Sibiu` as fallback), never the driver's street-level label. `point` is the 300 m grid centre. `routePublic` is `null` when the stored route is gone (coarsened). The plate, the driver's phone and every exact coordinate are absent. The blocked check arrives with E3/E5, and `viewer.bookingId`/`bookingStatus` stay `null` until E4.
+Implemented in E2: `origin.label` and `destination.label` are **area names** (the gazetteer area, `Sibiu` as fallback), never the driver's street-level label. `point` is the 300 m grid centre. `routePublic` is `null` when the stored route is gone (coarsened). The plate, the driver's phone and every exact coordinate are absent. Since E3 a block in either direction makes the ride `404` (same as missing), and `viewer.bookingId`/`bookingStatus` stay `null` until E4.
 
 ### `POST /rides/{id}/match`: Public
 Passenger-specific view for ride detail and the request sheet. Body `{ "from": LatLng, "to": LatLng }`.
-`200 { "pickup": {...}, "dropoff": {...}, "segmentM": 5390, "priceUpToBani": 120, "pickupEtaAt": "…", "bookable": true, "notBookableReason": null }`
+`200 { "pickup": {...}, "dropoff": {...}, "segmentM": 5390, "priceUpToBani": 120, "pickupEtaAt": "…", "seatsLeft": 2, "bookable": true, "notBookableReason": null }`
 `notBookableReason ∈ RIDE_FULL | RIDE_NOT_BOOKABLE | OWN_RIDE | BLOCKED | ALREADY_REQUESTED | NO_LONGER_MATCHES`. The UI shows it as a disabled-button reason.
+Implemented in E3: `seatsLeft` is added (0 when full). The endpoint never returns `BLOCKED` (a blocked pair gets `404`, like `GET /rides/{id}`, so nobody learns who blocked whom); `BLOCKED` stays for `POST /bookings` (E4), and `ALREADY_REQUESTED` arrives with E4. Reason priority: `OWN_RIDE`, `RIDE_NOT_BOOKABLE` (not published, or departing in under 10 minutes), `RIDE_FULL`, `NO_LONGER_MATCHES`. When the points no longer fit (`NO_LONGER_MATCHES`), `pickup`, `dropoff`, `segmentM`, `priceUpToBani` and `pickupEtaAt` are all `null`. Rate limit 60/min.
 
 ### `GET /users/{id}`: Public
 `200 PublicUser`. A deleted user returns `firstName: null`, no photo and no bio. Suspended or blocked (either way) → `404`.
