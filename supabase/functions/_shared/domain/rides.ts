@@ -77,33 +77,6 @@ export function isLateRideCancel(ride: RideCancelContext, clock: Clock): boolean
   return canCancelRide(ride, clock) && isLateCancel(ride.departureAt, clock);
 }
 
-/** Outbox payload for a cancelled ride (labels and times only: no coordinates, phones or plates). */
-export type RideCancelledPayload = {
-  rideId: string;
-  departureAt: string;
-  originLabel: string;
-  destinationLabel: string;
-  driverFirstName: string | null;
-};
-
-export type OutboxRow = {
-  userId: string;
-  template: 'ride_cancelled';
-  payload: RideCancelledPayload;
-};
-
-/** One `ride_cancelled` outbox row per affected passenger (the dispatcher arrives with E4). */
-export function rideCancelledOutbox(
-  passengerIds: readonly string[],
-  payload: RideCancelledPayload,
-): OutboxRow[] {
-  return [...new Set(passengerIds)].map((userId) => ({
-    userId,
-    template: 'ride_cancelled' as const,
-    payload,
-  }));
-}
-
 // ---- preview input ------------------------------------------------------------------------------
 
 /** Origin and destination closer than this are "the same place". */

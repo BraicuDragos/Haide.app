@@ -125,6 +125,19 @@ describe('notBookableReason', () => {
     expect(notBookableReason(ride(), null, clock, true)).toBeNull();
   });
 
+  it('an active or rejected booking of the viewer is ALREADY_REQUESTED, right after OWN_RIDE', () => {
+    expect(notBookableReason(ride(), 'me', clock, true, true)).toBe('ALREADY_REQUESTED');
+    // it wins over a full or no longer bookable ride and over non-matching points
+    expect(notBookableReason(ride({ seatsBooked: 3 }), 'me', clock, false, true)).toBe(
+      'ALREADY_REQUESTED',
+    );
+    expect(notBookableReason(ride({ status: 'cancelled' }), 'me', clock, true, true)).toBe(
+      'ALREADY_REQUESTED',
+    );
+    // own ride still comes first
+    expect(notBookableReason(ride(), 'driver', clock, true, true)).toBe('OWN_RIDE');
+  });
+
   it('own ride comes first, whatever else is true', () => {
     const r = ride({ status: 'cancelled', seatsBooked: 3 });
     expect(notBookableReason(r, 'driver', clock, false)).toBe('OWN_RIDE');

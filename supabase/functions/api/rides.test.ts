@@ -680,7 +680,7 @@ describe('POST /rides/{id}/cancel', () => {
     const update = find(calls, 'update app.rides set status');
     expect(update?.values).toContain(false); // not a late cancel
     expect(has(calls, 'insert into app.reliability_events')).toBe(false);
-    // no passengers exist before E4, so there are no outbox rows
+    // no booking was affected, so there are no outbox rows
     expect(has(calls, 'insert into app.outbox')).toBe(false);
   });
 

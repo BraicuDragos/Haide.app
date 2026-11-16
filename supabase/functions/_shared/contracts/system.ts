@@ -20,5 +20,7 @@ export const tickResponseSchema = z.object({
   expired: z.number().int(),
   sent: z.number().int(),
   failed: z.number().int(),
+  /** Route previews plus hourly housekeeping rows deleted (E4, additive). */
+  purged: z.number().int(),
 });
 export type TickResponse = z.infer<typeof tickResponseSchema>;

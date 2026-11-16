@@ -359,14 +359,19 @@ describe('POST /internal/tick', () => {
     expect(bad.status).toBe(404);
   });
 
-  it('runs the no-op skeleton with the right secret', async () => {
+  it('runs the tick with the right secret (nothing to do: all zeros)', async () => {
     const { app } = makeApp();
     const res = await app.request(`${BASE}/internal/tick`, {
       method: 'POST',
       headers: { 'x-cron-secret': TEST_CRON_SECRET },
     });
     expect(res.status).toBe(200);
-    expect(tickResponseSchema.parse(await res.json())).toEqual({ expired: 0, sent: 0, failed: 0 });
+    expect(tickResponseSchema.parse(await res.json())).toEqual({
+      expired: 0,
+      sent: 0,
+      failed: 0,
+      purged: 0,
+    });
   });
 });
 

@@ -117,7 +117,8 @@ export type MatchBody = z.infer<typeof matchBodySchema>;
 
 /**
  * Why the "Request seat" button is disabled. BLOCKED is kept for POST /bookings (E4): /match answers
- * 404 for a blocked pair instead. ALREADY_REQUESTED arrives with E4 (bookings).
+ * 404 for a blocked pair instead. ALREADY_REQUESTED (E4): the viewer has a requested, confirmed or
+ * rejected booking on the ride.
  */
 export const notBookableReasonSchema = z.enum([
   'RIDE_FULL',
@@ -132,8 +133,8 @@ export type NotBookableReason = z.infer<typeof notBookableReasonSchema>;
 /**
  * Passenger-specific view of one ride. When the typed points do not fit the ride (reason
  * NO_LONGER_MATCHES), pickup, dropoff, segmentM, priceUpToBani and pickupEtaAt are all null.
- * Reason priority: OWN_RIDE, RIDE_NOT_BOOKABLE (cancelled, completed, expired, departs in under
- * 10 minutes), RIDE_FULL, NO_LONGER_MATCHES.
+ * Reason priority: OWN_RIDE, ALREADY_REQUESTED, RIDE_NOT_BOOKABLE (cancelled, completed, expired,
+ * departs in under 10 minutes), RIDE_FULL, NO_LONGER_MATCHES.
  */
 export const matchResponseSchema = z.object({
   pickup: searchPlaceSchema.nullable(),

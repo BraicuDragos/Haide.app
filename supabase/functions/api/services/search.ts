@@ -18,6 +18,7 @@ import {
   notBookableReason,
   searchTimes,
 } from '../../_shared/domain/search.ts';
+import { hasActiveOrRejected } from '../repo/bookings.ts';
 import { describePoint, selectPublicRide } from '../repo/rides.ts';
 import {
   getPublicProfiles,
@@ -168,6 +169,8 @@ export async function matchRide(
   const row = rows[0] ?? null;
   if (row?.blocked) throw notFound();
 
+  // An active or rejected booking of the viewer blocks a new request (a declined passenger cannot re-ask).
+  const alreadyRequested = viewerId !== null && (await hasActiveOrRejected(sql, rideId, viewerId));
   const reason = notBookableReason(
     {
       driverId: ride.driver_id,
@@ -179,6 +182,7 @@ export async function matchRide(
     viewerId,
     clock,
     row !== null,
+    alreadyRequested,
   );
   return toMatchResponse(row, Math.max(0, ride.seats_offered - ride.seats_booked), reason);
 }

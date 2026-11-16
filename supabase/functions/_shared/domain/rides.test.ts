@@ -24,7 +24,6 @@ import {
   normalizeLabel,
   normalizeNote,
   previewExpiresAt,
-  rideCancelledOutbox,
 } from './rides.ts';
 
 const NOW = '2026-11-16T05:00:00Z';
@@ -132,34 +131,6 @@ describe('cancel rules', () => {
     expect(isLateRideCancel(ride('published', '2026-11-16T05:01:00Z'), clock)).toBe(true);
     // not cancellable at all: never "late"
     expect(isLateRideCancel(ride('cancelled', '2026-11-16T05:10:00Z'), clock)).toBe(false);
-  });
-});
-
-describe('rideCancelledOutbox', () => {
-  const payload = {
-    rideId: 'r1',
-    departureAt: '2026-11-16T05:30:00.000Z',
-    originLabel: 'Șelimbăr',
-    destinationLabel: 'Zona Industrială Vest',
-    driverFirstName: 'Radu',
-  };
-
-  it('writes one row per distinct passenger and nothing for an empty ride', () => {
-    expect(rideCancelledOutbox([], payload)).toEqual([]);
-    const rows = rideCancelledOutbox(['p1', 'p2', 'p1'], payload);
-    expect(rows.map((r) => r.userId)).toEqual(['p1', 'p2']);
-    expect(rows.every((r) => r.template === 'ride_cancelled')).toBe(true);
-  });
-
-  it('carries labels and times only: no coordinates, phone or plate', () => {
-    const [row] = rideCancelledOutbox(['p1'], payload);
-    expect(Object.keys(row?.payload ?? {}).sort()).toEqual([
-      'departureAt',
-      'destinationLabel',
-      'driverFirstName',
-      'originLabel',
-      'rideId',
-    ]);
   });
 });
 

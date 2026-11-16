@@ -2,7 +2,6 @@ import type { Db } from '../../_shared/db.ts';
 import type { FuelType } from '../../_shared/contracts/account.ts';
 import type { LatLng } from '../../_shared/contracts/geo.ts';
 import type { RideStatus } from '../../_shared/contracts/rides.ts';
-import type { OutboxRow } from '../../_shared/domain/rides.ts';
 
 /**
  * SQL for rides (E2). postgres.js tagged templates only. Columns are listed explicitly (no
@@ -260,6 +259,8 @@ export type RideListRow = {
   status: RideStatus;
   seats_offered: number;
   seats_booked: number;
+  /** Open requests: requested and not past their expiry. */
+  pending_requests: number;
 };
 
 /**
@@ -278,7 +279,9 @@ export async function listUpcomingRides(
   const cursorId = after?.id ?? '00000000-0000-0000-0000-000000000000';
   return await sql<RideListRow[]>`
     select r.id, r.departure_at, r.origin_label, r.destination_label, r.status,
-           r.seats_offered, r.seats_booked
+           r.seats_offered, r.seats_booked,
+           (select count(*)::int from app.bookings b
+             where b.ride_id = r.id and b.status = 'requested' and b.expires_at > ${now}) as pending_requests
     from app.rides r
     where r.driver_id = ${driverId} and r.status = 'published' and r.departure_at >= ${now}
       and (not ${hasCursor}::boolean or (r.departure_at, r.id) > (${cursorAt}::timestamptz, ${cursorId}::uuid))
@@ -299,7 +302,9 @@ export async function listPastRides(
   const cursorId = after?.id ?? 'ffffffff-ffff-ffff-ffff-ffffffffffff';
   return await sql<RideListRow[]>`
     select r.id, r.departure_at, r.origin_label, r.destination_label, r.status,
-           r.seats_offered, r.seats_booked
+           r.seats_offered, r.seats_booked,
+           (select count(*)::int from app.bookings b
+             where b.ride_id = r.id and b.status = 'requested' and b.expires_at > ${now}) as pending_requests
     from app.rides r
     where r.driver_id = ${driverId} and (r.status <> 'published' or r.departure_at < ${now})
       and (not ${hasCursor}::boolean or (r.departure_at, r.id) < (${cursorAt}::timestamptz, ${cursorId}::uuid))
@@ -330,23 +335,6 @@ export async function insertLateCancelEvent(
   await sql`
     insert into app.reliability_events (user_id, kind, ride_id, occurred_at)
     values (${userId}, 'late_cancellation', ${rideId}, ${at})`;
-}
-
-/**
- * Passengers with a `requested` or `confirmed` booking on the ride. Bookings arrive with E4
- * (the table does not exist yet), which replaces this body with the real query. Until then
- * no ride has passengers.
- */
-export function activePassengerIds(_sql: Db, _rideId: string): Promise<string[]> {
-  return Promise.resolve([]);
-}
-
-export async function insertOutboxRows(sql: Db, rows: readonly OutboxRow[]): Promise<void> {
-  for (const row of rows) {
-    await sql`
-      insert into app.outbox (user_id, template, payload)
-      values (${row.userId}, ${row.template}, ${JSON.stringify(row.payload)}::text::jsonb)`;
-  }
 }
 
 // ---- public read --------------------------------------------------------------------------------

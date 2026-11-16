@@ -3,6 +3,7 @@ import type { Db } from '../_shared/db.ts';
 import { fixedClock } from '../_shared/domain/clock.ts';
 import { parseEnv, type Env } from '../_shared/env.ts';
 import { silentLogger } from '../_shared/log.ts';
+import { createConsoleProvider } from '../_shared/providers/email/console.ts';
 import { createFixtureProvider } from '../_shared/providers/routing/fixture.ts';
 import { createApp } from './app.ts';
 import { LOCAL_JWT_ISSUER, createTokenVerifier } from './middleware/auth.ts';
@@ -86,6 +87,7 @@ export function makeApp(
     storage: store.storage,
     encodeAvatar: passThroughEncoder,
     routing: createFixtureProvider(),
+    email: createConsoleProvider(silentLogger),
     ...overrides,
   };
   return { app: createApp(deps), calls, deps, uploaded: store.uploaded, removed: store.removed };

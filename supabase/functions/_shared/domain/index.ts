@@ -10,3 +10,5 @@ export * from './pricing.ts';
 export * from './rides.ts';
 export * from './corridors.ts';
 export * from './search.ts';
+export * from './outbox.ts';
+export * from './bookings.ts';
