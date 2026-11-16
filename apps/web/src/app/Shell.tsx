@@ -1,10 +1,11 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { Outlet, useLocation } from 'react-router';
+import { Navigate, Outlet, useLocation } from 'react-router';
 import { ApiError } from '@/api/client';
 import { useAuth } from '@/auth/AuthProvider';
 import { useMe } from '@/auth/hooks';
 import { t } from '@/i18n';
 import { Icon } from '@/ui/Icon';
+import { useToast } from '@/ui/Toast';
 import { ErrorBoundary } from './ErrorBoundary';
 import { TabBar, TABS } from './TabBar';
 import { useNavigationCounter } from './useScreenHeading';
@@ -17,7 +18,10 @@ export function routeTemplate(pathname: string): string {
 const SuspendedScreen = lazy(() => import('@/features/common/screens/SuspendedScreen'));
 
 /** Public browsing stays available to a suspended account (5.7). Everything else shows the suspended screen. */
-const OPEN_TO_SUSPENDED = ['/find', '/results', '/ride/', '/user/', '/policy/', '/auth'];
+const OPEN_TO_SUSPENDED = ['/find', '/results', '/ride/', '/user/', '/policy/', '/auth', '/delete'];
+
+/** Where a person who has to re-accept updated terms can still go (they must be able to read them, leave or delete). */
+const OPEN_TO_REACCEPT = ['/policy/', '/auth', '/delete'];
 
 function useOnline(): boolean {
   const [online, setOnline] = useState(() => navigator.onLine);
@@ -43,13 +47,32 @@ export function Shell() {
   const online = useOnline();
   useNavigationCounter();
   const isRoot = TABS.some((tab) => tab.to === loc.pathname);
-  const { status } = useAuth();
+  const { status, signOut } = useAuth();
+  const toast = useToast();
   const me = useMe();
+
+  // The account was deleted (here or on another device): drop the session and say why.
+  const deleted = me.error instanceof ApiError && me.error.code === 'ACCOUNT_DELETED';
+  useEffect(() => {
+    if (status !== 'signedIn' || !deleted) return;
+    void signOut().then(() => toast.show(t('errors.ACCOUNT_DELETED')));
+  }, [status, deleted, signOut, toast]);
+
   const suspended =
     status === 'signedIn' &&
     me.error instanceof ApiError &&
     me.error.code === 'ACCOUNT_SUSPENDED' &&
     !OPEN_TO_SUSPENDED.some((p) => loc.pathname === p || loc.pathname.startsWith(p));
+
+  // Terms or privacy changed since the person accepted: every screen but the legal pages asks for re-acceptance first.
+  const reaccept =
+    status === 'signedIn' &&
+    me.data?.consent.reaccept === true &&
+    !OPEN_TO_REACCEPT.some((p) => loc.pathname === p || loc.pathname.startsWith(p));
+  if (reaccept) {
+    const returnTo = loc.pathname + loc.search;
+    return <Navigate to={`/auth/consent?returnTo=${encodeURIComponent(returnTo)}`} replace />;
+  }
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-xl flex-col bg-bg md:border-x md:border-(color:--hair)">

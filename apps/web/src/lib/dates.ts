@@ -80,3 +80,13 @@ export function dateLabel(day: string): string {
   const [y, m, d] = day.split('-').map(Number) as [number, number, number];
   return label.format(new Date(Date.UTC(y, m - 1, d)));
 }
+
+/** "21 November 2026" for a legal or request date (UTC, so the date is the same for everyone). */
+export function longDate(iso: string): string {
+  return new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(iso));
+}
