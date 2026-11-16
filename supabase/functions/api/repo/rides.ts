@@ -8,6 +8,8 @@ import type { OutboxRow } from '../../_shared/domain/rides.ts';
  * SQL for rides (E2). postgres.js tagged templates only. Columns are listed explicitly (no
  * SELECT *). Geometry in via ST_MakePoint / ST_GeomFromGeoJSON, out via ST_AsGeoJSON / ST_X / ST_Y
  * (5 decimals exact). Parameters inside SELECT lists carry explicit casts.
+ * jsonb parameters go in as `JSON.stringify(x)::text::jsonb`: with a bare `::jsonb` cast postgres.js
+ * infers the jsonb type and encodes the string a second time (a JSON string scalar, not an object).
  */
 
 export type EnergyPriceRow = { id: string; price_milli: number; consumption_centi: number };
@@ -141,7 +143,7 @@ export async function insertRideFromPreview(sql: Db, v: NewRide): Promise<string
            app.area_for(p.origin), app.area_for(p.destination), p.route, p.distance_m, p.duration_s,
            ${v.departureAt}::timestamptz, ${v.seats}::smallint, ${v.note}::text,
            ${v.isFree}::boolean, ${v.energyPriceId}::uuid, ${v.rateMicroPerKm}::integer,
-           ${JSON.stringify(v.vehicleSnapshot)}::jsonb, ${v.now}::timestamptz, ${v.now}::timestamptz
+           ${JSON.stringify(v.vehicleSnapshot)}::text::jsonb, ${v.now}::timestamptz, ${v.now}::timestamptz
     from app.route_previews p
     where p.id = ${v.previewId} and p.driver_id = ${v.driverId} and p.expires_at > ${v.now}
     returning id`;
@@ -343,7 +345,7 @@ export async function insertOutboxRows(sql: Db, rows: readonly OutboxRow[]): Pro
   for (const row of rows) {
     await sql`
       insert into app.outbox (user_id, template, payload)
-      values (${row.userId}, ${row.template}, ${JSON.stringify(row.payload)}::jsonb)`;
+      values (${row.userId}, ${row.template}, ${JSON.stringify(row.payload)}::text::jsonb)`;
   }
 }
 

@@ -18,6 +18,30 @@ function envelope(
   return body;
 }
 
+const PG_TEXT_FIELDS = [
+  ['code', 'pgCode'],
+  ['constraint_name', 'pgConstraint'],
+  ['table_name', 'pgTable'],
+  ['column_name', 'pgColumn'],
+  ['routine', 'pgRoutine'],
+] as const;
+
+/**
+ * Safe diagnostics of a postgres.js PostgresError: SQLSTATE, constraint, table, column, routine and
+ * the scrubbed server message. Never the `detail` / `where` / query text (they hold row values).
+ */
+export function pgDiagnostics(err: Error): Record<string, string> {
+  if (err.name !== 'PostgresError') return {};
+  const e = err as unknown as Record<string, unknown>;
+  const out: Record<string, string> = {};
+  for (const [field, key] of PG_TEXT_FIELDS) {
+    const v = e[field];
+    if (typeof v === 'string' && v !== '') out[key] = scrubText(v, 100);
+  }
+  if (err.message) out.pgMessage = scrubText(err.message, 200);
+  return out;
+}
+
 /** Renders the error envelope (api-contract §1.1). Unknown errors become 500 INTERNAL, no details. */
 export const onError: ErrorHandler<AppBindings> = async (err, c) => {
   const reqId = c.get('reqId') ?? 'unknown';
@@ -29,8 +53,13 @@ export const onError: ErrorHandler<AppBindings> = async (err, c) => {
     return c.json(envelope(app.code, app.message, reqId, app.fields), app.status);
   }
 
-  // Unexpected: log the class name only (messages may contain SQL text or user data).
-  deps.log('error', 'unhandled_error', { reqId, route: c.req.routePath, name: err.name });
+  // Unexpected: class name plus scrubbed Postgres diagnostics (no detail, no row values).
+  deps.log('error', 'unhandled_error', {
+    reqId,
+    route: c.req.routePath,
+    name: err.name,
+    ...pgDiagnostics(err),
+  });
   try {
     await recordAppError(deps.sql, {
       source: 'server',
