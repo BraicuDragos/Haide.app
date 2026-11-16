@@ -13,7 +13,7 @@ export const DRIVER = publicUser({
 const approx = (lat: number, lng: number) => ({ lat, lng, approx: true, radiusM: 300 });
 
 /** Tomorrow 07:25 Bucharest, as an instant. Ten days ahead is not needed: the fake ignores the date. */
-function tomorrowAt(h: number, m: number): string {
+export function tomorrowAt(h: number, m: number): string {
   const d = new Date(Date.now() + 24 * 3600 * 1000);
   const [y, mo, da] = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Bucharest' })
     .format(d)
