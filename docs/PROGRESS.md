@@ -13,6 +13,7 @@
 - [x] E-DM — "Headlight" dark-first design + motion (ADRs 0016–0020): Sora, Lucide, motion tokens, route glow, price roll, seat picker, launch moment, Reduce-motion + Theme settings; QA APPROVED (383 unit, 68 Playwright, Lighthouse a11y 100, JS 152.6 KB gzip)
 - [x] E1 — accounts (PR #5 merged), profile, vehicle: migration `20261116090000_accounts.sql` (6 tables, RLS), gates middleware, account endpoints, photo pipeline (Jimp), JWT iss check, bodyLimit; auth + onboarding + profile screens, policy pages. QA: APPROVED (292 unit tests, 30 mocked Playwright, initial JS 155 KB gzip)
 - [x] E2 - publish and manage rides + pricing engine (`feat/rides`, working tree): migration `20261117090000_rides.sql` (energy_prices v1, route_previews, rides, route helpers), pricing.ts (integer bani, trips A/B/C + mixed example verified to the bani), ORS + fixture routing, 6 ride endpoints (preview, publish, list, owner view, cancel, public view), daily limit via advisory lock; offer form, published, driving list/detail, cancel sheet. QA: see below
+- [x] E3 - search and matching (`feat/search`, working tree): migration `20261118090000_search.sql` (`app.blocks` with RLS and no policies, `app.match_rides`: pickup then dropoff by linear referencing, 800 m corridor, segment >= 1 km, walk-then-time order, loops, own/full/blocked/cancelled/departed excluded, PUBLIC EXECUTE revoked), `POST /search` (30/min, signed-out OK) and `POST /rides/{id}/match`, 404 for blocked pairs on `GET /rides/{id}` and `/match`, price per result from the ride rate snapshot (`quoteUpTo` on the segment; Selimbar to ZI Vest = 3.10 RON checked by hand), analytics `search_performed` without coordinates; Results, empty state, ride detail, Request seat gate with return-to-intent, shared-element transition, search kept in sessionStorage (no coordinates in URLs). QA: APPROVED after fixes (595 unit + 161 web unit, 107 Playwright passed twice, initial JS 156.1 kB gzip, audit clean)
 
 ## Next step
 - Owner merges E-DM PR → E2 (publish rides + pricing engine), then E3…E8. E-DM leftovers: match moment + live trip + shared-element ride morphs land with E3/E4 screens; real-phone fps, real tiles, screen readers unverified
@@ -26,6 +27,11 @@
 - Real ORS routing and key (fixture only so far). Lighthouse not run (not installed); axe 360x800 dark + light clean on every E2 screen.
 - Energy price consumptions are assumptions (pricing.md section 3); electric price to verify before launch.
 - Carry-forward: purge expired route_previews in tick (E4); activePassengerIds, pendingRequests and requests/passengers arrays are stubs until E4.
+
+## Not verified locally in E3 - CI must confirm
+- No Docker, Supabase CLI, Deno or psql on the review machine: migration `20261118090000_search.sql` + pgTAP 006 (53 assertions, count checked by reading), `deno check/lint`, `tests/integration/search.test.ts` (incl. the 500-ride perf run) and the SQL in `api/repo/search.ts` have only been read, never executed. CI sets `SEARCH_P95_MS=1000` for the perf gate (local default 300 ms) and `INT_DB_URL` defaults to the `supabase start` DB on 127.0.0.1:54322.
+- Lighthouse not run (not installed); axe 360x800 dark + light clean on Results, empty, error and detail in the mocked Playwright specs. Real MapLibre tiles and a real phone are still unverified; the detail map shows its text fallback without tiles.
+- Carry-forward: `nearestOutsideWindow` re-sorts the 50 best-by-walk same-day rides by time (a busy day could hide a closer-in-time ride); `hiddenBlockedCount` shares the 50-row limit with visible rides; the Request seat tap shows a "coming soon" toast until E4.
 
 ## Carry-forward findings (non-blocking)
 - E1: imagescript replaced by pure-JS Jimp 1.6.1 (lazy import; native codec failed on Deno Edge Runtime); `PHOTO_MAX_PIXELS` lowered to 8 MP.
