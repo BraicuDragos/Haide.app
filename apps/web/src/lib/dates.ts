@@ -34,3 +34,49 @@ export function dayOptions(count = 7, now: Date = new Date()): DayOption[] {
     return { value, label: text };
   });
 }
+
+const wall = new Intl.DateTimeFormat('en-US', {
+  timeZone: TIME_ZONE,
+  hourCycle: 'h23',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
+/** Europe/Bucharest wall clock of an instant, read back as if it were UTC (for offset arithmetic). */
+function wallAsUtc(ms: number): number {
+  const p = Object.fromEntries(wall.formatToParts(new Date(ms)).map((x) => [x.type, x.value]));
+  return Date.UTC(+p.year!, +p.month! - 1, +p.day!, +p.hour!, +p.minute!);
+}
+
+/**
+ * "2026-11-16" + "07:30" in Europe/Bucharest -> ISO UTC ("2026-11-16T05:30:00.000Z"). DST-safe: the offset is read
+ * from Intl at the target instant, so the browser's own time zone never matters.
+ */
+export function bucharestToIso(day: string, time: string): string {
+  const [y, m, d] = day.split('-').map(Number) as [number, number, number];
+  const [hh, mm] = time.split(':').map(Number) as [number, number];
+  const target = Date.UTC(y, m - 1, d, hh, mm);
+  let ms = target - (wallAsUtc(target) - target);
+  ms = target - (wallAsUtc(ms) - ms); // second pass settles instants next to a DST change
+  return new Date(ms).toISOString();
+}
+
+/** "Today", "Tomorrow", or "Mon 17 Nov" for an instant, by Europe/Bucharest calendar day. */
+export function dayLabel(iso: string, now: Date = new Date()): string {
+  const d = new Date(iso);
+  const [y, m, dd] = ymd.format(d).split('-').map(Number) as [number, number, number];
+  const [ny, nm, nd] = bucharestToday(now).split('-').map(Number) as [number, number, number];
+  const diff = Math.round((Date.UTC(y, m - 1, dd) - Date.UTC(ny, nm - 1, nd)) / 86_400_000);
+  if (diff === 0) return t('common.today');
+  if (diff === 1) return t('common.tomorrow');
+  return label.format(new Date(Date.UTC(y, m - 1, dd)));
+}
+
+/** "Mon 17 Nov" for a YYYY-MM-DD calendar day (never "Today"): for messages that name a date. */
+export function dateLabel(day: string): string {
+  const [y, m, d] = day.split('-').map(Number) as [number, number, number];
+  return label.format(new Date(Date.UTC(y, m - 1, d)));
+}
