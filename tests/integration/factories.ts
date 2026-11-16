@@ -1,4 +1,5 @@
 import { Jimp, JimpMime } from 'jimp';
+import type postgres from 'postgres';
 import { SignJWT } from 'jose';
 import {
   bucharestDayKey,
@@ -89,11 +90,16 @@ export async function createUser(
   const must = async (res: Response, what: string) => {
     if (!res.ok) throw new Error(`${what} failed with ${res.status}: ${await res.text()}`);
   };
+  // The current document versions change with each legal text (1.0, then 1.1 from E6): ask the API.
+  const legal = (await (await fetch(`${BASE}/legal/current`)).json()) as {
+    terms: { version: string };
+    privacy: { version: string };
+  };
   await must(
     await user.send('POST', '/me/consents', {
       age18: true,
-      termsVersion: '1.0',
-      privacyVersion: '1.0',
+      termsVersion: legal.terms.version,
+      privacyVersion: legal.privacy.version,
     }),
     'consent',
   );
@@ -139,4 +145,29 @@ export function noonTomorrow(plusMinutes = 0): string {
   const day = bucharestDayKey(new Date(Date.now() + 30 * 3_600_000));
   const noon = bucharestLocalToUtc(day, '12:00');
   return new Date(noon.getTime() + plusMinutes * 60_000).toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
+
+/** Direct database access for the suites that move time (superuser of the local stack). */
+export const DB_URL =
+  process.env.INT_DB_URL ?? 'postgresql://postgres:postgres@127.0.0.1:54322/postgres';
+
+/**
+ * Makes a ride and its bookings `days` old (E6 retention tests): the ride departed `days` days ago
+ * and each booking was requested a day before that, so `bookings.created_at` stays before departure
+ * (the coarsening prefilter relies on it). A published ride is then completed by the next tick.
+ */
+export async function ageRide(sql: postgres.Sql, rideId: string, days: number): Promise<void> {
+  await sql`
+    update app.rides
+    set departure_at = now() - make_interval(days => ${days}::int),
+        completed_at = case when status = 'completed'
+          then now() - make_interval(days => ${days}::int) + interval '2 hours' else completed_at end
+    where id = ${rideId}::uuid`;
+  await sql`
+    update app.bookings b
+    set created_at = r.departure_at - interval '1 day',
+        requested_at = r.departure_at - interval '1 day',
+        expires_at = r.departure_at - interval '23 hours'
+    from app.rides r
+    where r.id = b.ride_id and b.ride_id = ${rideId}::uuid`;
 }

@@ -46,7 +46,8 @@ describe.skipIf(!BASE || !SECRET)('accounts against the local stack', () => {
   it('GET /legal/current is public', async () => {
     const res = await fetch(`${BASE}/legal/current`);
     expect(res.status).toBe(200);
-    expect(legalCurrentResponseSchema.parse(await res.json()).terms.version).toBe('1.0');
+    // 1.0 until 2026-11-21, then 1.1 (E6): the contract is the shape, the web content files pin the text.
+    expect(legalCurrentResponseSchema.parse(await res.json()).terms.version).toMatch(/^1\.\d+$/);
   });
 
   it('GET /me needs a token, and a bad issuer is refused', async () => {
@@ -80,18 +81,25 @@ describe.skipIf(!BASE || !SECRET)('accounts against the local stack', () => {
   });
 
   it('consent: stale versions are rejected, current ones accepted', async () => {
+    const legal = legalCurrentResponseSchema.parse(
+      await (await fetch(`${BASE}/legal/current`)).json(),
+    );
     const bad = await call(
       '/me/consents',
-      json('POST', { age18: true, termsVersion: '0.1', privacyVersion: '1.0' }),
+      json('POST', { age18: true, termsVersion: '0.1', privacyVersion: legal.privacy.version }),
     );
     expect(bad.status).toBe(400);
     const ok = await call(
       '/me/consents',
-      json('POST', { age18: true, termsVersion: '1.0', privacyVersion: '1.0' }),
+      json('POST', {
+        age18: true,
+        termsVersion: legal.terms.version,
+        privacyVersion: legal.privacy.version,
+      }),
     );
     expect(ok.status).toBe(204);
     const me = meResponseSchema.parse(await (await call('/me')).json());
-    expect(me.consent).toEqual({ upToDate: true, required: [] });
+    expect(me.consent).toEqual({ upToDate: true, required: [], reaccept: false });
   });
 
   it('profile: validates, normalises and stores diacritics', async () => {
