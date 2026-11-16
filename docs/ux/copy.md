@@ -405,8 +405,10 @@ Driver publishing flow with the price preview (E2-2). The driver can lower the p
 | `offer.seats.inc` | More seats |
 | `offer.seats.value.one` | 1 seat |
 | `offer.seats.value.other` | {n} seats |
+| `offer.seats.hint` | Your car has {n} seats. |
 | `offer.note` | Note for passengers |
 | `offer.note.placeholder` | Where you’ll wait, space for bags, anything useful. |
+| `offer.note.hint` | {n} of 200 characters |
 | `offer.route.loading` | Working out your route |
 | `offer.route.result` | {km} km, about {min} min |
 | `offer.route.err` | We couldn’t work out this route. Check both places and try again. |
@@ -414,7 +416,8 @@ Driver publishing flow with the price preview (E2-2). The driver can lower the p
 | `offer.price.title` | What passengers pay |
 | `offer.price.body` | Fuel cost split between everyone in the car, you included. |
 | `offer.price.fuel` | {fuel}, {km} km |
-| `offer.price.recover` | With {n} passengers you recover about {amount} of the {fuel} fuel cost. |
+| `offer.price.recover.one` | With 1 passenger you recover about {amount} of the {fuel} fuel cost. |
+| `offer.price.recover.other` | With {n} passengers you recover about {amount} of the {fuel} fuel cost. |
 | `offer.price.lock` | The price is set by Haide. You can’t raise it. |
 | `offer.price.waiting` | Choose both places to see the price. |
 | `offer.free` | Offer this ride for free |
@@ -429,6 +432,9 @@ Driver publishing flow with the price preview (E2-2). The driver can lower the p
 | `offer.err.limit` | You’ve reached 4 rides on {day}. Choose another day. |
 | `offer.err.distance` | Rides must be between 1 and 40 km. |
 | `offer.err.same` | Start and destination are the same place. Choose two different places. |
+| `offer.err.seats` | Your car has {n} seats. Choose fewer seats. |
+| `offer.err.expired` | Your route price timed out. We’ve worked it out again. Check the price and publish once more. |
+| `offer.err.offline` | You’re offline. Connect to publish your ride. |
 | `offer.needCar.title` | Add your car first |
 | `offer.needCar.body` | Passengers need to know what to look for, and the fuel type sets the price. |
 | `offer.needCar.cta` | Add car |
@@ -449,6 +455,11 @@ Two levels of tabs: Riding or Driving, then Upcoming or Past.
 | `rides.driving` | Driving |
 | `rides.upcoming` | Upcoming |
 | `rides.past` | Past |
+| `rides.tabs.role` | Riding or driving |
+| `rides.tabs.when` | Upcoming or past |
+| `rides.loading` | Loading your rides |
+| `rides.err` | We couldn’t load your rides. Check your connection and try again. |
+| `rides.more` | Show more |
 | `rides.empty.riding.title` | No rides booked yet |
 | `rides.empty.riding.body` | Find a ride and send a request. It will show up here. |
 | `rides.empty.riding.cta` | Find a ride |
@@ -564,6 +575,7 @@ Requests, passengers, cancel and no-show.
 | Key | English |
 |---|---|
 | `driverRide.title` | Your ride |
+| `driverRide.loading` | Loading your ride |
 | `driverRide.requests` | Requests |
 | `driverRide.noRequests` | No requests yet. We’ll email you when someone asks for a seat. |
 | `driverRide.passengers` | Passengers |
@@ -772,6 +784,9 @@ Pattern: what happened, then what to do. No apologies, no “Oops”, never “S
 | `error.fieldRequired` | Fill in this field. |
 | `errors.PHOTO_INVALID` | We couldn’t read this photo. Choose a JPEG or PNG. |
 | `errors.PHOTO_TOO_LARGE` | This photo is too large. Choose a smaller JPEG or PNG. |
+| `errors.INVALID_STATE` | This ride can’t be changed any more. Go back to My rides to see where it stands. |
+| `errors.ROUTING_UNAVAILABLE` | Our route service isn’t answering. Try again in a moment. |
+| `errors.DAILY_RIDE_LIMIT` | You’ve reached 4 rides on that day. Choose another day. |
 
 ## 34. Notification emails (E4-6)
 

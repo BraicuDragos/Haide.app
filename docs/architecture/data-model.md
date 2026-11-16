@@ -178,7 +178,9 @@ Seed v1 (effective 2026-11-15, from pricing.md §3): petrol 9810/700 l · diesel
 
 ### 4.3 Rides (E2)
 
-**`route_previews`** (TTL 30 min): `id`, `driver_id`, `origin geometry(Point)`, `destination geometry(Point)`, `route geometry(LineString)`, `distance_m`, `duration_s`, `provider text`, `created_at`, `expires_at`. Index `(expires_at)`.
+**`route_previews`** (TTL 30 min): `id`, `driver_id`, `origin geometry(Point)`, `destination geometry(Point)`, `origin_label text`, `destination_label text` (1 to 80 chars, NOT NULL: the labels shown to the driver, copied to the ride on publish), `route geometry(LineString)` (simplified at 10 m on insert), `distance_m`, `duration_s`, `provider text` (`ors` or `fixture`), `created_at`, `expires_at` (`CHECK (expires_at > created_at)`). Indexes `(expires_at)` and `(driver_id)`.
+
+**`energy_prices`** (immutable config, seeded with v1 in the E2 migration, not in `seed.sql`): `id`, `fuel_type`, `price_milli` (milli-RON per l or kWh), `consumption_centi` (per 100 km, x100), `unit` (`l` or `kWh`, `CHECK ((fuel_type = 'electric') = (unit = 'kWh'))`), `effective_from`, `source_note`, `created_by`, `created_at`. `UNIQUE (fuel_type, effective_from)`. `haide_api` has no UPDATE or DELETE: a new price is a new row.
 
 **`rides`**
 
@@ -209,6 +211,8 @@ Seed v1 (effective 2026-11-15, from pricing.md §3): petrol 9810/700 l · diesel
 | completed_at | timestamptz | |
 | coarsened_at | timestamptz | |
 | created_at, updated_at | timestamptz | |
+
+Named constraints: `rides_seats_booked_range` (`seats_booked BETWEEN 0 AND seats_offered`, the overbooking backstop: E4 maps a violation to `RIDE_FULL`), `rides_cancelled_has_time` (`status <> 'cancelled' OR cancelled_at IS NOT NULL`), `rides_late_cancel_only_cancelled` (`NOT late_cancel OR status = 'cancelled'`). The route helper functions `app.simplify_route(geometry, integer)` and `app.public_route(geometry)` (trim `min(500 m, 10 %)` at both ends, then simplify at 25 m) are IMMUTABLE, STRICT and executable by `haide_api` only.
 
 Indexes:
 - `rides_published_departure_idx` B-tree `(departure_at) WHERE status = 'published'`: search prefilter.
