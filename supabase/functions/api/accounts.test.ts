@@ -22,7 +22,7 @@ const OTHER = '9a1b2c3d-4e5f-4a6b-8c7d-0e1f2a3b4c5d';
 type State = {
   profile: Record<string, unknown> | null;
   accepted: { kind: string; version: string | null }[];
-  legal: { kind: string; version: string; url: string }[];
+  legal: { kind: string; version: string; url: string; published_at?: Date }[];
   vehicle: Record<string, unknown> | null;
   public: Record<string, unknown> | null;
 };
@@ -40,6 +40,8 @@ const profileRow = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
+const PUBLISHED = new Date('2026-11-15T00:00:00Z');
+
 const ALL_ACCEPTED = [
   { kind: 'age_18', version: null },
   { kind: 'terms', version: '1.0' },
@@ -52,8 +54,8 @@ function accountDb(init: Partial<State> = {}) {
     profile: profileRow(),
     accepted: ALL_ACCEPTED,
     legal: [
-      { kind: 'terms', version: '1.0', url: '/policy/terms' },
-      { kind: 'privacy', version: '1.0', url: '/policy/privacy' },
+      { kind: 'terms', version: '1.0', url: '/policy/terms', published_at: PUBLISHED },
+      { kind: 'privacy', version: '1.0', url: '/policy/privacy', published_at: PUBLISHED },
     ],
     vehicle: null,
     public: null,
@@ -126,8 +128,8 @@ describe('GET /legal/current', () => {
     const res = await app.request(`${BASE}/legal/current`);
     expect(res.status).toBe(200);
     expect(legalCurrentResponseSchema.parse(await res.json())).toEqual({
-      terms: { version: '1.0', url: '/policy/terms' },
-      privacy: { version: '1.0', url: '/policy/privacy' },
+      terms: { version: '1.0', url: '/policy/terms', publishedAt: '2026-11-15T00:00:00.000Z' },
+      privacy: { version: '1.0', url: '/policy/privacy', publishedAt: '2026-11-15T00:00:00.000Z' },
     });
   });
 
@@ -166,7 +168,7 @@ describe('GET /me', () => {
       firstName: null,
       status: 'active',
       role: 'user',
-      consent: { upToDate: false, required: ['age18', 'terms', 'privacy'] },
+      consent: { upToDate: false, required: ['age18', 'terms', 'privacy'], reaccept: false },
       profileComplete: false,
       hasVehicle: false,
       photoUrl: null,
@@ -192,7 +194,7 @@ describe('GET /me', () => {
       phoneE164: '+40721234567',
       profileComplete: true,
       hasVehicle: true,
-      consent: { upToDate: true, required: [] },
+      consent: { upToDate: true, required: [], reaccept: false },
       createdAt: '2026-10-01T10:00:00.000Z',
     });
     expect(body.photoUrl).toBe(`http://127.0.0.1:54321/storage/v1/object/public/${photo}`);
@@ -227,7 +229,8 @@ describe('GET /me', () => {
     const body = meResponseSchema.parse(
       await (await app.request(`${BASE}/me`, { headers: await auth() })).json(),
     );
-    expect(body.consent).toEqual({ upToDate: false, required: ['terms'] });
+    // The user accepted terms 1.0 earlier, so this is the "updated terms" case (E6), not a first consent.
+    expect(body.consent).toEqual({ upToDate: false, required: ['terms'], reaccept: true });
   });
 
   it.each([
@@ -255,6 +258,39 @@ describe('POST /me/consents', () => {
     expect(insert?.text).toContain("'privacy'");
     expect(insert?.text).toContain("'age_18'");
     expect(insert?.values).toEqual([USER, '1.0', USER, '1.0', USER]);
+  });
+
+  it('E6: re-accepting updated terms needs no age18 and writes only terms and privacy', async () => {
+    const legal = [
+      { kind: 'terms', version: '1.1', url: '/policy/terms', published_at: PUBLISHED },
+      { kind: 'privacy', version: '1.1', url: '/policy/privacy', published_at: PUBLISHED },
+    ];
+    const { handler, writes } = accountDb({ legal });
+    const { app } = makeApp([handler]);
+    const res = await app.request(
+      `${BASE}/me/consents`,
+      jsonReq('POST', { termsVersion: '1.1', privacyVersion: '1.1' }, await auth()),
+    );
+    expect(res.status).toBe(204);
+    const insert = writes.find((w) => w.text.startsWith('insert into app.consents'));
+    expect(insert?.text).not.toContain("'age_18'");
+    expect(insert?.values).toEqual([USER, '1.1', USER, '1.1']);
+  });
+
+  it('E6: the old version is refused once 1.1 is current', async () => {
+    const legal = [
+      { kind: 'terms', version: '1.1', url: '/policy/terms', published_at: PUBLISHED },
+      { kind: 'privacy', version: '1.1', url: '/policy/privacy', published_at: PUBLISHED },
+    ];
+    const { handler, writes } = accountDb({ legal });
+    const { app } = makeApp([handler]);
+    const res = await app.request(
+      `${BASE}/me/consents`,
+      jsonReq('POST', { termsVersion: '1.0', privacyVersion: '1.1' }, await auth()),
+    );
+    expect(res.status).toBe(400);
+    expect((await errorCode(res)).fields).toEqual({ termsVersion: 'not_current' });
+    expect(writes.some((w) => w.text.includes('consents'))).toBe(false);
   });
 
   it('requires a token', async () => {

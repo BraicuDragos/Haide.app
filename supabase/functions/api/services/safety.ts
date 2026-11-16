@@ -324,7 +324,7 @@ export async function runSafetySweep(deps: Deps): Promise<number> {
         if (
           !ride ||
           ride.status !== 'published' ||
-          ride.driver_status !== 'suspended' ||
+          (ride.driver_status !== 'suspended' && ride.driver_status !== 'deleted') ||
           new Date(ride.departure_at).getTime() <= now.getTime()
         ) {
           return 0;

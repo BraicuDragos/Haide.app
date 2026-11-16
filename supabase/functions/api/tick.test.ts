@@ -120,7 +120,12 @@ describe('POST /internal/tick', () => {
   });
 
   it('purges expired previews and share links every minute and housekeeping only at minute 0 UTC', async () => {
-    const answer: Handler = (q) => (q.text.includes('delete from') ? [{ n: 2 }] : undefined);
+    const answer: Handler = (q) => {
+      if (q.text.includes('app.run_retention')) {
+        return [{ counts: { rateLimits: 2, appErrors: 2, outbox: 2 } }];
+      }
+      return q.text.includes('delete from') ? [{ n: 2 }] : undefined;
+    };
 
     const quiet = makeApp(dbWith([answer]), {}, { clock: fixedClock('2026-11-16T05:31:00Z') });
     expect(tickResponseSchema.parse(await (await tick(quiet.app)).json()).purged).toBe(4);
@@ -128,14 +133,116 @@ describe('POST /internal/tick', () => {
       expect.stringContaining('app.route_previews'),
       expect.stringContaining('app.share_links'),
     ]);
+    expect(find(quiet.calls, 'app.run_retention')).toBeUndefined();
 
     const hourly = makeApp(dbWith([answer]), {}, { clock: fixedClock('2026-11-16T06:00:00Z') });
     expect(tickResponseSchema.parse(await (await tick(hourly.app)).json()).purged).toBe(10);
-    const deletes = all(hourly.calls, 'delete from').map((c) => c.text);
-    expect(deletes).toHaveLength(5);
-    expect(deletes.some((t) => t.includes('app.rate_limits'))).toBe(true);
-    expect(deletes.some((t) => t.includes('app.app_errors'))).toBe(true);
-    const outboxPurge = deletes.find((t) => t.includes('app.outbox')) as string;
-    expect(outboxPurge).toContain("status <> 'pending'");
+    // One definer call replaces the inline deletes of E4 (ADR 0030); previews and share links stay.
+    expect(all(hourly.calls, 'app.run_retention')).toHaveLength(1);
+    expect(all(hourly.calls, 'delete from')).toHaveLength(2);
+  });
+
+  it('runs the steps in order 1 to 8', async () => {
+    const { app, calls } = makeApp(dbWith([]), {}, { clock: fixedClock('2026-11-16T06:00:00Z') });
+    await tick(app);
+    const order = [
+      'from app.expire_requests',
+      'from app.complete_rides',
+      "p.status in ('suspended', 'deleted')",
+      'update app.outbox set attempts',
+      'delete from app.route_previews',
+      'delete from app.share_links',
+      'from app.coarsen_locations',
+      'from app.account_deletions',
+      'app.run_retention',
+    ].map((f) => calls.findIndex((c) => c.text.includes(f)));
+    expect(order.every((i) => i >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+  });
+
+  it('reports the coarsened rows and the completed account purges', async () => {
+    const { app, calls, authDeleted, removedStrict } = makeApp(
+      dbWith([
+        (q) =>
+          q.text.includes('from app.coarsen_locations') ? [{ rides: 3, bookings: 4 }] : undefined,
+        (q) =>
+          q.text.includes('next_attempt_at <=')
+            ? [{ user_id: '7d6f5e4c-3b2a-4a19-8e07-1f2a3b4c5d6e' }]
+            : undefined,
+        (q) =>
+          q.text.startsWith('select user_id, requested_at, photo_path')
+            ? [
+                {
+                  user_id: '7d6f5e4c-3b2a-4a19-8e07-1f2a3b4c5d6e',
+                  requested_at: new Date('2026-11-16T05:00:00Z'),
+                  photo_path: 'avatars/6f1d8a5e-0000-4000-8000-000000000001.jpg',
+                  storage_done_at: null,
+                  auth_done_at: null,
+                  attempts: 0,
+                },
+              ]
+            : undefined,
+        (q) =>
+          q.text.includes('set completed_at =')
+            ? [{ user_id: '7d6f5e4c-3b2a-4a19-8e07-1f2a3b4c5d6e' }]
+            : undefined,
+      ]),
+      {},
+      { clock: fixedClock('2026-11-16T05:31:00Z') },
+    );
+    const out = tickResponseSchema.parse(await (await tick(app)).json());
+    expect(out).toMatchObject({ coarsened: 7, accountsPurged: 1 });
+    expect(find(calls, 'from app.coarsen_locations')?.values).toEqual([
+      new Date('2026-11-16T05:31:00Z'),
+      500,
+    ]);
+    expect(removedStrict).toEqual(['avatars/6f1d8a5e-0000-4000-8000-000000000001.jpg']);
+    expect(authDeleted).toEqual(['7d6f5e4c-3b2a-4a19-8e07-1f2a3b4c5d6e']);
+  });
+
+  it('a failing coarsening or purge does not stop the other steps or the housekeeping', async () => {
+    const { app, calls } = makeApp(
+      dbWith([
+        (q) => {
+          if (q.text.includes('from app.coarsen_locations')) throw new Error('db down');
+          if (q.text.includes('next_attempt_at <=')) throw new Error('db down');
+          return undefined;
+        },
+      ]),
+      {},
+      { clock: fixedClock('2026-11-16T06:00:00Z') },
+    );
+    expect((await tick(app)).status).toBe(200);
+    const errors = all(calls, 'insert into app.app_errors').map((c) => String(c.values[1]));
+    expect(errors.some((m) => m.includes('tick coarsen'))).toBe(true);
+    expect(errors.some((m) => m.includes('tick account_purge'))).toBe(true);
+    expect(find(calls, 'app.run_retention')).toBeDefined();
+  });
+
+  it('raises one app_errors alarm per deletion open for more than 7 days, hourly', async () => {
+    const { app, calls } = makeApp(
+      dbWith([
+        (q) =>
+          q.text.includes('requested_at <')
+            ? [{ user_id: '7d6f5e4c-3b2a-4a19-8e07-1f2a3b4c5d6e' }]
+            : undefined,
+      ]),
+      {},
+      { clock: fixedClock('2026-11-16T06:00:00Z') },
+    );
+    await tick(app);
+    const overdue = find(calls, 'requested_at <') as Query;
+    expect(overdue.values[0]).toEqual(new Date('2026-11-09T06:00:00Z'));
+    const alarms = all(calls, 'insert into app.app_errors').filter(
+      (c) => c.values[1] === 'account_purge_overdue',
+    );
+    expect(alarms).toHaveLength(1);
+    expect(String(alarms[0]?.values[5])).toMatch(/^[0-9a-f]{16}$/);
+    expect(JSON.stringify(alarms[0]?.values)).not.toContain('7d6f5e4c');
+
+    // not on a quiet minute
+    const quiet = makeApp(dbWith([]), {}, { clock: fixedClock('2026-11-16T06:01:00Z') });
+    await tick(quiet.app);
+    expect(find(quiet.calls, 'requested_at <')).toBeUndefined();
   });
 });

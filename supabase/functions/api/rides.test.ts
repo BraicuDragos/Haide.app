@@ -842,6 +842,28 @@ describe('GET /rides/{id} (public view)', () => {
     expect(out.routePublic).toBeNull();
   });
 
+  it('a ride of a deleted driver has no car details left and still matches the contract (E6 QA)', async () => {
+    // scrub_account keeps only the fuel type in the snapshot: the SQL projection yields nulls.
+    const scrubbed = publicRow({
+      status: 'published',
+      driver_status: 'deleted',
+      route_public: null,
+      note: null,
+      car: { make: null, model: null, colour: null },
+    });
+    const { app } = makeApp([
+      rideDb({
+        publicRide: scrubbed,
+        publicProfile: publicProfileRow({ status: 'deleted' }),
+      }).handler,
+    ]);
+    const res = await app.request(`${BASE}/rides/${RIDE_ID}`, { headers: await auth(OTHER) });
+    expect(res.status).toBe(200);
+    const out = ridePublicViewSchema.parse(await res.json());
+    expect(out.car).toEqual({ make: '', model: '', colour: '' });
+    expect(out.routePublic).toBeNull();
+  });
+
   it('a free ride shows zero prices', async () => {
     const { app } = makeApp([rideDb({ publicRide: publicRow({ is_free: true }) }).handler]);
     const out = ridePublicViewSchema.parse(

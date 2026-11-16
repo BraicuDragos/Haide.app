@@ -45,6 +45,8 @@ export const ERROR_STATUS = {
   RATE_LIMITED: 429,
   // 5xx
   ROUTING_UNAVAILABLE: 503,
+  // E6: a transaction lost a lock race twice (DELETE /me); the client may retry
+  TEMPORARILY_UNAVAILABLE: 503,
   UPSTREAM_ERROR: 502,
   INTERNAL: 500,
 } as const;

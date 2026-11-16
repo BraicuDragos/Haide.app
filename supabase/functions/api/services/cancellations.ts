@@ -87,7 +87,7 @@ export async function cancelRideTx(
 }
 
 export type SystemCancelReason =
-  'blocked_by_passenger' | 'blocked_by_driver' | 'suspended_passenger';
+  'blocked_by_passenger' | 'blocked_by_driver' | 'suspended_passenger' | 'account_deleted'; // E6: the passenger deleted the account (the driver is told, nothing about why)
 
 /** n shrinks, so every price per seat grows: relock keeps the old (lower) lock. Never up. */
 async function relockAfterCancel(db: Db, ride: LockedRide, now: Date): Promise<void> {
@@ -111,12 +111,13 @@ async function relockAfterCancel(db: Db, ride: LockedRide, now: Date): Promise<v
 }
 
 /**
- * Cancels one requested or confirmed booking for a system reason (a block between the pair, or a
- * suspended passenger). Locks the ride first, re-reads the booking and does nothing (returns false)
+ * Cancels one requested or confirmed booking for a system reason (a block between the pair, a
+ * suspended passenger or a deleted account). Locks the ride first, re-reads the booking and does nothing (returns false)
  * when it is no longer active or the ride has already departed. A confirmed booking gives its seat
  * back. Who is told:
  * - `blocked_by_driver`: the passenger gets `booking_rejected` (and sees the update).
- * - `blocked_by_passenger`, `suspended_passenger`: the driver gets `booking_cancelled` (confirmed only).
+ * - `blocked_by_passenger`, `suspended_passenger`, `account_deleted`: the driver gets `booking_cancelled`
+ *   (confirmed only).
  */
 export async function systemCancelBookingTx(
   tx: Db,

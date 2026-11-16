@@ -7,7 +7,7 @@ import { createConsoleProvider } from '../_shared/providers/email/console.ts';
 import { createFixtureProvider } from '../_shared/providers/routing/fixture.ts';
 import { createApp } from './app.ts';
 import { LOCAL_JWT_ISSUER, createTokenVerifier } from './middleware/auth.ts';
-import type { AvatarEncoder, AvatarStorage, Deps } from './types.ts';
+import type { AuthAdmin, AvatarEncoder, AvatarStorage, Deps } from './types.ts';
 
 export const TEST_JWT_SECRET = 'test-only-jwt-secret-with-at-least-32-chars';
 export const TEST_CRON_SECRET = 'test-cron-secret-0123456789';
@@ -54,6 +54,9 @@ export function fakeSql(handlers: Handler[] = []) {
 export function fakeStorage() {
   const uploaded: { path: string; bytes: Uint8Array }[] = [];
   const removed: string[] = [];
+  /** Paths removeStrict was asked for. control.failStrict makes it throw (an outage). */
+  const removedStrict: string[] = [];
+  const control = { failStrict: false };
   const storage: AvatarStorage = {
     upload: (path, bytes) => {
       uploaded.push({ path, bytes });
@@ -63,8 +66,27 @@ export function fakeStorage() {
       removed.push(path);
       return Promise.resolve();
     },
+    removeStrict: (path) => {
+      if (control.failStrict) return Promise.reject(new Error('storage down'));
+      removedStrict.push(path);
+      return Promise.resolve();
+    },
   };
-  return { storage, uploaded, removed };
+  return { storage, uploaded, removed, removedStrict, control };
+}
+
+/** Records auth user deletions. control.fail makes it throw (an outage). */
+export function fakeAuthAdmin() {
+  const deleted: string[] = [];
+  const control = { fail: false };
+  const authAdmin: AuthAdmin = {
+    deleteUser: (id) => {
+      if (control.fail) return Promise.reject(new Error('auth down'));
+      deleted.push(id);
+      return Promise.resolve();
+    },
+  };
+  return { authAdmin, deleted, control };
 }
 
 /** Pass-through encoder for route tests (the real one has its own test with real images). */
@@ -78,6 +100,7 @@ export function makeApp(
   const { sql, calls } = fakeSql(handlers);
   const env = testEnv(envOverrides);
   const store = fakeStorage();
+  const auth = fakeAuthAdmin();
   const deps: Deps = {
     env,
     sql,
@@ -85,12 +108,23 @@ export function makeApp(
     log: silentLogger,
     verifyToken: createTokenVerifier(env),
     storage: store.storage,
+    authAdmin: auth.authAdmin,
     encodeAvatar: passThroughEncoder,
     routing: createFixtureProvider(),
     email: createConsoleProvider(silentLogger),
     ...overrides,
   };
-  return { app: createApp(deps), calls, deps, uploaded: store.uploaded, removed: store.removed };
+  return {
+    app: createApp(deps),
+    calls,
+    deps,
+    uploaded: store.uploaded,
+    removed: store.removed,
+    removedStrict: store.removedStrict,
+    storageControl: store.control,
+    authDeleted: auth.deleted,
+    authControl: auth.control,
+  };
 }
 
 export async function signToken(

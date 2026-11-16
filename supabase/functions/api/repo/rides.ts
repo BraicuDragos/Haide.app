@@ -372,7 +372,7 @@ export type PublicRideRow = {
   driver_id: string;
   driver_status: 'active' | 'suspended' | 'deleted';
   /** Snapshot WITHOUT the plate (removed in SQL). */
-  car: { make: string; model: string; colour: string };
+  car: { make: string | null; model: string | null; colour: string | null };
   origin_lat: number;
   origin_lng: number;
   destination_lat: number;
