@@ -130,6 +130,16 @@ function numbersIn(value: unknown): number[] {
   return [];
 }
 
+/** JSON paths (`$.items[0].pickup.point.lat=45.7`) of every number in `value` that is in `bad`. */
+function pathsOfNumbers(value: unknown, bad: ReadonlySet<number>, path = '$'): string[] {
+  if (typeof value === 'number') return bad.has(value) ? [`${path}=${value}`] : [];
+  if (Array.isArray(value)) return value.flatMap((v, i) => pathsOfNumbers(v, bad, `${path}[${i}]`));
+  if (value && typeof value === 'object') {
+    return Object.entries(value).flatMap(([k, v]) => pathsOfNumbers(v, bad, `${path}.${k}`));
+  }
+  return [];
+}
+
 const isGridCentre = (p: Point) => {
   const g = gridPoint(p, 300);
   return g.lat === p.lat && g.lng === p.lng;
@@ -236,18 +246,43 @@ describe.skipIf(!BASE || !SECRET)('search and matching against the local stack',
     const typed = numbersIn([typedFrom, typedTo]);
     // (a stored value may coincide with a returned grid centre by chance: that is not a leak)
     const gridNumbers = new Set(points.flatMap((p) => [p.lat, p.lng]));
-    for (const text of [searchText, matchText, publicText]) {
-      const nums = new Set(numbersIn(JSON.parse(text)));
-      for (const e of [...exact, ...typed]) {
-        if (!gridNumbers.has(e)) expect(nums.has(e), String(e)).toBe(false);
-      }
+    // The only intended exception is the public route's INTERIOR vertices (api-contract: trimmed
+    // at both ends, simplified at 25 m): they are points of the road, checked separately below.
+    // The failure message names the JSON path of any offending number.
+    const forbidden = new Set([...exact, ...typed].filter((e) => !gridNumbers.has(e)));
+    const withoutRoute = (text: string): unknown => {
+      const v = JSON.parse(text) as Record<string, unknown>;
+      return 'routePublic' in v ? { ...v, routePublic: null } : v;
+    };
+    for (const [name, text] of [
+      ['search', searchText],
+      ['match', matchText],
+      ['public', publicText],
+    ] as const) {
+      const hits = pathsOfNumbers(withoutRoute(text), forbidden);
+      expect(hits, `${name} contains exact or typed numbers at: ${hits.join(', ')}`).toEqual([]);
       expect(text).not.toContain('SB12ABC');
       expect(text).not.toContain('plate');
       expect(text).not.toContain('+4072');
       expect(text).not.toContain('phone');
     }
-    // the public route is trimmed: none of its vertices is the stored start or end
+    // search and match carry no route at all
+    expect(searchText).not.toContain('routePublic');
+    expect(matchText).not.toContain('routePublic');
+    // The public route is trimmed (min(500 m, 10 %) at both ends): no vertex is within 300 m of the
+    // stored start or end, nor of a typed point.
     expect(publicRide.routePublic).not.toBeNull();
+    const metres = (a: Point, b: Point) =>
+      Math.hypot(
+        (a.lat - b.lat) * 111_000,
+        (a.lng - b.lng) * 111_000 * Math.cos((a.lat * Math.PI) / 180),
+      );
+    for (const c of publicRide.routePublic?.coordinates ?? []) {
+      const v = { lat: c[1] as number, lng: c[0] as number };
+      for (const e of [ride.origin.point, ride.destination.point, typedFrom, typedTo]) {
+        expect(metres(v, e), `public route vertex ${JSON.stringify(c)}`).toBeGreaterThan(300);
+      }
+    }
   });
 
   it('walks are rounded to 50 m and measured from the typed point to the road', async () => {
