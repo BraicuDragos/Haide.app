@@ -25,6 +25,8 @@ export interface RouteOverlayProps {
   zones?: number | undefined;
   /** Match moment (motion.md 2): where the passenger starts and ends, in px. The walk legs snap onto the ride. */
   you?: { from: Pt; to: Pt } | undefined;
+  /** Exact passenger pickup points (driver view), in px. Static markers: no motion. */
+  pins?: Pt[] | undefined;
   /** Play the draw-in (once per mount, or once per session when `onceKey` is given). */
   draw?: boolean;
   onceKey?: string;
@@ -46,6 +48,7 @@ export function RouteOverlay({
   end,
   zones,
   you,
+  pins,
   draw = true,
   onceKey,
 }: RouteOverlayProps) {
@@ -227,6 +230,9 @@ export function RouteOverlay({
             <circle className="snap" cx={end.x} cy={end.y} r="10" />
           </>
         )}
+        {pins?.map((p, i) => (
+          <circle key={i} className="pin" cx={p.x} cy={p.y} r="6" />
+        ))}
         <g className="pk" transform={`translate(${start.x} ${start.y})`}>
           <circle className="ring" r="11" />
           <circle className="ping mk" r="11" />

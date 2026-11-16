@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from 'react';
 import { setTokenProvider } from '@/api/client';
+import { clearPending } from '@/features/bookings/pendingRequest';
 import { authClient, authConfigured, callbackUrl } from './client';
 
 export type AuthStatus = 'loading' | 'signedOut' | 'signedIn';
@@ -57,7 +58,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Do not await Supabase calls inside this callback (auth-js holds a lock while it runs).
     const { data } = authClient.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT') qc.clear(); // also fires for a sign-out in another tab
+      if (event === 'SIGNED_OUT') {
+        // also fires for a sign-out in another tab. A queued seat request belongs to the person who made it.
+        qc.clear();
+        clearPending();
+      }
       apply(session);
     });
     void authClient.getSession().then(({ data: d }) => apply(d.session));
@@ -113,6 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       /* the local session is dropped even when the network call fails */
     }
     qc.clear();
+    clearPending();
     setState({ status: 'signedOut', session: null });
   }, [qc]);
 

@@ -26,6 +26,8 @@ export interface RouteMapProps {
   route?: Array<[number, number]>;
   /** The passenger's own start and end (match moment): their walks snap onto the ride. Client-side only. */
   you?: { from: LatLng; to: LatLng };
+  /** Extra exact points on the route (the driver's confirmed passengers, 4.5). Only drawn over real tiles. */
+  pins?: LatLng[];
   /** Chip text for the match moment ("Fits your route. 150 m walk to pickup."). A sibling of the map, so it is in the accessibility tree. */
   fit?: string;
   /** Text alternative: what the map shows, in words (pickup and drop-off labels). Rendered visibly under the map. */
@@ -127,6 +129,7 @@ interface Geometry {
   end: Pt;
   zones: number | undefined;
   you?: { from: Pt; to: Pt } | undefined;
+  pins?: Pt[] | undefined;
 }
 
 /**
@@ -141,6 +144,7 @@ export default function RouteMap({
   dropoff,
   route,
   you,
+  pins,
   fit,
   description,
   className = '',
@@ -150,6 +154,7 @@ export default function RouteMap({
   const [phase, setPhase] = useState<Phase>('loading');
   const [projected, setProjected] = useState<Geometry | null>(null);
   const { w, h } = useSize(frame);
+  const pinsKey = (pins ?? []).map((p) => `${p.lat},${p.lng}`).join('|');
 
   useEffect(() => {
     let map: MapLibreMap | undefined;
@@ -212,6 +217,7 @@ export default function RouteMap({
           end,
           zones: mode === 'approximate' ? radiusPx(m, pickup, APPROX_RADIUS_M) : undefined,
           you: you ? { from: toPt(you.from), to: toPt(you.to) } : undefined,
+          pins: pins && pins.length > 0 ? pins.map(toPt) : undefined,
         });
       };
       m.on('load', () => {
@@ -237,6 +243,7 @@ export default function RouteMap({
     you?.from.lng,
     you?.to.lat,
     you?.to.lng,
+    pinsKey,
   ]);
 
   // Plain background: a fixed layout in the measured box, same overlay.

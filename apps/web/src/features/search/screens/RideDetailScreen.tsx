@@ -1,10 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import { lazy, Suspense, useEffect, useMemo, useRef } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { ApiError } from '@/api/client';
 import { keys } from '@/api/keys';
 import { getPublicRide, postMatch } from '@/api/search';
-import type { MatchResponse, NotBookableReason, PublicRide } from '@/api/types';
+import type { LatLng, MatchResponse, NotBookableReason, PublicRide } from '@/api/types';
 import { useBack } from '@/app/useBack';
 import { useAuth } from '@/auth/AuthProvider';
 import { useGate, useMe } from '@/auth/hooks';
@@ -22,7 +22,8 @@ import { PageHeader } from '@/ui/PageHeader';
 import { PriceRoll } from '@/ui/PriceRoll';
 import { Rating } from '@/ui/Rating';
 import { SeatStrip } from '@/ui/SeatPicker';
-import { useToast } from '@/ui/Toast';
+import { RequestSheet, requestErrorText } from '@/features/bookings/components/RequestSheet';
+import { useQueuedRequest } from '@/features/bookings/useQueuedRequest';
 import { readSearch, toPoint, type SearchCriteria } from '@/features/find/searchState';
 import { PriceTable } from '@/features/rides/components/PriceTable';
 import { RideStops } from '@/features/rides/components/RideStops';
@@ -267,6 +268,7 @@ function Detail({ ride, criteria }: { ride: PublicRide; criteria: SearchCriteria
       <RequestBar
         ride={ride}
         criteria={criteria}
+        body={body}
         match={match}
         matchLoading={matchQ.isPending && body !== null}
         matchError={matchQ.isError ? matchQ.error : null}
@@ -293,62 +295,72 @@ function Stop({ term, approx, walk }: { term: string; approx: string; walk: stri
 /**
  * Sticky Request seat. Disabled reasons come from the ride (own ride, blocked, already requested, full) and from
  * POST /match (not bookable, no longer fits), always as words next to the button. Signed out: the tap starts
- * onboarding and returns to this ride (ADR 0010). The request sheet and its Haide launch arrive with E4.
+ * onboarding and returns to this ride (ADR 0010). Signed in: the request sheet (4.1) opens and the Haide launch sends
+ * the request. A request queued while offline shows a note and is sent again when the device is back online.
  */
 function RequestBar({
   ride,
   criteria,
+  body,
   match,
   matchLoading,
   matchError,
 }: {
   ride: PublicRide;
   criteria: SearchCriteria | null;
+  body: { from: LatLng; to: LatLng } | null;
   match: MatchResponse | undefined;
   matchLoading: boolean;
   matchError: unknown;
 }) {
   const gate = useGate();
-  const toast = useToast();
   const { status } = useAuth();
   const me = useMe().data;
   const [params, setParams] = useSearchParams();
+  const [sheet, setSheet] = useState(false);
   const returnTo = `/ride/${ride.id}?request=1`;
+  const queue = useQueuedRequest(ride.id, status === 'signedIn');
 
+  const bookingStatus = ride.viewer.bookingStatus;
   const reasonCode: NotBookableReason | null = ride.viewer.isDriver
     ? 'OWN_RIDE'
     : ride.viewer.blocked
       ? 'BLOCKED'
-      : ride.viewer.bookingStatus === 'requested' || ride.viewer.bookingStatus === 'confirmed'
+      : bookingStatus === 'requested' ||
+          bookingStatus === 'confirmed' ||
+          bookingStatus === 'rejected'
         ? 'ALREADY_REQUESTED'
         : ride.seatsLeft <= 0
           ? 'RIDE_FULL'
           : (match?.notBookableReason ?? null);
-  const reason = reasonCode
-    ? t(REASON[reasonCode])
-    : !criteria
-      ? t('detail.needSearch')
-      : matchError
-        ? matchError instanceof ApiError && matchError.code !== 'NETWORK'
-          ? tError(matchError.code)
-          : t('detail.err')
-        : null;
+  const reason = queue.queued
+    ? t('booking.queued')
+    : reasonCode
+      ? t(REASON[reasonCode])
+      : !criteria
+        ? t('detail.needSearch')
+        : matchError
+          ? matchError instanceof ApiError && matchError.code !== 'NETWORK'
+            ? tError(matchError.code)
+            : t('detail.err')
+          : null;
   const disabled = reason !== null;
+  const ready = body !== null && match !== undefined && !disabled;
 
   const request = () => {
     if (!gate({ kind: 'request', returnTo })) return;
-    toast.show(t('detail.requestSoon'));
+    if (ready) setSheet(true);
   };
 
-  // Back from onboarding with `?request=1`: the gate is cleared, so carry on with the request once.
+  // Back from onboarding with `?request=1`: the gate is cleared, so open the sheet once.
   const done = useRef(false);
   useEffect(() => {
     if (done.current || params.get('request') !== '1') return;
-    if (status !== 'signedIn' || !me || disabled || matchLoading) return;
+    if (status !== 'signedIn' || !me || matchLoading) return;
     done.current = true;
     setParams({}, { replace: true });
-    if (!nextStep(me, { kind: 'request', returnTo })) toast.show(t('detail.requestSoon'));
-  }, [params, setParams, status, me, disabled, matchLoading, toast, returnTo]);
+    if (!nextStep(me, { kind: 'request', returnTo }) && ready) setSheet(true);
+  }, [params, setParams, status, me, ready, matchLoading, returnTo]);
 
   return (
     <div className="glass sticky bottom-0 z-10 flex flex-col gap-2 rounded-none border-x-0 border-b-0 px-4 pt-3 pb-[max(env(safe-area-inset-bottom),var(--tk-space-3))]">
@@ -356,6 +368,12 @@ function RequestBar({
         <p id="req-reason" className="text-sm leading-5 font-semibold text-text-muted">
           {reason}
         </p>
+      )}
+      {queue.error && <Notice tone="error">{requestErrorText(queue.error)}</Notice>}
+      {reasonCode === 'ALREADY_REQUESTED' && ride.viewer.bookingId && (
+        <Link to={`/booking/${ride.viewer.bookingId}`} className="btn btn-secondary">
+          {t('request.err.viewBooking')}
+        </Link>
       )}
       <Button
         block
@@ -370,6 +388,17 @@ function RequestBar({
         <Link to="/find" className="btn btn-secondary">
           {t('detail.needSearch.cta')}
         </Link>
+      )}
+      {body && match && (
+        <RequestSheet
+          open={sheet}
+          onClose={() => setSheet(false)}
+          ride={ride}
+          from={body.from}
+          to={body.to}
+          match={match}
+          onQueued={queue.markQueued}
+        />
       )}
     </div>
   );

@@ -68,7 +68,7 @@ describe('i18n', () => {
     expect(tp('place.count', 3)).toBe('3 places found');
   });
   it('falls back to the generic error text for unknown codes', () => {
-    expect(tError('RIDE_FULL')).toBe(tError('SOMETHING_ELSE'));
+    expect(tError('TEAPOT')).toBe(tError('SOMETHING_ELSE'));
     expect(tError('RATE_LIMITED')).toContain('Too many');
   });
 });

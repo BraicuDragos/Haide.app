@@ -20,7 +20,9 @@ import { SeatStrip } from '@/ui/SeatPicker';
 import { Sheet } from '@/ui/Sheet';
 import { useToast } from '@/ui/Toast';
 import { OwnerMap } from '../components/OwnerMap';
+import { PassengerCard } from '../components/PassengerCard';
 import { PriceTable } from '../components/PriceTable';
+import { RequestCard } from '../components/RequestCard';
 import { RideStops } from '../components/RideStops';
 import { StatusPill } from '../components/StatusPill';
 
@@ -120,6 +122,32 @@ function RideDetail({ ride, back }: { ride: OwnerRide; back: () => void }) {
           {ride.note && <p className="text-sm leading-5">{ride.note}</p>}
         </section>
 
+        {open && (
+          <section aria-labelledby="dr-req" className="flex flex-col gap-2">
+            <h2 id="dr-req" className="type-h3">
+              {t('driverRide.requests')}
+            </h2>
+            {ride.requests.length === 0 ? (
+              <p className="text-text-muted">{t('driverRide.noRequests')}</p>
+            ) : (
+              <>
+                <p className="text-text-muted">{tp('rides.requests', ride.requests.length)}</p>
+                <ul className="m-0 flex list-none flex-col gap-3 p-0">
+                  {ride.requests.map((r) => (
+                    <RequestCard
+                      key={r.bookingId}
+                      rideId={ride.id}
+                      request={r}
+                      full={n >= ride.seatsOffered}
+                      isFree={ride.isFree}
+                    />
+                  ))}
+                </ul>
+              </>
+            )}
+          </section>
+        )}
+
         <section aria-labelledby="dr-price" className="card flex flex-col gap-3 p-4">
           <h2 id="dr-price" className="type-h3">
             {t('offer.price.title')}
@@ -163,19 +191,6 @@ function RideDetail({ ride, back }: { ride: OwnerRide; back: () => void }) {
           <p className="text-sm leading-5 text-text-muted">{t('driverRide.fuelRule')}</p>
         </section>
 
-        {open && (
-          <section aria-labelledby="dr-req" className="flex flex-col gap-2">
-            <h2 id="dr-req" className="type-h3">
-              {t('driverRide.requests')}
-            </h2>
-            {ride.requests.length === 0 ? (
-              <p className="text-text-muted">{t('driverRide.noRequests')}</p>
-            ) : (
-              <p className="text-text-muted">{tp('rides.requests', ride.requests.length)}</p>
-            )}
-          </section>
-        )}
-
         <section aria-labelledby="dr-pax" className="flex flex-col gap-2">
           <h2 id="dr-pax" className="type-h3">
             {t('driverRide.passengers')}
@@ -183,13 +198,14 @@ function RideDetail({ ride, back }: { ride: OwnerRide; back: () => void }) {
           {ride.passengers.length === 0 ? (
             <p className="text-text-muted">{t('driverRide.noPassengers')}</p>
           ) : (
-            <ul className="m-0 flex list-none flex-col gap-2 p-0">
-              {ride.passengers.map((p) => (
-                <li key={p.bookingId} className="card p-4 font-semibold">
-                  {p.passenger.firstName ?? '-'}
-                </li>
-              ))}
-            </ul>
+            <>
+              <ul className="m-0 flex list-none flex-col gap-3 p-0">
+                {ride.passengers.map((p) => (
+                  <PassengerCard key={p.bookingId} passenger={p} />
+                ))}
+              </ul>
+              <p className="text-sm leading-5 text-text-muted">{t('driverRide.pax.hiddenAfter')}</p>
+            </>
           )}
         </section>
 

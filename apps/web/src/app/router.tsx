@@ -32,6 +32,7 @@ const rides = () => import('@/features/rides/screens/RidesScreen');
 const results = () => import('@/features/search/screens/ResultsScreen');
 const rideDetail = () => import('@/features/search/screens/RideDetailScreen');
 const drivingRide = () => import('@/features/rides/screens/DrivingRideScreen');
+const booking = () => import('@/features/bookings/screens/BookingScreen');
 
 export const router = createBrowserRouter([
   {
@@ -44,6 +45,7 @@ export const router = createBrowserRouter([
       { path: 'offer', ...lazyScreen(offer, (m) => m.default) },
       { path: 'offer/done', ...lazyScreen(offerDone, (m) => m.default) },
       { path: 'rides', ...lazyScreen(rides, (m) => m.default) },
+      { path: 'booking/:id', ...lazyScreen(booking, (m) => m.default) },
       { path: 'driving/:id', ...lazyScreen(drivingRide, (m) => m.default) },
       { path: 'profile', element: <ProfileScreen /> },
       { path: 'profile/edit', ...lazyScreen(form, (m) => m.EditProfileScreen) },
