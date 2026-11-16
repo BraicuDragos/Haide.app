@@ -102,7 +102,7 @@ export async function purgeRoutePreviews(sql: Db, now: Date): Promise<number> {
 /** Hourly: old rate-limit windows, old client/server errors, old finished outbox rows. */
 export async function purgeHousekeeping(sql: Db, now: Date): Promise<number> {
   const days = (n: number) => new Date(now.getTime() - n * 86_400_000);
-  const one = async (rows: { n: number }[]) => rows[0]?.n ?? 0;
+  const one = (rows: { n: number }[]) => rows[0]?.n ?? 0;
   const a = await one(
     await sql<{ n: number }[]>`
       with d as (delete from app.rate_limits where window_start < ${days(2)} returning 1)
