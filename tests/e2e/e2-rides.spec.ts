@@ -88,6 +88,8 @@ for (const theme of ['dark', 'light'] as const) {
     test('driver publishes Trip B and sees 3.10 / 2.00 / 1.50 RON, then lists and cancels it', async ({
       page,
     }) => {
+      // One long journey (publish, price table, detail, list, cancel) with 6 axe scans: ~40 s, over the 30 s default.
+      test.slow();
       const fake = await setup(page);
       await page.goto('/offer');
       await expect(heading(page, 'Offer a ride')).toBeVisible();

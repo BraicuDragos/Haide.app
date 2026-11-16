@@ -141,20 +141,20 @@ test.describe('theme', () => {
   test('the Display setting is remembered across reloads', async ({ page }) => {
     await page.emulateMedia({ colorScheme: 'light' });
     await page.goto('/profile');
-    expect(await html(page, 'data-theme')).toBe('dark'); // no choice yet: dark even on a light OS
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark'); // no choice yet: dark even on a light OS
     await expect(page.getByRole('radio', { name: 'Dark' })).toBeChecked();
     await page.getByRole('radio', { name: 'Light' }).check({ force: true });
-    expect(await html(page, 'data-theme')).toBe('light');
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
     await page.reload();
-    expect(await html(page, 'data-theme')).toBe('light');
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
     await expect(page.getByRole('radio', { name: 'Light' })).toBeChecked();
     expect(await page.evaluate(() => window.localStorage.getItem('haide.theme'))).toBe('light');
     // Auto: an explicit choice that follows the OS (light here).
     await page.getByRole('radio', { name: 'Auto' }).check({ force: true });
-    expect(await html(page, 'data-theme')).toBe('light');
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
     expect(await page.evaluate(() => window.localStorage.getItem('haide.theme'))).toBe('system');
     await page.emulateMedia({ colorScheme: 'dark' });
-    expect(await html(page, 'data-theme')).toBe('dark');
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   });
 
   test('works when storage is blocked', async ({ page }) => {
