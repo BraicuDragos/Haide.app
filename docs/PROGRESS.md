@@ -3,9 +3,9 @@
 > Updated by the Orchestrator after every step. Read at the start of every session.
 
 ## Current state
-- **Phase:** 6 — features. E-DM, E1, E2, E3 merged; E4 (bookings) QA-approved, PR on `feat/bookings`
-- **Open PRs:** E4 PR (feat/bookings)
-- **Approved gates:** GATE 1 (PR #1), GATE 2 (PR #2); merged: E0 #3, E1 #5, E-DM #6, E2 #7, E3 #8
+- **Phase:** 6 — features. E-DM, E1–E4 merged; starting E5 (`feat/trust-safety`)
+- **Open PRs:** none
+- **Approved gates:** GATE 1 (PR #1), GATE 2 (PR #2); merged: E0 #3, E1 #5, E-DM #6, E2 #7, E3 #8, E4 #9
 
 ## Done
 - [x] Phases 1–4: strategy, brand "Haide", UX + prototype, architecture (ADRs 0001–0015)
@@ -15,9 +15,10 @@
 - [x] E2 - publish and manage rides + pricing engine (`feat/rides`, working tree): migration `20261117090000_rides.sql` (energy_prices v1, route_previews, rides, route helpers), pricing.ts (integer bani, trips A/B/C + mixed example verified to the bani), ORS + fixture routing, 6 ride endpoints (preview, publish, list, owner view, cancel, public view), daily limit via advisory lock; offer form, published, driving list/detail, cancel sheet. QA: see below
 - [x] E3 - search and matching (`feat/search`, working tree): migration `20261118090000_search.sql` (`app.blocks` with RLS and no policies, `app.match_rides`: pickup then dropoff by linear referencing, 800 m corridor, segment >= 1 km, walk-then-time order, loops, own/full/blocked/cancelled/departed excluded, PUBLIC EXECUTE revoked), `POST /search` (30/min, signed-out OK) and `POST /rides/{id}/match`, 404 for blocked pairs on `GET /rides/{id}` and `/match`, price per result from the ride rate snapshot (`quoteUpTo` on the segment; Selimbar to ZI Vest = 3.10 RON checked by hand), analytics `search_performed` without coordinates; Results, empty state, ride detail, Request seat gate with return-to-intent, shared-element transition, search kept in sessionStorage (no coordinates in URLs). QA: APPROVED after fixes (595 unit + 161 web unit, 107 Playwright passed twice, initial JS 156.1 kB gzip, audit clean)
 - [x] E4 - booking lifecycle and notifications (`feat/bookings`): ADRs 0021-0023, spec `docs/architecture/e4-bookings-spec.md`, migration `20261119090000_bookings.sql` (bookings, ride-row lock, expire_requests, outbox, call_tick via pg_cron), request/approve/reject/cancel/summary endpoints, Brevo outbox emails, reveal rules; request sheet, booking detail, riding list, driver requests, badges. QA: APPROVED (748 server + 185 web unit, 145 mocked Playwright, initial JS ~158 kB gzip)
+- [x] E5 - trust and safety (`feat/trust-safety`, working tree): ADRs 0024-0028, spec `docs/architecture/e5-trust-safety-spec.md`, migration `20261120090000_trust_safety.sql` (reports, admin_actions, share_links, blind ratings via `visible_at`, `complete_rides`, suspend/unsuspend), completion + safety sweep + share purge as tick steps, no-show, ratings, reports, blocks with cascade, hashed share link, Call 112 window; rate, report, block, no-show, share, blocked-people, suspended screens and driver-side actions. QA second pass: APPROVED (662 server + 206 web unit, tsc/eslint/prettier clean, 169 mocked Playwright passed + 9 skipped by design, initial JS 161.8 kB gzip). Fixed in QA: Prettier on 4 web files, accepted-seat invariant in `tests/integration/bookings.test.ts`, BlockSheet `stayOnPage` so a driver blocking a passenger stays on the ride.
 
 ## Next step
-- Owner merges E4 PR → E5 (ratings, no-show, reliability), then E6…E8. E-DM leftovers: match moment + live trip + shared-element ride morphs land with E3/E4 screens; real-phone fps, real tiles, screen readers unverified
+- E5 (ratings, no-show, reliability), then E6…E8. E-DM leftovers: match moment + live trip + shared-element ride morphs land with E3/E4 screens; real-phone fps, real tiles, screen readers unverified
 
 ## Not verified locally in E1 — CI must confirm
 - Migration + pgTAP 004, `deno check/lint`, integration tests incl. Storage upload, real magic-link E2E, CI assumptions (`supabase seed buckets`, `supabase status -o env` keys, HS256 local JWT).
@@ -44,6 +45,11 @@
 ## Blockers / what the owner needs to provide
 - Nothing before Gate 3 (batch in `docs/architecture/deploy.md` §3). `haide.ro`/`haide.app` are taken; `haide.city`, `gohaide.app` look free — brand-guide domain advice needs updating.
 - `gh` is at `C:\Program Files\GitHub CLI\gh.exe`; `pnpm` not on PATH locally (use `npx pnpm`).
+
+## Not verified locally in E5 - CI must confirm
+- No Docker/psql/Deno: migration `20261120090000_trust_safety.sql`, pgTAP 008 (86 assertions, recounted by reading), `tests/integration/trust-safety.test.ts` (incl. concurrency S1-S4; the tick tests need CRON_SECRET), SQL in `api/repo/{safety,ratings,sweep,shareLinks,ratingSummary}.ts`, the `selectBookingView` and `selectRidePassengers` joins, `deno check/lint`, and the E4 integration suite after the accepted-seat invariant change.
+- Lighthouse not run; real phone, real tiles and real Brevo emails unverified.
+- Low findings: a driver can infer that the passenger rated (canMarkNoShow flips to false, or INVALID_STATE; stars and tags stay hidden, spec-inherent); web `SharedTrip.driver.firstName` is typed non-null but the contract allows null; the share page shows the passenger's own pickup and drop-off segment at 5 decimals (accepted, ADR 0026); `reports.reported_snapshot` keeps the reported phone until the E6 retention job.
 
 ## Not verified locally in E4 - CI must confirm
 - No Docker/psql/Deno: migration, pgTAP 007 (78 assertions, counted), `tests/integration/bookings.test.ts` (concurrency C1-C6), pg_cron/pg_net/Vault path, real Brevo. Lighthouse not run; real tiles/phone unverified.

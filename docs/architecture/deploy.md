@@ -154,6 +154,8 @@ Every merge to `main` triggers `deploy.yml`. It waits for the owner's approval o
 | Quota check | Monthly | Supabase → Usage (egress, invocations, DB size). Admin ops tile (emails/day, ORS/day) |
 | Map tiles and gazetteer refresh | Quarterly | `scripts/geo/build-tiles.sh`, `scripts/geo/build-gazetteer.ts` → PR |
 | Suspend a user (before E7 UI) | On report | SQL Editor: `select app.admin_suspend_user('<uuid>', '<reason>');` |
+| Suspend a user with a report (before E7 UI) | On report | SQL Editor: `select app.admin_suspend_user('<uuid>', '<reason>', null, '<report uuid>');` (arguments: user, reason, admin id or null, report id or null; returns false when the user is not active). The next tick cancels their future rides and bookings (ADR 0027) |
+| Unsuspend a user (before E7 UI) | On appeal | SQL Editor: `select app.admin_unsuspend_user('<uuid>', '<note>');` (arguments: user, note, admin id or null). Cancelled rides and bookings stay cancelled |
 | Data export request (E6-4) | On request (≤ 30 days) | Admin → user → Export, then email the JSON from `privacy@haide.ro` |
 | Breach | On incident | DPIA §7: contain, assess, notify ANSPDCP within 72 h if risk |
 | Backup restore drill | Quarterly | §5.2 step 8 |

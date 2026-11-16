@@ -19,7 +19,7 @@
 | Matching | PostGIS corridor + linear referencing, 800 m straight-line walk, O(log N + R·V) |
 | Pricing | Pure TS module in `_shared/domain/pricing.ts`, integer money (bani), rate snapshot per ride |
 | Email | Brevo (EU) free, 300/day: SMTP for auth mails, HTTP API for notifications via an outbox |
-| Jobs | pg_cron: `tick` every minute (expire requests + dispatch outbox), `complete-rides` every 5 min, `retention` daily |
+| Jobs | pg_cron: `tick` every minute (expire requests, complete rides, safety sweep, dispatch outbox, purge; ADR 0024), `retention` daily |
 | Hosting | Cloudflare Pages (PWA, `haide.ro`) + Supabase Free (API, DB, auth, storage) |
 | CI/CD | GitHub Actions: lint, typecheck, unit, pgTAP, API integration, Playwright mobile E2E on every PR. Deploy gated by `DEPLOY_ENABLED` + an owner-approved `production` environment |
 | Observability | Structured JSON logs (Supabase, 1 day), `app_errors` table (14 days), ops tiles on the admin page, twice-weekly health ping |
@@ -158,8 +158,8 @@ sequenceDiagram
 
 | Job | Schedule | Kind | What it does |
 |---|---|---|---|
-| `tick` | every minute | pg_net → `POST /internal/tick` (secret header) | (1) expire `requested` bookings past `expires_at` and enqueue emails. (2) Send up to 50 pending outbox emails (retry with backoff, max 5 attempts). (3) Delete expired route previews |
-| `complete-rides` | every 5 min | SQL | Rides with `departure_at + 2 h ≤ now()`: `completed` if seats were booked, else `expired`. Confirmed bookings become `completed` and `final_price_bani = price_locked_bani` |
+| `tick` | every minute | pg_net → `POST /internal/tick` (secret header) | (1) expire `requested` bookings past `expires_at` and enqueue emails. (2) Complete finished rides (E5). (3) Safety sweep (E5). (4) Send up to 50 pending outbox emails (retry with backoff, max 5 attempts). (5) Delete expired route previews and share links |
+| ~~`complete-rides`~~ | moved into `tick` in E5 | | **Implemented in E5 (ADR 0024):** there is no separate cron job. `tick` step 2 calls `app.complete_rides(now, now − 2 h, 200)`: rides with `departure_at + 2 h ≤ now` become `completed` (confirmed bookings `completed`, `final_price_bani = price_locked_bani`) or `expired` when no booking was completed, with rating prompts queued in the same transaction. Rows locked by a concurrent writer are skipped until the next tick. Step 3 is the safety sweep (suspended users, blocked pairs; ADR 0027, 0028) and step 5 also deletes expired `share_links` |
 | `retention` | daily 02:15 UTC | SQL | 90-day coarsening, 13-month event purge, 12-month report purge, 30-day outbox purge, 14-day error purge, expired share links |
 | `keepalive` | Tue + Fri (GitHub Actions) | HTTP | `GET /health`, keeps the free project active pre-launch |
 | `backup` | daily 01:30 UTC (GitHub Actions) | pg_dump | `pg_dump --schema=app --table=auth.users --table=auth.identities` (session pooler, `SUPABASE_DB_PASSWORD`), gzip, encrypted with `age` to the owner's public key → 14-day artifact. Gazetteer tables excluded (reseedable) |
