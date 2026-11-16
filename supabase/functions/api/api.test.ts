@@ -4,7 +4,7 @@ import { errorEnvelopeSchema } from '../_shared/contracts/errors.ts';
 import { healthResponseSchema, tickResponseSchema } from '../_shared/contracts/system.ts';
 import { placesResponseSchema, reverseResponseSchema } from '../_shared/contracts/geo.ts';
 import { authMiddleware, requireAuth } from './middleware/auth.ts';
-import { onError } from './middleware/errors.ts';
+import { onError, pgDiagnostics } from './middleware/errors.ts';
 import type { AppBindings } from './types.ts';
 import { BASE, TEST_CRON_SECRET, makeApp, signToken, type Handler } from './testing.ts';
 
@@ -74,6 +74,61 @@ describe('error envelope', () => {
     expect(errorEnvelopeSchema.parse(JSON.parse(text)).error.code).toBe('INTERNAL');
     const logged = calls.find((c) => c.text.includes('insert into app.app_errors'));
     expect(logged?.values[0]).toBe('server');
+  });
+});
+
+describe('unhandled_error log', () => {
+  it('logs scrubbed Postgres diagnostics and never the detail or row values', async () => {
+    const pgErr = Object.assign(
+      new Error('new row for relation "rides" violates check constraint'),
+      {
+        name: 'PostgresError',
+        code: '23514',
+        constraint_name: 'rides_vehicle_snapshot_check',
+        table_name: 'rides',
+        column_name: 'vehicle_snapshot',
+        routine: 'ExecConstraints',
+        detail: 'Failing row contains (ana@example.com, 45.79712, 24.15211)',
+      },
+    );
+    const boom: Handler = (q) => {
+      if (q.text.includes('app.places')) throw pgErr;
+      return undefined;
+    };
+    const lines: { event: string; fields: Record<string, unknown> }[] = [];
+    const { app } = makeApp(
+      [boom],
+      {},
+      { log: (_level, event, fields = {}) => void lines.push({ event, fields }) },
+    );
+    const res = await app.request(`${BASE}/places?q=selimbar`);
+    expect(res.status).toBe(500);
+    const line = lines.find((l) => l.event === 'unhandled_error');
+    expect(line?.fields).toMatchObject({
+      name: 'PostgresError',
+      pgCode: '23514',
+      pgConstraint: 'rides_vehicle_snapshot_check',
+      pgTable: 'rides',
+      pgColumn: 'vehicle_snapshot',
+      pgRoutine: 'ExecConstraints',
+    });
+    const dump = JSON.stringify(line);
+    expect(dump).not.toContain('ana@example.com');
+    expect(dump).not.toContain('45.79712');
+  });
+
+  it('scrubs emails and coordinates from the server message', () => {
+    const e = Object.assign(new Error('bad value ana@example.com at 45.79712, 24.15211'), {
+      name: 'PostgresError',
+      code: '22P02',
+    });
+    const d = pgDiagnostics(e);
+    expect(d.pgMessage).toBe('bad value [email] at [coords]');
+    expect(d.pgCode).toBe('22P02');
+  });
+
+  it('adds nothing for non-Postgres errors', () => {
+    expect(pgDiagnostics(new Error('x'))).toEqual({});
   });
 });
 

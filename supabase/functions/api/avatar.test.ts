@@ -40,7 +40,7 @@ describe('encodeAvatar', () => {
     expect(contains(out, 'SECRET-EXIF-MARKER')).toBe(false);
     // no APP1 (EXIF/XMP) segment right after SOI
     expect(out[2] === 0xff && out[3] === 0xe1).toBe(false);
-  });
+  }, 30_000); // pure-JS Jimp is CPU bound: allow for a busy machine or the parallel coverage run
 
   it('accepts PNG input and outputs JPEG', async () => {
     const img = new Jimp({ width: 300, height: 600, color: 0x0a78c8ff });

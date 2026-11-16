@@ -2,9 +2,7 @@ import { lazy, Suspense, type ComponentType } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router';
 import { FindScreen } from '@/features/find/screens/FindScreen';
 import { NotFoundScreen } from '@/features/common/screens/NotFoundScreen';
-import { OfferScreen } from '@/features/offer/screens/OfferScreen';
 import { ProfileScreen } from '@/features/profile/screens/ProfileScreen';
-import { RidesScreen } from '@/features/rides/screens/RidesScreen';
 import { Shell } from './Shell';
 
 // Dev-only harness for the lazy map. Tree-shaken out of production builds unless VITE_ENABLE_DEV_ROUTES=true
@@ -28,6 +26,10 @@ const lazyScreen = <T extends Record<string, unknown>>(
 const auth = () => import('@/features/auth/screens');
 const form = () => import('@/features/profile/screens/AccountFormScreens');
 const policy = () => import('@/features/policy/screens/PolicyScreen');
+const offer = () => import('@/features/offer/screens/OfferScreen');
+const offerDone = () => import('@/features/offer/screens/OfferDoneScreen');
+const rides = () => import('@/features/rides/screens/RidesScreen');
+const drivingRide = () => import('@/features/rides/screens/DrivingRideScreen');
 
 export const router = createBrowserRouter([
   {
@@ -35,8 +37,10 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <Navigate to="/find" replace /> },
       { path: 'find', element: <FindScreen /> },
-      { path: 'offer', element: <OfferScreen /> },
-      { path: 'rides', element: <RidesScreen /> },
+      { path: 'offer', ...lazyScreen(offer, (m) => m.default) },
+      { path: 'offer/done', ...lazyScreen(offerDone, (m) => m.default) },
+      { path: 'rides', ...lazyScreen(rides, (m) => m.default) },
+      { path: 'driving/:id', ...lazyScreen(drivingRide, (m) => m.default) },
       { path: 'profile', element: <ProfileScreen /> },
       { path: 'profile/edit', ...lazyScreen(form, (m) => m.EditProfileScreen) },
       { path: 'profile/car', ...lazyScreen(form, (m) => () => <m.VehicleScreen mode="edit" />) },

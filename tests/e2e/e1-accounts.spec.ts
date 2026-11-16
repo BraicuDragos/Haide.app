@@ -244,11 +244,9 @@ test.describe('signed in: onboarding', () => {
 
     await page.goto('/offer');
     await expect(heading(page, 'Offer a ride')).toBeVisible();
-    await expect(
-      page.getByRole('heading', { level: 2, name: 'Sign in to offer a ride' }),
-    ).toBeVisible();
+    await expect(page.getByRole('heading', { level: 2, name: 'Add your car first' })).toBeVisible();
     await expectNoAxeViolations(page);
-    await page.getByRole('button', { name: 'Continue setup' }).click();
+    await page.getByRole('button', { name: 'Add car' }).click();
 
     await expect(heading(page, 'Your car')).toBeVisible();
     await expect(page.getByText('Step 4 of 4')).toBeVisible();
@@ -269,7 +267,8 @@ test.describe('signed in: onboarding', () => {
     await page.getByRole('button', { name: 'Save car' }).click();
 
     await expect(page).toHaveURL(/\/offer$/);
-    await expect(page.getByText('Publishing a ride is coming soon')).toBeVisible();
+    await expect(page.getByRole('button', { name: /^From/ })).toBeVisible();
+    await expect(page.getByText('Your car has 3 seats.')).toBeVisible();
     expect(acc.vehicle).toMatchObject({ plate: 'SB12ABC', fuelType: 'petrol', seats: 3 });
   });
 

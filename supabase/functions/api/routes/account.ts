@@ -7,9 +7,8 @@ import {
   type LegalCurrentResponse,
   type MeResponse,
   type PhotoResponse,
-  type PublicUser,
 } from '../../_shared/contracts/account.ts';
-import { isProfileComplete, memberSince, ratingSummary } from '../../_shared/domain/account.ts';
+import { isProfileComplete } from '../../_shared/domain/account.ts';
 import { checkPhotoUpload } from '../../_shared/domain/photo.ts';
 import {
   BODY_LIMIT_PHOTO_BYTES,
@@ -38,6 +37,7 @@ import {
   upsertVehicle,
   type ProfilePatchValues,
 } from '../repo/accounts.ts';
+import { toPublicUser } from '../serializers/users.ts';
 import { avatarUrl } from '../services/storage.ts';
 import type { Account, AppBindings, Deps } from '../types.ts';
 import { parse, readJson } from '../validate.ts';
@@ -228,18 +228,5 @@ accountRoutes.get('/users/:id', rateLimit('users', RATE_LIMITS.publicRead), asyn
   const since = new Date(clock.now().getTime() - RELIABILITY_WINDOW_DAYS * DAY_MS);
   const row = await getPublicProfile(sql, id.toLowerCase(), since);
   if (!row || row.status === 'suspended') throw new AppError('NOT_FOUND', 'User not found.');
-  const deleted = row.status === 'deleted';
-  const body: PublicUser = {
-    id: row.id,
-    firstName: deleted ? null : row.first_name,
-    photoUrl: deleted ? null : avatarUrl(env, row.photo_path),
-    memberSince: memberSince(new Date(row.created_at)),
-    rating: ratingSummary(row.rating_count, row.rating_avg),
-    // Counted from completed bookings once rides exist (E2/E4).
-    ridesCompleted: 0,
-    lateCancellations90d: row.late_cancellations,
-    noShows90d: row.no_shows,
-    bio: deleted ? null : row.bio,
-  };
-  return c.json(body);
+  return c.json(toPublicUser(row, env));
 });

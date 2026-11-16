@@ -4,7 +4,7 @@
 -- 2. A SMALL gazetteer sample for tests and local development. Coordinates and boundaries are
 --    approximate and illustrative only. The real Sibiu gazetteer is built by
 --    scripts/geo/build-gazetteer.ts (OpenStreetMap, ODbL) and loaded by its own migration.
--- 3. Legal documents v1 are seeded by the E1 migration. Energy prices v1 arrive with E2.
+-- 3. Legal documents v1 are seeded by the E1 migration. Energy prices v1 are seeded by the E2 migration (needed in every environment).
 
 alter role haide_api with password 'haide_api_local';
 

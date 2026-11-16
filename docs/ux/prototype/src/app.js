@@ -739,7 +739,7 @@ function offerPrice() {
   const km = o.route.km, cost = tripCost(km, v.fuel), free = !!fv('o_free', false), nmax = o.seats;
   const rows = Array.from({ length: nmax }, (_, k) => k + 1).map(n => `<tr class="${n === nmax ? 'me' : ''}"><th scope="row">${tp('detail.priceTable.n', n)}</th><td>${free ? t('common.free') : money(priceFor(km, v.fuel, n))}</td></tr>`).join('');
   return `<table class="table"><caption>${t('offer.price.fuel', { fuel: t('vehicle.fuel.' + v.fuel), km: km.toFixed(1) })}</caption><thead class="sr-only"><tr><th>${t('detail.priceTable.col1')}</th><th>${t('detail.priceTable.col2')}</th></tr></thead><tbody>${rows}</tbody></table>
-    ${free ? '' : `<p class="save">${t('offer.price.recover', { n: nmax, amount: money(nmax * priceFor(km, v.fuel, nmax)), fuel: money(cost) })}</p>`}<p class="small muted">${t('offer.price.lock')}</p>`;
+    ${free ? '' : `<p class="save">${tp('offer.price.recover', nmax, { amount: money(nmax * priceFor(km, v.fuel, nmax)), fuel: money(cost) })}</p>`}<p class="small muted">${t('offer.price.lock')}</p>`;
 }
 /** The readout under the seats: how many seats, and what each passenger pays when the car is full. Digits roll. */
 function offerReadout() {

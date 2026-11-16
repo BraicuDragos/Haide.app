@@ -102,7 +102,8 @@ The generic public detail.
   "car": CarPublic, "driver": PublicUser,
   "viewer": { "isDriver": false, "bookingId": null, "bookingStatus": null, "blocked": false } }
 ```
-`404` if the ride is cancelled/expired and the viewer is not a party, the driver is blocked either way, or the driver is suspended.
+`404` if the ride is cancelled/expired and the viewer is not a party, the driver is blocked either way, or the driver is suspended. Malformed ids are `404` too.
+Implemented in E2: `origin.label` and `destination.label` are **area names** (the gazetteer area, `Sibiu` as fallback), never the driver's street-level label. `point` is the 300 m grid centre. `routePublic` is `null` when the stored route is gone (coarsened). The plate, the driver's phone and every exact coordinate are absent. The blocked check arrives with E3/E5, and `viewer.bookingId`/`bookingStatus` stay `null` until E4.
 
 ### `POST /rides/{id}/match`: Public
 Passenger-specific view for ride detail and the request sheet. Body `{ "from": LatLng, "to": LatLng }`.
@@ -164,14 +165,16 @@ Body `{ "origin": LatLng, "destination": LatLng, "originLabel"?: string, "destin
   "priceTable": [ {"passengers":1,"priceBani":310}, {"passengers":2,"priceBani":200}, {"passengers":3,"priceBani":150} ],
   "tripCostBani": 624, "rateMicroPerKm": 651000, "fuelType": "diesel" }
 ```
-`priceTable` goes up to `vehicle.seats`. `tripCostBani` (rounded down) feeds the "you recover about X of Y RON" line. Errors: `SAME_PLACE`, `ROUTE_TOO_SHORT`, `ROUTE_TOO_LONG`, `ROUTE_NOT_FOUND`, `ROUTING_UNAVAILABLE`.
+`priceTable` goes up to `vehicle.seats`. `tripCostBani` (rounded down) feeds the "you recover about X of Y RON" line. Errors: `SAME_PLACE`, `ROUTE_TOO_SHORT`, `ROUTE_TOO_LONG`, `ROUTE_NOT_FOUND`, `ROUTING_UNAVAILABLE`, and `VALIDATION_FAILED` with `fields.origin` and/or `fields.destination` = `outside_coverage` when a point is outside the Sibiu coverage box (checked before `SAME_PLACE`, which needs the points at least 100 m apart). Coordinates are rounded to 5 decimals on input.
+Labels: optional, at most 80 characters (NFC, whitespace collapsed). When omitted, the server derives `<area>, <nearest place within about 150 m>` (falling back to the area, then `Sibiu`). The response always carries the labels in use. They are stored with the preview and copied to the ride on publish.
 
 ### `POST /rides`
 Body `{ "previewId": "…", "departureAt": "2026-11-16T05:30:00Z", "seats": 3, "note": "Blue backpack on the dashboard", "isFree": false }`
-`201` returns the owner ride view (below). Errors: `PREVIEW_EXPIRED`, `DEPARTURE_TOO_SOON`, `DEPARTURE_TOO_FAR`, `SEATS_EXCEED_VEHICLE`, `DAILY_RIDE_LIMIT`. Logs `ride_published`.
+`201` returns the owner ride view (below). Errors: `PREVIEW_EXPIRED` (unknown, expired or someone else's preview: indistinguishable on purpose), `DEPARTURE_TOO_SOON`, `DEPARTURE_TOO_FAR`, `SEATS_EXCEED_VEHICLE`, `DAILY_RIDE_LIMIT` (4 non-cancelled rides per driver per Europe/Bucharest day of departure). Logs `ride_published`. Rate limit 20/hour.
+There is no price field: unknown keys are ignored, the price comes from the stored route and the energy price version in effect at publish time (snapshotted on the ride). `isFree: true` makes every row of the table 0.
 
 ### `GET /me/rides?scope=upcoming|past&limit&cursor`
-Driver list. `{ items: [{ id, departureAt, originLabel, destinationLabel, status, seatsOffered, seatsBooked, pendingRequests }] }`. Upcoming is sorted ascending by departure, past descending.
+Driver list. `{ items: [{ id, departureAt, originLabel, destinationLabel, status, seatsOffered, seatsBooked, pendingRequests }], nextCursor: string | null }`. Upcoming (published, not departed) is sorted ascending by departure, past (departed or no longer published) descending. `limit` 1 to 50 (default 20). `cursor` is opaque (keyset on departure time and id): pass `nextCursor` back. `pendingRequests` is `0` until E4.
 
 ### `GET /me/rides/{id}`: driver only (else 404)
 ```json
@@ -184,8 +187,10 @@ Driver list. `{ items: [{ id, departureAt, originLabel, destinationLabel, status
                     "pickup": { "point": LatLng, "label": "…" }, "dropoff": {...},   // exact only within window
                     "phoneE164": "+40…" /* only within window */, "priceLockedBani": 200, "finalPriceBani": null,
                     "canMarkNoShow": false, "canRate": false } ],
-  "canCancel": true, "lateCancelIfNow": false }
+  "canCancel": true, "lateCancelIfNow": false,
+  "fuelType": "diesel", "lateCancel": false, "cancelledAt": null, "createdAt": "…" }
 ```
+Additive fields added in E2: `fuelType` (from the vehicle snapshot), `lateCancel` (true once cancelled within 30 min of departure), `cancelledAt`, `createdAt`. `requests` and `passengers` stay empty until E4. For a coarsened ride (no stored route) `route` falls back to a straight line between the two points.
 
 ### `POST /rides/{id}/cancel`: driver only
 Body `{}`. Ride → `cancelled`. All `requested` and `confirmed` bookings → `cancelled` (`cancelled_by='driver'`), passengers emailed. Within 30 min of departure: `late_cancel=true` + a reliability event. `200` returns the owner view. `INVALID_STATE` if not `published`.
