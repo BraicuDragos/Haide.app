@@ -250,8 +250,11 @@ Indexes:
 | no_show_at | timestamptz | |
 | no_show_by | text | `'driver'` (passenger didn't show) or `'passenger'` (driver didn't show) |
 | seen_by_passenger_at | timestamptz | for badges |
+| passenger_event_at | timestamptz NULL | **E4.** Last change the passenger did not cause (confirmed, rejected, expired, cancelled by the driver, price dropped). Unseen = `passenger_event_at > coalesce(seen_by_passenger_at, '-infinity')`. `profiles.last_seen_summary_at` is no longer used (dropped in E6) |
 | coarsened_at | timestamptz | |
 | created_at, updated_at | timestamptz | |
+
+**Implemented in E4** (`20261119090000_bookings.sql`): the table and its named constraints exactly as above (`bookings_fractions`, `bookings_segment_min`, `bookings_price_nonneg`, `bookings_lock_le_quote`, `bookings_final_le_lock`, `bookings_locked_when_confirmed`, `bookings_decided_has_time`, `bookings_cancelled_has_meta`, `bookings_late_only_cancelled`, `bookings_expiry_after_request`, `bookings_idempotency_uniq`), RLS enabled with no policies, `DELETE` revoked from `haide_api`. **`pickup_label` and `dropoff_label` are area names** (`app.area_for` of the exact snapped point), safe for emails, lists and every viewer. `pickup`/`dropoff` hold the exact points on the route (`ST_LineInterpolatePoint(route_utm, fraction)` back to 4326), shown only through `revealFor`. The foreign keys that were waiting for this table are added: `reliability_events.booking_id`, `reliability_events.ride_id` and `ratings.booking_id`. Invariant: `rides.seats_booked = count(bookings WHERE status = 'confirmed')` at all times, also for a cancelled ride (ride cancel sets it to 0); the CHECK `rides_seats_booked_range` is the backstop (`23514` → `RIDE_FULL`). New functions (all with PUBLIC EXECUTE revoked): `app.expire_requests(timestamptz)`, `app.outbox_recipients(uuid[])` (SECURITY DEFINER, the only path to `auth.users` emails) and `app.call_tick()` (SECURITY DEFINER, reads `api_tick_url` and `cron_secret` from Vault and does nothing when they are missing; pg_cron job `haide-tick`, every minute). Ride row lock first, then guarded booking updates (ADR 0021).
 
 Note: when a passenger reports "driver didn't show", the booking moves to `no_show` with `no_show_by='passenger'`, and a `reliability_events(no_show)` row is created **for the driver**.
 

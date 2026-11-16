@@ -3,9 +3,9 @@
 > Updated by the Orchestrator after every step. Read at the start of every session.
 
 ## Current state
-- **Phase:** 6 — features. E-DM (design & motion) built + QA-approved; PR being opened on `feat/design-motion`
-- **Open PRs:** E-DM PR (being opened)
-- **Approved gates:** GATE 1 (PR #1), GATE 2 (PR #2); E0 merged (PR #3)
+- **Phase:** 6 — features. E-DM, E1, E2, E3 merged; E4 (bookings) QA-approved, PR on `feat/bookings`
+- **Open PRs:** E4 PR (feat/bookings)
+- **Approved gates:** GATE 1 (PR #1), GATE 2 (PR #2); merged: E0 #3, E1 #5, E-DM #6, E2 #7, E3 #8
 
 ## Done
 - [x] Phases 1–4: strategy, brand "Haide", UX + prototype, architecture (ADRs 0001–0015)
@@ -14,9 +14,10 @@
 - [x] E1 — accounts (PR #5 merged), profile, vehicle: migration `20261116090000_accounts.sql` (6 tables, RLS), gates middleware, account endpoints, photo pipeline (Jimp), JWT iss check, bodyLimit; auth + onboarding + profile screens, policy pages. QA: APPROVED (292 unit tests, 30 mocked Playwright, initial JS 155 KB gzip)
 - [x] E2 - publish and manage rides + pricing engine (`feat/rides`, working tree): migration `20261117090000_rides.sql` (energy_prices v1, route_previews, rides, route helpers), pricing.ts (integer bani, trips A/B/C + mixed example verified to the bani), ORS + fixture routing, 6 ride endpoints (preview, publish, list, owner view, cancel, public view), daily limit via advisory lock; offer form, published, driving list/detail, cancel sheet. QA: see below
 - [x] E3 - search and matching (`feat/search`, working tree): migration `20261118090000_search.sql` (`app.blocks` with RLS and no policies, `app.match_rides`: pickup then dropoff by linear referencing, 800 m corridor, segment >= 1 km, walk-then-time order, loops, own/full/blocked/cancelled/departed excluded, PUBLIC EXECUTE revoked), `POST /search` (30/min, signed-out OK) and `POST /rides/{id}/match`, 404 for blocked pairs on `GET /rides/{id}` and `/match`, price per result from the ride rate snapshot (`quoteUpTo` on the segment; Selimbar to ZI Vest = 3.10 RON checked by hand), analytics `search_performed` without coordinates; Results, empty state, ride detail, Request seat gate with return-to-intent, shared-element transition, search kept in sessionStorage (no coordinates in URLs). QA: APPROVED after fixes (595 unit + 161 web unit, 107 Playwright passed twice, initial JS 156.1 kB gzip, audit clean)
+- [x] E4 - booking lifecycle and notifications (`feat/bookings`): ADRs 0021-0023, spec `docs/architecture/e4-bookings-spec.md`, migration `20261119090000_bookings.sql` (bookings, ride-row lock, expire_requests, outbox, call_tick via pg_cron), request/approve/reject/cancel/summary endpoints, Brevo outbox emails, reveal rules; request sheet, booking detail, riding list, driver requests, badges. QA: APPROVED (748 server + 185 web unit, 145 mocked Playwright, initial JS ~158 kB gzip)
 
 ## Next step
-- Owner merges E-DM PR → E2 (publish rides + pricing engine), then E3…E8. E-DM leftovers: match moment + live trip + shared-element ride morphs land with E3/E4 screens; real-phone fps, real tiles, screen readers unverified
+- Owner merges E4 PR → E5 (ratings, no-show, reliability), then E6…E8. E-DM leftovers: match moment + live trip + shared-element ride morphs land with E3/E4 screens; real-phone fps, real tiles, screen readers unverified
 
 ## Not verified locally in E1 — CI must confirm
 - Migration + pgTAP 004, `deno check/lint`, integration tests incl. Storage upload, real magic-link E2E, CI assumptions (`supabase seed buckets`, `supabase status -o env` keys, HS256 local JWT).
@@ -43,3 +44,8 @@
 ## Blockers / what the owner needs to provide
 - Nothing before Gate 3 (batch in `docs/architecture/deploy.md` §3). `haide.ro`/`haide.app` are taken; `haide.city`, `gohaide.app` look free — brand-guide domain advice needs updating.
 - `gh` is at `C:\Program Files\GitHub CLI\gh.exe`; `pnpm` not on PATH locally (use `npx pnpm`).
+
+## Not verified locally in E4 - CI must confirm
+- No Docker/psql/Deno: migration, pgTAP 007 (78 assertions, counted), `tests/integration/bookings.test.ts` (concurrency C1-C6), pg_cron/pg_net/Vault path, real Brevo. Lighthouse not run; real tiles/phone unverified.
+- Low findings: same Idempotency-Key + ride with different points replays the booking (spec says 400); list pill shows Ride cancelled when passenger cancelled first (needs cancelledBy on BookingListItem); BLOCKED reveals a block exists.
+- Production: Vault secrets api_tick_url, cron_secret; EMAIL_PROVIDER=brevo + BREVO_API_KEY; disable Brevo open/click tracking; verify sender domain.

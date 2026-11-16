@@ -104,13 +104,13 @@ The generic public detail.
   "viewer": { "isDriver": false, "bookingId": null, "bookingStatus": null, "blocked": false } }
 ```
 `404` if the ride is cancelled/expired and the viewer is not a party, the driver is blocked either way, or the driver is suspended. Malformed ids are `404` too.
-Implemented in E2: `origin.label` and `destination.label` are **area names** (the gazetteer area, `Sibiu` as fallback), never the driver's street-level label. `point` is the 300 m grid centre. `routePublic` is `null` when the stored route is gone (coarsened). The plate, the driver's phone and every exact coordinate are absent. Since E3 a block in either direction makes the ride `404` (same as missing), and `viewer.bookingId`/`bookingStatus` stay `null` until E4.
+Implemented in E2: `origin.label` and `destination.label` are **area names** (the gazetteer area, `Sibiu` as fallback), never the driver's street-level label. `point` is the 300 m grid centre. `routePublic` is `null` when the stored route is gone (coarsened). The plate, the driver's phone and every exact coordinate are absent. Since E3 a block in either direction makes the ride `404` (same as missing), and (E4) `viewer.bookingId`/`bookingStatus` hold the viewer's latest booking on the ride. A cancelled ride stays visible to its passengers (party rule) and to nobody else.
 
 ### `POST /rides/{id}/match`: Public
 Passenger-specific view for ride detail and the request sheet. Body `{ "from": LatLng, "to": LatLng }`.
 `200 { "pickup": {...}, "dropoff": {...}, "segmentM": 5390, "priceUpToBani": 120, "pickupEtaAt": "…", "seatsLeft": 2, "bookable": true, "notBookableReason": null }`
 `notBookableReason ∈ RIDE_FULL | RIDE_NOT_BOOKABLE | OWN_RIDE | BLOCKED | ALREADY_REQUESTED | NO_LONGER_MATCHES`. The UI shows it as a disabled-button reason.
-Implemented in E3: `seatsLeft` is added (0 when full). The endpoint never returns `BLOCKED` (a blocked pair gets `404`, like `GET /rides/{id}`, so nobody learns who blocked whom); `BLOCKED` stays for `POST /bookings` (E4), and `ALREADY_REQUESTED` arrives with E4. Reason priority: `OWN_RIDE`, `RIDE_NOT_BOOKABLE` (not published, or departing in under 10 minutes), `RIDE_FULL`, `NO_LONGER_MATCHES`. When the points no longer fit (`NO_LONGER_MATCHES`), `pickup`, `dropoff`, `segmentM`, `priceUpToBani` and `pickupEtaAt` are all `null`. Rate limit 60/min.
+Implemented in E3: `seatsLeft` is added (0 when full). The endpoint never returns `BLOCKED` (a blocked pair gets `404`, like `GET /rides/{id}`, so nobody learns who blocked whom); `BLOCKED` stays for `POST /bookings` (E4), and `ALREADY_REQUESTED` arrived with E4. Reason priority: `OWN_RIDE`, `ALREADY_REQUESTED` (an active or rejected booking of the viewer), `RIDE_NOT_BOOKABLE` (not published, or departing in under 10 minutes), `RIDE_FULL`, `NO_LONGER_MATCHES`. When the points no longer fit (`NO_LONGER_MATCHES`), `pickup`, `dropoff`, `segmentM`, `priceUpToBani` and `pickupEtaAt` are all `null`. Rate limit 60/min.
 
 ### `GET /users/{id}`: Public
 `200 PublicUser`. A deleted user returns `firstName: null`, no photo and no bio. Suspended or blocked (either way) → `404`.
@@ -145,6 +145,7 @@ Body `{ "make": "Dacia", "model": "Logan", "colour": "Grey", "plate": "sb 12 abc
 
 ### `POST /me/summary/seen`
 Body `{ "bookingIds": ["…"] }` → marks passenger updates as seen. `204`.
+Implemented in E4: 1 to 50 uuids (else `400`). Sets `seen_by_passenger_at = now` on the caller's **own** bookings only; other ids match no row and are ignored. Badge rule: a booking is unseen while `passenger_event_at > coalesce(seen_by_passenger_at, -infinity)`; `passenger_event_at` is bumped by every change the passenger did not cause (confirmed, rejected, expired, cancelled by the driver, price dropped). `GET /me/summary`: `driverPendingRequests` counts open requests on the caller's rides (`requested`, not past `expires_at`); `nextRide` is the soonest upcoming confirmed booking or published ride (`kind` `booking` or `ride`). Rate limit 30/min (the `account` bucket).
 
 ### `GET /me/blocks` · `POST /blocks` · `DELETE /blocks/{userId}`
 `POST` body `{ "userId": "…" }` → `204` (idempotent). `GET` → `{ items: [{ user: PublicUser, blockedAt }] }`.
@@ -192,10 +193,11 @@ Driver list. `{ items: [{ id, departureAt, originLabel, destinationLabel, status
   "canCancel": true, "lateCancelIfNow": false,
   "fuelType": "diesel", "lateCancel": false, "cancelledAt": null, "createdAt": "…" }
 ```
-Additive fields added in E2: `fuelType` (from the vehicle snapshot), `lateCancel` (true once cancelled within 30 min of departure), `cancelledAt`, `createdAt`. `requests` and `passengers` stay empty until E4. For a coarsened ride (no stored route) `route` falls back to a straight line between the two points.
+Additive fields added in E2: `fuelType` (from the vehicle snapshot), `lateCancel` (true once cancelled within 30 min of departure), `cancelledAt`, `createdAt`. Implemented in E4: `requests` holds the open requests (`requested`, `expires_at` in the future, soonest deadline first): public profile, **area labels** and `segmentM`, never a point. `priceIfAcceptedBani` is `seatPrice(segment, rate, confirmed + 1)`. `passengers` holds the `confirmed` bookings. `pickup.point`, `dropoff.point` and `phoneE164` go through `revealFor` (confirmed or completed, and now < departure + 24 h): outside it the points are 300 m grid centres (`approx: true`) and `phoneE164` is `null`. `label` is always an area name. `GET /me/rides` `pendingRequests` counts the open requests. For a coarsened ride (no stored route) `route` falls back to a straight line between the two points.
 
 ### `POST /rides/{id}/cancel`: driver only
 Body `{}`. Ride → `cancelled`. All `requested` and `confirmed` bookings → `cancelled` (`cancelled_by='driver'`), passengers emailed. Within 30 min of departure: `late_cancel=true` + a reliability event. `200` returns the owner view. `INVALID_STATE` if not `published`.
+Implemented in E4: the cascade runs in the same transaction as the ride cancel (ride row locked first, ADR 0021). `rides.seats_booked` returns to 0 (the invariant `seats_booked = count(confirmed)` also holds for a cancelled ride). One `ride_cancelled` outbox row per booking, each with that passenger's own pickup and dropoff **area names**, plus one `booking_cancelled` analytics event per booking (`by: driver`).
 
 ### `PATCH /me/rides/{id}` (E8-3)
 Body `{ "autoAccept": true }` → `200`.
@@ -207,9 +209,11 @@ Headers: `Idempotency-Key`. Requires consent + complete profile. Rate limit 10/h
 Body `{ "rideId": "…", "from": LatLng, "to": LatLng }`
 Server re-runs the match for this ride and stores the snapped points, `segment_m`, labels, `price_quoted_bani = quoteUpTo`, and `expires_at = min(now + 30 min, departure − 10 min)`.
 `201` returns the booking view (below). Errors: `RIDE_FULL`, `RIDE_NOT_BOOKABLE`, `OWN_RIDE`, `BLOCKED`, `ALREADY_REQUESTED`, `NO_LONGER_MATCHES`. Logs `booking_requested`. Outbox: `booking_requested` → driver. With `autoAccept` (E8-3) and an eligible requester, the booking is confirmed in the same transaction.
+Implemented in E4: header `Idempotency-Key` (uuid) is required: missing or not a uuid → `400 VALIDATION_FAILED` (`fields.idempotencyKey = required | invalid`). A replay with the same key and ride returns `201` with the current view and writes nothing; the same key for another ride → `400` (`fields.idempotencyKey = reused`). Body points must be inside the Sibiu box (`fields.from|to = outside_coverage`); there is no price field. Under the ride row lock (ADR 0021) the guards run in this order: replay, `OWN_RIDE`, `BLOCKED` (either direction), driver not active (`404`), `ALREADY_REQUESTED` (a `requested`, `confirmed` or **`rejected`** booking exists: a declined passenger cannot ask again, after `cancelled` or `expired` they can), `RIDE_NOT_BOOKABLE` (not published, or departing in 10 minutes or less), `RIDE_FULL`, `NO_LONGER_MATCHES`. An unknown ride is `404`. `pickup.label` and `dropoff.label` are **area names**; the stored points are the exact snapped points on the route (`ST_LineInterpolatePoint` at the matched fractions) and are never returned before the reveal. `price_quoted_bani` = `quoteUpTo(segment)` (n = 1). Rate limit 10/hour. Analytics `booking_requested`.
 
 ### `GET /me/bookings?scope=upcoming|past&limit&cursor`
 `{ items: [{ id, rideId, status, departureAt, pickupLabel, dropoffLabel, driver: PublicUser, priceBani /* locked ?? quoted */, unseen: boolean }] }`
+Implemented in E4: `{ items: BookingListItem[], nextCursor }` with `BookingListItem = { id, rideId, status, rideStatus, departureAt, pickupEtaAt, pickupLabel, dropoffLabel, driver: PublicUser, priceBani /* final ?? locked ?? quoted */, unseen }`. Upcoming = `requested` or `confirmed` and departing after now, ascending. Past = everything else, descending. Keyset cursor on `(departure_at, id)` like `/me/rides`; `limit` 1 to 50 (default 20). Labels are area names.
 
 ### `GET /bookings/{id}`: passenger of the booking or driver of the ride (else 404)
 ```json
@@ -226,15 +230,19 @@ Server re-runs the match for this ride and stores the snapped points, `segment_m
                "canShare": true, "show112": false } }
 ```
 Exact `pickup`, `dropoff`, `plate` and `contact` are present only when the status is `confirmed`/`completed` and `now < departureAt + 24 h`. Otherwise approximate points and `null`.
+Implemented in E4 (ADR 0023): the shape is `BookingView` in `_shared/contracts/bookings.ts` (adds `viewerRole`, `passenger`, `segmentM`, `cancelledAt`, `cancelledBy`, `unseen`, `rideStatus`; `actions` carries the five E5 flags, all `false` for now). One pure function, `revealFor`, decides the exposure: `status ∈ {confirmed, completed}` and `now < departureAt + 24 h` (hidden at exactly +24 h). When revealed, `route` is the exact route **between the passenger's own pickup and dropoff only** (never the driver's start and end), `contact.phoneE164` is the counterpart's phone (the driver's for the passenger, the passenger's for the driver) and `car.plate` is set. Otherwise points are 300 m grid centres (`approx: true`), `route` is the trimmed public route (`null` once coarsened), `contact` is `null` and a passenger gets `plate: null` (the driver always sees their own plate). `walkM` is rounded to 50 m, `pickupEtaAt` to 5 minutes. `price.finalBani` equals `lockedBani` once the ride has departed (E5 stores it). `timeline` shows `ride_cancelled` instead of `cancelled` when the driver cancelled the ride. `unseen` is true for the passenger viewer while `passenger_event_at > seen_by_passenger_at`. Anyone but the passenger and the ride's driver gets `404` (also for a malformed id).
 
 ### `POST /bookings/{id}/approve`: driver only
 Transaction: lock the ride, check `requested` and `expires_at > now`, seat free → `confirmed`, `seats_booked + 1`, relock all confirmed prices with `min`. `200` returns the owner ride view. Errors: `RIDE_FULL`, `REQUEST_EXPIRED`, `INVALID_STATE`. Logs `booking_confirmed`. Outbox → passenger.
+Implemented in E4: not the driver of the ride (or unknown id) → `404`. Guards in order: ride `published` (else `INVALID_STATE`), booking `requested` (an `expired` one answers `REQUEST_EXPIRED`, any other state `INVALID_STATE`), `expires_at > now` (`REQUEST_EXPIRED`, which also covers the up-to-1-minute tick lag), no block either way (`BLOCKED`), a free seat (`RIDE_FULL`). The update is `… WHERE id = $1 AND status = 'requested' AND expires_at > now`; the `rides_seats_booked_range` CHECK is the backstop (`23514` → `RIDE_FULL`). After the seat is taken every confirmed booking is relocked with `min(old ?? quoted, seatPrice(segment, rate, n))`; the approved booking and every booking whose lock dropped get `passenger_event_at = now` (badge). Logs `booking_confirmed` (`responseSeconds`). Rate limit 30/min.
 
 ### `POST /bookings/{id}/reject`: driver only
 `requested` → `rejected`. `200`. Logs `booking_rejected`. Outbox → passenger.
+Implemented in E4: `200` returns the owner ride view. Errors `404`, `REQUEST_EXPIRED`, `INVALID_STATE`. Seats and prices are untouched. Rate limit 30/min.
 
 ### `POST /bookings/{id}/cancel`: passenger only
 Allowed from `requested` and `confirmed`, until departure. A confirmed booking cancelled within 30 min of departure is a late cancellation (reliability event). Seats are freed and remaining prices relocked (never up). `200` returns the booking view. Logs `booking_cancelled` (`late` flag). Outbox → driver.
+Implemented in E4: a withdrawn `requested` booking sends **no** email (in-app only, ADR 0022); a cancelled `confirmed` booking emails the driver, sets `late_cancel` and inserts `reliability_events(late_cancellation, booking_id)` when within 30 minutes of departure. A booking in a terminal state, or a ride that has already left → `409 INVALID_STATE`. Not the passenger's booking → `404`. Rate limit 30/min.
 
 ### `POST /bookings/{id}/no-show`
 - Driver caller: marks the passenger as a no-show (`confirmed`/`completed` → `no_show`, `no_show_by='driver'`). Reliability event for the passenger.
@@ -288,7 +296,8 @@ Body `{ "message": "…", "stack": "…", "route": "/ride/:id", "appVersion": "�
 ## 10. Internal
 
 ### `POST /internal/tick`
-Header `x-cron-secret: <CRON_SECRET>`. Called by pg_cron through pg_net every minute. Runs expiry, outbox dispatch (≤ 50 per run) and cleanup. `200 { "expired": n, "sent": n, "failed": n }`. Not exposed through CORS.
+Header `x-cron-secret: <CRON_SECRET>`. Called by pg_cron through pg_net every minute. Runs expiry, outbox dispatch (≤ 50 per run) and cleanup. `200 { "expired": n, "sent": n, "failed": n, "purged": n }`. Not exposed through CORS.
+Implemented in E4 (every minute, each step in its own try/catch; a failure is logged and recorded in `app_errors`, the next step still runs): (1) `app.expire_requests(now)` turns every `requested` booking past `expires_at` into `expired` and queues `booking_expired` + analytics in one transaction; (2) the outbox dispatcher (claim with `FOR UPDATE SKIP LOCKED` and a 5 minute lease, 4 sends at a time through Brevo or the console provider, backoff 1/2/4/8 min, final after 5 attempts or a permanent 4xx, stops at `EMAIL_DAILY_CAP` per UTC day); (3) deletes expired `route_previews`; (4) at minute 0 UTC also deletes `rate_limits` older than 2 days, `app_errors` older than 14 days and finished `outbox` rows older than 30 days. `purged` is the number of rows deleted by steps 3 and 4. `sent`/`failed` count rows that reached `sent`/`failed` in this run.
 
 ## 11. Analytics events written by the API (E7-1)
 
