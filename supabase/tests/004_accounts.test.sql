@@ -84,8 +84,8 @@ select throws_ok($$insert into app.consents (user_id, kind)
   values ('00000000-0000-4000-8000-000000000001', 'terms')$$,
   '23514', null, 'terms consent needs a document version');
 
-select throws_ok($$insert into app.ratings (booking_id, rater_id, ratee_id, stars)
-  values (gen_random_uuid(), '00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000001', 5)$$,
+select throws_ok($$insert into app.ratings (booking_id, rater_id, ratee_id, stars, visible_at)
+  values (gen_random_uuid(), '00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000001', 5, now())$$,
   '23514', null, 'a user cannot rate themselves');
 
 -- Trigger on auth.users --------------------------------------------------------------------------
