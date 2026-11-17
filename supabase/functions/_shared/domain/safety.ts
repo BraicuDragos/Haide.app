@@ -1,6 +1,5 @@
 import type { Call112Window } from '../contracts/ratings.ts';
 import type { BookingStatus, RideStatus } from '../contracts/rides.ts';
-import type { AnalyticsEvent } from './bookings.ts';
 import type { Clock } from './clock.ts';
 import { DomainError } from './errors.ts';
 import {
@@ -152,28 +151,11 @@ export const reportReceivedOutbox = (
   payload: ReportReceivedPayload,
 ): OutboxRow<'report_received'> => guard({ userId: adminId, template: 'report_received', payload });
 
-// ---- analytics (no coordinates, phones or plates: conventions §6) -----------------------------------------------
+// ---- analytics: the builders live in events.ts (E7), re-exported for compatibility ----------------------
 
-export const rideCompletedEvent = (
-  driverId: string,
-  p: { rideId: string; seats: number },
-  at: Date,
-): AnalyticsEvent => ({ name: 'ride_completed', userId: driverId, props: p, at });
-
-export const noShowReportedEvent = (
-  actorId: string,
-  p: { bookingId: string; rideId: string; by: 'driver' | 'passenger' },
-  at: Date,
-): AnalyticsEvent => ({ name: 'no_show_reported', userId: actorId, props: p, at });
-
-export const ratingSubmittedEvent = (
-  raterId: string,
-  p: { bookingId: string; stars: number; tagCount: number; raterRole: 'driver' | 'passenger' },
-  at: Date,
-): AnalyticsEvent => ({ name: 'rating_submitted', userId: raterId, props: p, at });
-
-export const reportSubmittedEvent = (
-  reporterId: string,
-  p: { reason: string; alsoBlock: boolean },
-  at: Date,
-): AnalyticsEvent => ({ name: 'report_submitted', userId: reporterId, props: p, at });
+export {
+  noShowReportedEvent,
+  ratingSubmittedEvent,
+  reportSubmittedEvent,
+  rideCompletedEvent,
+} from './events.ts';

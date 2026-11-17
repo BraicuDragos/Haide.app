@@ -279,20 +279,24 @@ Implemented in E5 (ADR 0028). All need an active account. `POST /blocks { userId
 
 ## 7. Admin (E5-5, E7). Role `admin` only, else 403 `FORBIDDEN`
 
+Implemented in E7 (ADR 0033 to 0035, `_shared/contracts/admin.ts`, `routes/admin.ts`, `services/{admin,metrics,energyPrices}.ts`). Every route sits behind `requireAdmin`: an active account whose `profiles.role` is `admin`, **re-read from the database on every request** (anonymous 401, a plain user 403 `FORBIDDEN`, a suspended admin 403 `ACCOUNT_SUSPENDED`). One rate limit for all: `admin`, 120 per minute per admin. **No admin response holds a phone number, plate, email or coordinate**; ride endpoints are area names. Nothing can grant or revoke the role (SQL only). Every write is one transaction: the target's profile row is locked `FOR NO KEY UPDATE`, the state is re-checked, one audited SQL function changes it and inserts its `admin_actions` row, and the outbox row is queued in the same commit.
+
+`AdminUserRef = { id, firstName: string | null, photoUrl, status: 'active' | 'suspended' | 'deleted', memberSince: 'YYYY-MM', ridesCompleted, reports90d }`. For a deleted reported user `firstName` falls back to the name in the report snapshot.
+
 | Method & path | Body / query | Response |
 |---|---|---|
-| `GET /admin/metrics?week=2026-W47` | | `{ week, northStar: {completedSeats, target:100, kill:30}, matchRate: {overall, byCorridor: [{label, rate}]}, fillRate, medianResponseMin, retention4w, reportsPer100, cancellationRate, weeklySeries: [{week, completedSeats}] }` |
-| `GET /admin/ops` | | `{ dbSizeMb, emailsToday, emailCap: 300, outboxPending, outboxFailed, orsCallsToday, lastCronRuns: [{job, status, at}], errors24h }` |
-| `GET /admin/reports?status=open` | | `{ items: [{ id, reporter: PublicUser, reported: PublicUser, reason, details, rideId, createdAt }] }` (never phones) |
-| `POST /admin/reports/{id}/dismiss` | `{ note? }` | `204` + `admin_actions` row |
-| `POST /admin/users/{id}/suspend` | `{ reason, reportId? }` | `204`. Cancels future rides and bookings (notifications), hides from search |
-| `POST /admin/users/{id}/unsuspend` | `{ note? }` | `204` |
-| `GET /admin/energy-prices` | | `{ current: [...], history: [...] }` |
-| `POST /admin/energy-prices` | `{ fuelType, priceMilli, consumptionCenti, unit, effectiveFrom, sourceNote, overrideLargeChange?: boolean }` | `201`. `409 LARGE_CHANGE` if more than ±30 % without the override |
-| `GET /admin/users/{id}/export` | | JSON export (E6-4) |
-| `GET /admin/errors?limit` | | recent `app_errors` |
+| `GET /admin/metrics?week=2026-W47` | `week` is an ISO week from `2026-W46` to the current one (Europe/Bucharest), default the current one. Else `400 fields.week` (`invalid`, `before_launch`, `future`) | `{ week, from, to, partial, northStar, matchRate: {overall, launch, byCorridor: [{corridor, value, searches}]}, fillRate, medianResponseMin, retention4w: {…, cohortWeek, closed}, reportsPer100, cancellationRate, series: [{week, completedSeats}] (12 weeks, zeros included), flags: {highVolumeDrivers: [{user: AdminUserRef, completed7d}]} }`. Each metric is `{ value: number \| null, target, kill, status: 'on_target' \| 'between' \| 'below_kill' \| 'no_data', n }` (`n` is the denominator). Rates are fractions with 3 decimals, `medianResponseMin` has 1 decimal, `reportsPer100` 2. `partial` while `now < to`. `matchRate.launch` is south + west + campus (the target applies to it) |
+| `GET /admin/reports?status=open\|dismissed\|actioned\|all&limit&cursor` | default `open`, `limit` 20 (≤ 50), keyset `(created_at desc, id desc)` | `{ items: [{ id, status, reason, details, createdAt, resolvedAt, reporter: AdminUserRef, reported: AdminUserRef & {openReports}, ride: {id, departureAt, fromArea, toArea} \| null, bookingId, history: [{action, adminFirstName, at, note}] (last 5 admin actions about the reported user) }], nextCursor }` |
+| `POST /admin/reports/{id}/dismiss` | `{ note?: ≤ 200 }` | `204`, `admin_actions` row `dismiss_report`. `404` unknown, `409 INVALID_STATE` not open. Nobody is emailed |
+| `POST /admin/users/{id}/suspend` | `{ reasonCode: report_reason, statement: 10…300 (NFC, trimmed, no contact details), reportId? }` | `204`. Report becomes `actioned`, `admin_actions` row `suspend` (`{reason: statement, reasonCode}`), outbox `account_suspended` (ground, statement, "a person reviewed this", how to appeal by reply: DSA Art. 17), sent to the suspended user. The tick sweep cancels future rides and bookings within a minute. `400`: `fields.userId = self`, `fields.statement = required \| too_short \| too_long \| contact_details`, `fields.reportId = mismatch`. `404` unknown user or report. `409 INVALID_STATE`: user not active, report not open. Two parallel suspends: one `204`, one `409` |
+| `POST /admin/users/{id}/unsuspend` | `{ note?: ≤ 200 }` | `204`, outbox `account_reinstated`. `404`, `409 INVALID_STATE` when not suspended. Cancelled items stay cancelled |
+| `GET /admin/users?status=suspended` | | `{ items: [{ user: AdminUserRef, suspendedAt, reasonCode \| null, statement \| null, adminFirstName \| null }] }` (≤ 100, newest first) |
+| `GET /admin/energy-prices` | | `{ fuels: [{ fuelType, unit, current: EnergyPrice, scheduled: EnergyPrice \| null }], history: EnergyPrice[] (last 50) }`. `EnergyPrice = { id, fuelType, priceMilli, consumptionCenti, unit, effectiveFrom, sourceNote, createdBy: {id, firstName} \| null, createdAt }` |
+| `POST /admin/energy-prices` | `{ fuelType, priceMilli, consumptionCenti, effectiveFrom?, sourceNote, overrideLargeChange?: boolean }` (no `unit`: electric is kWh, the rest litres) | `201 { item: EnergyPrice }`. One transaction under `pg_advisory_xact_lock`, `admin_actions` row `energy_price_added`. `400`: `priceMilli` 100…50 000 and `consumptionCenti` 100…5 000 (integers, `out_of_range`), `sourceNote` 1…200 (`required`, `too_long`), `fields.effectiveFrom = invalid \| past \| too_far \| not_after_latest` (default now to the minute, at most 5 minutes back and 30 days ahead, later than the latest row of the fuel). `409 LARGE_CHANGE` when price **or** consumption moves more than 30 % from the latest row (exactly 30 % passes), with `fields.priceMilli` and/or `fields.consumptionCenti = large_change`, unless `overrideLargeChange` (then `details.override = true`) |
+| `GET /admin/ops` | | `{ dbSizeMb, emailsToday, emailCap, outboxPending, outboxFailed24h, routePreviewsToday, errors24h, openReports, openDataRequests, overdueDeletions, cron: [{job, status, startedAt}] }`. `routePreviewsToday` is the sum of `ride-preview` rate-limit counters since UTC midnight (about the openrouteservice calls); `cron` comes from `app.admin_cron_runs()` and is empty where pg_cron is unreadable |
+| `GET /admin/errors?limit=50` | `limit` ≤ 100 | `{ items: [{ id, source, message, route, appVersion, createdAt }] }` (no stack, no user hash) |
 
-Until E7 ships, suspension is done by SQL: `select app.admin_suspend_user('<uuid>', 'reason');` (documented in deploy.md).
+Metric definitions and thresholds: e7-metrics-admin-spec §3 (counts come from STABLE SQL functions, rates and statuses from `_shared/domain/metrics.ts`, ADR 0034). There is **no admin export endpoint**: `GET /admin/users/{id}/export` was dropped (ADR 0031: `app.export_user_data` stays SQL-editor only, deploy.md §6). The SQL functions `app.admin_suspend_user` and `app.admin_unsuspend_user` keep working from the SQL editor (deploy.md); the 4-argument call shape `admin_suspend_user(user, reason, admin, report)` still resolves (the fifth argument `reason_code` defaults to `other`).
 
 ## 8. Telemetry
 
@@ -322,15 +326,21 @@ Implemented in E6 (ADR 0029, 0030): the order is (1) expire, (2) complete, (3) s
 
 ## 11. Analytics events written by the API (E7-1)
 
-| Event | Written by | Props (never coordinates or phones) |
+Server-side only, written in the transaction of the state change (`user_id` is the actor; NULL for a signed-out search), no SDK and no device storage, so no consent prompt (ADR 0032). The registry is `_shared/domain/events.ts` (`EVENT_NAMES`, `EventProps`, the builders and `eventPropsOk`). **Props are flat** (string, number, boolean or null), at most 12 keys of at most 40 characters, strings at most 80 characters, and no key named `lat`, `lng`, `lon`, `latitude`, `longitude`, `coordinates`, `point`, `geom`, `geometry`, `origin`, `destination`, `pickup`, `dropoff`, `phone`, `phoneE164`, `plate`, `email`, `details`, `note`, `firstName` or `name` (any letter case): the database refuses a row that breaks this (`analytics_events_props_ok`, `app.event_props_ok`).
+
+| Event | Written by | Props (the complete list) |
 |---|---|---|
-| `search_performed` | `POST /search` | `resultsCount`, `fromArea`, `toArea`, `windowMin`, `corridor` (`south|west|campus|other`) |
+| `search_performed` | `POST /search` (own statement, never fails the search) | `resultsCount`, `fromArea`, `toArea`, `windowMin`, `corridor` (`south\|west\|campus\|other`) |
 | `ride_published` | `POST /rides` | `rideId`, `distanceM`, `seats`, `isFree`, `originArea`, `destinationArea` |
-| `booking_requested` / `booking_confirmed` / `booking_rejected` / `booking_expired` | booking endpoints / tick | `bookingId`, `rideId`, `responseSeconds` (confirm/reject) |
-| `booking_cancelled` | cancel endpoints | `bookingId`, `by`, `late` |
-| `ride_completed` | complete job | `rideId`, `seats` |
-| `no_show_reported` | no-show endpoint | `bookingId`, `by` |
-| `rating_submitted` | ratings endpoint | `bookingId`, `stars` |
-| `report_submitted` | reports endpoint | `reason` |
+| `booking_requested` | `POST /bookings` | `bookingId`, `rideId`, `segmentM` |
+| `booking_confirmed` / `booking_rejected` | approve / reject | `bookingId`, `rideId`, `responseSeconds` |
+| `booking_expired` | tick step 1 | `bookingId`, `rideId` |
+| `booking_cancelled` | passenger cancel, ride cancel (`driver`), sweep, block and deletion (`system`) | `bookingId`, `rideId`, `by`, `late` |
+| `ride_completed` | tick step 2, outcome `completed` only | `rideId`, `seats` |
+| `no_show_reported` | no-show endpoint | `bookingId`, `rideId`, `by` |
+| `rating_submitted` | ratings endpoint | `bookingId`, `stars`, `tagCount`, `raterRole` |
+| `report_submitted` | reports endpoint | `reason`, `alsoBlock` |
+
+Other state changes are not analytics events: they are audited in their own tables (`admin_actions`, `consents`, `account_deletions`, `data_requests`, `reliability_events`). Admin writes are never analytics events (G2). Retention: `app.run_retention` deletes events older than 13 months; `app.scrub_account` nulls `user_id` on deletion; `app.export_user_data` includes the user's own events. Objection (GDPR Art. 21): by email to support, runbook in deploy.md (null the user's `user_id` in past events). Metrics outputs are aggregates; the only per-person output is the high-volume driver flag in `GET /admin/metrics` (id and first name, for ToS enforcement).
 
 Corridor classification lives in `_shared/domain/corridors.ts` (area-name sets per launch corridor from strategy §2).

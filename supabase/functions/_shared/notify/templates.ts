@@ -61,6 +61,21 @@ const date = (v: unknown): Date => {
 
 const SIBIU = 'Sibiu';
 
+const GROUND_KEYS = {
+  no_show: 'email.ground.no_show',
+  unsafe_driving: 'email.ground.unsafe_driving',
+  harassment: 'email.ground.harassment',
+  extra_money: 'email.ground.extra_money',
+  fake_profile: 'email.ground.fake_profile',
+  other: 'email.ground.other',
+} as const;
+
+/** The ToS ground for a report reason code; anything unknown reads as "other". */
+function groundLabel(code: unknown): string {
+  const key = typeof code === 'string' && Object.hasOwn(GROUND_KEYS, code) ? code : 'other';
+  return t(GROUND_KEYS[key as keyof typeof GROUND_KEYS]);
+}
+
 type Parts = { subject: string; body: string; path: string };
 
 function parts(input: TemplateInput, ctx: RenderContext): Parts {
@@ -186,8 +201,7 @@ function parts(input: TemplateInput, ctx: RenderContext): Parts {
       return {
         subject: t('email.report.subject', { reason: str(p.reason, 'other') }),
         body: t('email.report.body'),
-        // E7 adds the reports queue. Until then the link is the app root.
-        path: '',
+        path: '/admin/reports',
       };
     }
     case 'data_export_requested': {
@@ -205,6 +219,24 @@ function parts(input: TemplateInput, ctx: RenderContext): Parts {
         path: '',
       };
     }
+    case 'account_suspended': {
+      const p = input.payload;
+      return {
+        subject: t('email.suspended.subject'),
+        body: t('email.suspended.body', {
+          ground: groundLabel(p.reasonCode),
+          statement: str(p.statement, ''),
+        }),
+        // Nothing to open: a suspended account cannot use the app. The link is the app root.
+        path: '',
+      };
+    }
+    case 'account_reinstated':
+      return {
+        subject: t('email.reinstated.subject'),
+        body: t('email.reinstated.body'),
+        path: '',
+      };
     case 'data_export_ack':
       return {
         subject: t('email.dataAck.subject'),
@@ -222,7 +254,7 @@ export function renderEmail(input: TemplateInput, ctx: RenderContext): RenderedE
   const text = `${body}\n\n${openLine}\n\n--\n${footer}\n`;
   const html =
     `<!doctype html><html lang="en"><body style="font-family:system-ui,sans-serif;line-height:1.5">` +
-    `<p>${escapeHtml(body)}</p>` +
+    `<p>${escapeHtml(body).replace(/\n/g, '<br>')}</p>` +
     `<p><a href="${escapeHtml(link)}">${escapeHtml(t('email.openLabel'))}</a></p>` +
     `<p style="color:#666;font-size:12px">${escapeHtml(footer)}</p></body></html>`;
   return { subject, text, html, link };

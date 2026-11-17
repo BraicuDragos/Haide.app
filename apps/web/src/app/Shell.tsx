@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { Navigate, Outlet, useLocation } from 'react-router';
+import { Navigate, Outlet, useLocation, useMatches } from 'react-router';
 import { ApiError } from '@/api/client';
 import { useAuth } from '@/auth/AuthProvider';
 import { useMe } from '@/auth/hooks';
@@ -50,6 +50,10 @@ export function Shell() {
   const { status, signOut } = useAuth();
   const toast = useToast();
   const me = useMe();
+  // Routes that opt in with handle: { wide: true } (admin) drop the narrow phone column.
+  const wide = useMatches().some(
+    (m) => (m.handle as { wide?: boolean } | undefined)?.wide === true,
+  );
 
   // The account was deleted (here or on another device): drop the session and say why.
   const deleted = me.error instanceof ApiError && me.error.code === 'ACCOUNT_DELETED';
@@ -75,7 +79,9 @@ export function Shell() {
   }
 
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-xl flex-col bg-bg md:border-x md:border-(color:--hair)">
+    <div
+      className={`mx-auto flex min-h-dvh w-full flex-col bg-bg ${wide ? 'max-w-7xl' : 'max-w-xl md:border-x md:border-(color:--hair)'}`}
+    >
       <a
         href="#main"
         className="absolute top-2 left-2 z-50 -translate-y-24 rounded-full bg-text px-4 py-3 font-semibold text-bg focus:translate-y-0"

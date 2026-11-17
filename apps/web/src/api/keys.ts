@@ -24,4 +24,13 @@ export const keys = {
   user: (id: string) => ['users', id] as const,
   blocks: ['blocks'] as const,
   sharedTrip: (token: string) => ['share', token] as const,
+  admin: {
+    all: ['admin'] as const,
+    metrics: (week: string) => ['admin', 'metrics', week] as const,
+    reports: (status: string) => ['admin', 'reports', status] as const,
+    suspended: ['admin', 'suspended'] as const,
+    energy: ['admin', 'energy'] as const,
+    ops: ['admin', 'ops'] as const,
+    errors: ['admin', 'errors'] as const,
+  },
 } as const;

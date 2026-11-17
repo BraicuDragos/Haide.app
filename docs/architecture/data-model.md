@@ -176,6 +176,8 @@ Profile completeness (derived): `first_name AND phone_e164 AND photo_path IS NOT
 
 Seed v1 (effective 2026-11-15, from pricing.md §3): petrol 9810/700 l · diesel 10850/600 l · lpg 4760/900 l · hybrid 9810/500 l · electric 1400/1700 kWh.
 
+**Rules for a new version (E7-4, ADR 0035; enforced by `services/energyPrices.ts` and `_shared/domain/energyPrices.ts`, not by the table):** append-only and forward-only per fuel: `effective_from` is later than the latest row of that fuel (in force or scheduled), at most 5 minutes in the past and 30 days ahead, truncated to the minute. `price_milli` is 100 to 50 000 and `consumption_centi` 100 to 5 000. The unit follows the fuel type (electric is kWh). A change of more than 30 % in price **or** consumption from the latest row needs `overrideLargeChange` (integer math: exactly 30 % passes). `source_note` is required (1 to 200 characters). The insert runs under `pg_advisory_xact_lock(hashtext('app.energy_prices'))`, sets `created_by` to the admin and writes an `admin_actions` row `energy_price_added`. Published rides keep their `energy_price_id` and `rate_micro_per_km` snapshot; `energyPriceFor()` picks the row in force at publish time, so a scheduled row needs no job. A mistaken scheduled row is deleted in the SQL editor before it takes effect (deploy.md §6).
+
 ### 4.3 Rides (E2)
 
 **`route_previews`** (TTL 30 min): `id`, `driver_id`, `origin geometry(Point)`, `destination geometry(Point)`, `origin_label text`, `destination_label text` (1 to 80 chars, NOT NULL: the labels shown to the driver, copied to the ride on publish), `route geometry(LineString)` (simplified at 10 m on insert), `distance_m`, `duration_s`, `provider text` (`ors` or `fixture`), `created_at`, `expires_at` (`CHECK (expires_at > created_at)`). Indexes `(expires_at)` and `(driver_id)`.
@@ -290,7 +292,7 @@ UNIQUE `(booking_id, rater_id)`. Immutable (no UPDATE/DELETE grants). Index `(ra
 
 **`share_links`** (E5-6): `id`, `booking_id`, `token_hash bytea UNIQUE`, `created_by`, `expires_at`, `created_at`.
 
-**`admin_actions`**: `id`, `admin_id`, `action text`, `target_user_id`, `report_id NULL`, `details jsonb`, `created_at`. Kept 24 months.
+**`admin_actions`**: `id`, `admin_id`, `action text` (`CHECK IN ('suspend','unsuspend','dismiss_report','energy_price_added')`, extended in E7), `target_user_id`, `report_id NULL`, `details jsonb`, `created_at`. Kept 24 months. Details: `suspend {reason, reasonCode}`, `unsuspend {note}`, `dismiss_report {note}`, `energy_price_added {energyPriceId, fuelType, priceMilli, prevPriceMilli, consumptionCenti, prevConsumptionCenti, effectiveFrom, override}`.
 
 **Implemented in E5** (`20261120090000_trust_safety.sql`): `reports`, `admin_actions` (append-only: UPDATE and DELETE revoked from `haide_api`) and `share_links` as above, all with RLS enabled and no policies. **`ratings.visible_at timestamptz NOT NULL`** (ADR 0025) replaces the computed visibility above: existing rows were backfilled with `created_at`; a new rating gets `completed_at + 7 d`, or `now` when the counter-rating exists (and the counter-rating is pulled to `least(visible_at, now)`). Every summary counts `visible_at <= now` (`rating_count`, `rating_avg`), index `ratings_ratee_visible_idx (ratee_id, visible_at)`. `haide_api` holds `UPDATE (visible_at)` only: stars and tags stay immutable; `ratings_tags_allowed` checks the tag set. Further named constraints: `rides_completed_has_time`, `bookings_no_show_meta`, `bookings_final_only_completed`, `reports_not_self`, `reports_other_has_details`, `reports_resolved_meta`, and the unique partial index `reliability_events_booking_kind_uidx (booking_id, kind)`. **Accepted-seat invariant (replaces the E4 one):** `rides.seats_booked = count(bookings WHERE status IN ('confirmed','completed','no_show'))`. Completion and no-show never touch it; cancelling a `confirmed` booking lowers it; a ride cancel sets it to 0. Share links keep only `sha256(token)`. New functions, all with PUBLIC EXECUTE revoked: `app.complete_rides(timestamptz, timestamptz, integer)`, `app.admin_suspend_user(uuid, text, uuid, uuid)`, `app.admin_unsuspend_user(uuid, text, uuid)`.
 
@@ -308,6 +310,26 @@ UNIQUE `(booking_id, rater_id)`. Immutable (no UPDATE/DELETE grants). Index `(ra
 
 **Catalog guard (pgTAP 009):** `geometry_columns` for schema `app` must set-equal the classified inventory (`areas.geom`, `areas.centroid`, `places.geom`, `route_previews.{origin,destination,route}`, `rides.{origin,destination,route,route_utm}`, `bookings.{pickup,dropoff}`) and there must be no `geography` column: a new location column fails CI until it gets a retention rule.
 
+### 4.5c Metrics and admin (E7)
+
+**Implemented in E7** (`20261122090000_metrics_admin.sql`, ADRs 0032 to 0035). **No new tables.** Changes: `analytics_events_props_ok` (above, validated on existing rows); the `admin_actions.action` CHECK re-created with `energy_price_added`; indexes `rides_departure_idx (departure_at)` (all statuses), `bookings_requested_idx (requested_at)`, `admin_actions_created_idx (created_at)` (24-month purge), `admin_actions_report_idx (report_id)`.
+
+**Functions** (PUBLIC EXECUTE revoked on all; `search_path = app, extensions, pg_catalog`):
+
+| Function | Kind | Behaviour |
+|---|---|---|
+| `app.event_props_ok(jsonb) → boolean` | IMMUTABLE | the props guard above |
+| `app.admin_suspend_user(p_user_id, p_reason, p_admin_id default null, p_report_id default null, p_reason_code text default 'other') → boolean` | invoker | the 4-argument E5 version is **dropped** and re-created with the fifth argument (no ambiguous overload; calls with 2 to 4 arguments still resolve). `details = {reason, reasonCode}`; `reasonCode` must be a `report_reason` label (else `22023`) |
+| `app.admin_dismiss_report(p_report_id, p_admin_id, p_note) → boolean` | invoker | `open` to `dismissed` with `resolved_at/by`, and the `dismiss_report` audit row (target = the reported user); false when the report is not open |
+| `app.outbox_recipients(p_user_ids uuid[], p_include_suspended boolean)` | **SECURITY DEFINER** | new overload (no default): `status = 'active'`, or also `'suspended'` when the flag is true; never `deleted`. The dispatcher uses it for `ANY_STATUS_TEMPLATES` (`account_suspended`, `data_export_ack`; this also fixes the E6 acknowledgement for a suspended user) |
+| `app.metrics_week(p_week date, p_now timestamptz)` | STABLE, invoker | one row of counts for the ISO week (Europe/Bucharest, Monday 00:00 local to the next Monday 00:00 local, so a DST week is 167 or 169 hours). A non-Monday raises `22023` |
+| `app.metrics_match_by_corridor(p_week date)` | STABLE | `search_performed` per corridor, always the 4 corridors (zeros included); unknown or missing corridor counts as `other`; matched is `resultsCount` a number at least 1 |
+| `app.metrics_seats_series(p_last_week date, p_weeks int)` | STABLE | completed seats per week, zeros included, `p_weeks` 1 to 26 |
+| `app.metrics_high_volume_drivers(p_until timestamptz, p_min int)` | STABLE | drivers with more than `p_min` completed bookings on rides departing in `(p_until - 168 h, p_until]` (pricing section 7: 40) |
+| `app.admin_cron_runs()` | **SECURITY DEFINER** | last run per `cron.job` name from `cron.job_run_details`; never returns the command; empty when pg_cron is absent; EXECUTE for `haide_api` only |
+
+Counts of `metrics_week` (accepted booking = `decided_at IS NOT NULL AND status <> 'rejected'`): `completed_seats` (completed bookings on rides departing in the week), `rides_departed` and `rides_filled` (any status; at least one accepted booking), `requests`, `requests_decided`, `requests_expired`, `median_response_s` (`percentile_cont(0.5)` of `decided_at - requested_at`), `cohort_size` and `cohort_retained` (passengers whose FIRST completed booking departs in W-4, with another completed booking within 672 hours after it), `cohort_closed` (`p_now >= end(W-4) + 672 h`), `reports`, `rides_completed`, `accepted`, `cancelled_after_accept` (`cancelled_by` passenger or driver; `system` is a safety event, not reliability). Rates, rounding and status against target and kill are computed in `_shared/domain/metrics.ts` (ADR 0034).
+
 ### 4.6 Geo reference data (gazetteer, ADR 0014)
 
 **`areas`**: `id`, `name text` (e.g. "Hipodrom"), `locality text` (e.g. "Sibiu", "Cisnădie"), `kind text` (`suburb|quarter|neighbourhood|locality`), `geom geometry(MultiPolygon,4326)`, `centroid geometry(Point,4326)`, `osm_id bigint`. GiST `(geom)`. Built as Voronoi cells of OSM place nodes clipped to locality boundaries.
@@ -320,7 +342,7 @@ Autocomplete query: `WHERE search_text % unaccent(lower($q)) OR search_text LIKE
 
 **`outbox`**: `id`, `user_id`, `channel notify_channel`, `template text`, `payload jsonb` (labels, times, first names only: **no coordinates, phones or plates**), `status outbox_status`, `attempts smallint`, `send_after timestamptz`, `sent_at`, `last_error text`, `created_at`. Index `(send_after) WHERE status = 'pending'`. Purged after 30 days.
 
-**`analytics_events`**: `id bigint identity`, `name text`, `user_id uuid NULL` (nulled on deletion), `props jsonb`, `occurred_at`. Index `(name, occurred_at)`. Purged after 13 months. Allowed names: E7-1 list (enforced by a CHECK).
+**`analytics_events`**: `id bigint identity`, `name text`, `user_id uuid NULL` (nulled on deletion), `props jsonb`, `occurred_at`. Index `(name, occurred_at)`. Purged after 13 months. Allowed names: E7-1 list (enforced by a CHECK). **E7:** `CHECK analytics_events_props_ok (app.event_props_ok(props))`: a flat object, at most 12 keys of at most 40 characters, values string (at most 80 characters), number, boolean or null, and no key named like a location, contact detail or free text (`lat, lng, lon, latitude, longitude, coordinates, point, geom, geometry, origin, destination, pickup, dropoff, phone, phonee164, plate, email, details, note, firstname, name`, any letter case). The TypeScript mirror is `eventPropsOk()` in `_shared/domain/events.ts`.
 
 **`rate_limits`**: `key text`, `window_start timestamptz`, `count integer`, PK `(key, window_start)`. Purged hourly by `tick`.
 

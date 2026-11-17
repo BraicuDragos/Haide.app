@@ -31,13 +31,17 @@ const row = (id: string, over: Partial<OutboxRecord> = {}): OutboxRecord => ({
   ...over,
 });
 
-function fakeStore(rows: OutboxRecord[], opts: { sentToday?: number; missing?: string[] } = {}) {
+function fakeStore(
+  rows: OutboxRecord[],
+  opts: { sentToday?: number; missing?: string[]; suspended?: string[] } = {},
+) {
   const calls = {
     claim: [] as { now: Date; leaseUntil: Date; limit: number }[],
     sent: [] as string[],
     failed: [] as { id: string; error: string }[],
     rescheduled: [] as { id: string; at: Date; error: string }[],
     countSince: [] as Date[],
+    recipients: [] as { ids: string[]; includeSuspended: boolean | undefined }[],
   };
   const store: OutboxStore = {
     countSentSince(since) {
@@ -48,9 +52,13 @@ function fakeStore(rows: OutboxRecord[], opts: { sentToday?: number; missing?: s
       calls.claim.push({ now, leaseUntil, limit });
       return Promise.resolve(rows.slice(0, limit));
     },
-    recipients(ids) {
+    recipients(ids, includeSuspended) {
+      calls.recipients.push({ ids: [...ids], includeSuspended });
       const m = new Map<string, string>();
-      for (const id of ids) if (!opts.missing?.includes(id)) m.set(id, `${id}@example.com`);
+      for (const id of ids) {
+        if (opts.suspended?.includes(id) && !includeSuspended) continue;
+        if (!opts.missing?.includes(id)) m.set(id, `${id}@example.com`);
+      }
       return Promise.resolve(m);
     },
     markSent(id) {
@@ -276,5 +284,55 @@ describe('dispatchOutbox', () => {
     const { provider, sent } = fakeProvider();
     await run(store, provider, { supportTo: 'support@haide.ro' });
     expect(sent[0]).toMatchObject({ to: 'u-a@example.com', tag: 'data_export_ack' });
+  });
+});
+
+describe('E7: recipients of templates that must reach a suspended user', () => {
+  const suspendedRow = (id: string) =>
+    row(id, {
+      template: 'account_suspended',
+      payload: { reasonCode: 'other', statement: 'A statement of reasons.' },
+    });
+
+  it('looks up ANY_STATUS_TEMPLATES with includeSuspended and the rest without it', async () => {
+    const { store, calls } = fakeStore(
+      [
+        row('a'),
+        suspendedRow('b'),
+        row('c', {
+          template: 'data_export_ack',
+          payload: { requestId: 'r', dueBy: '2026-12-16T00:00:00.000Z' },
+        }),
+      ],
+      { suspended: ['u-b', 'u-c'] },
+    );
+    const { provider, sent } = fakeProvider();
+    const result = await run(store, provider);
+    expect(calls.recipients).toEqual([
+      { ids: ['u-a'], includeSuspended: undefined },
+      { ids: ['u-b', 'u-c'], includeSuspended: true },
+    ]);
+    expect(result.sent).toBe(3);
+    expect(sent.map((m) => m.to).sort()).toEqual([
+      'u-a@example.com',
+      'u-b@example.com',
+      'u-c@example.com',
+    ]);
+  });
+
+  it('a normal template to a suspended user has no recipient and fails', async () => {
+    const { store, calls } = fakeStore([row('a')], { suspended: ['u-a'] });
+    const { provider, sent } = fakeProvider();
+    const result = await run(store, provider);
+    expect(sent).toHaveLength(0);
+    expect(result.failed).toBe(1);
+    expect(calls.failed[0]?.error).toBe('no_recipient');
+  });
+
+  it('skips the second lookup when no row needs it', async () => {
+    const { store, calls } = fakeStore([row('a'), row('b')]);
+    await run(store, fakeProvider().provider);
+    expect(calls.recipients).toHaveLength(1);
+    expect(calls.recipients[0]?.includeSuspended).toBeUndefined();
   });
 });

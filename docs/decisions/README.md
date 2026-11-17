@@ -36,3 +36,7 @@ Every significant decision (business, brand, UX, architecture) gets a file
 | [0029](0029-account-deletion-immediate-tombstone-and-purge-queue.md) | Account deletion: immediate tombstone in one transaction, external purge retried by the tick | Architecture | Proposed | software-architect |
 | [0030](0030-retention-in-tick-coarsening-and-definer-purge.md) | Retention inside the tick: coarsening every minute, row purges through one SECURITY DEFINER function | Architecture | Proposed | software-architect |
 | [0031](0031-data-access-requests-by-email-and-sql-export.md) | Data access requests: in-app request by email, export by an admin-only SQL function | Architecture | Proposed | software-architect |
+| [0032](0032-product-events-service-side-flat-props-13-month-purge.md) | Product events: service-side in the state-change transaction, flat allow-listed props guarded by a CHECK, 13-month purge | Architecture | Proposed | software-architect |
+| [0033](0033-admin-role-profile-flag-and-audited-sql-actions.md) | Admin role: profile flag granted by SQL, admin area in the same PWA, every write audited | Architecture | Proposed | software-architect |
+| [0034](0034-metrics-computed-on-read-by-sql-functions.md) | Metrics computed on read by SQL functions from domain tables; events only for search | Architecture | Proposed | software-architect |
+| [0035](0035-energy-price-versions-append-only-with-30-percent-guard.md) | Energy price versions: append-only, forward-only timeline, ±30 % guard with audited override | Architecture | Proposed | software-architect |

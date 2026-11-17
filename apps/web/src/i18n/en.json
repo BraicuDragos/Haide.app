@@ -663,5 +663,9 @@
   "consent.update.delete": "I’d rather delete my account",
   "consent.update.signOut": "Sign out",
   "policy.toc": "Contents",
-  "policy.loadError": "We couldn’t load this page. Check your connection and try again."
+  "policy.loadError": "We couldn’t load this page. Check your connection and try again.",
+  "settings.admin": "Admin",
+  "settings.admin.open": "Metrics, reports and prices",
+  "errors.LARGE_CHANGE": "This is a large change from the current price. Confirm it to save.",
+  "errors.FORBIDDEN": "You don’t have access to this page."
 }

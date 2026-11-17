@@ -1,5 +1,10 @@
 import type { Clock } from '../domain/clock.ts';
-import { isOutboxTemplate, type OutboxPayloadMap, type OutboxTemplate } from '../domain/outbox.ts';
+import {
+  isAnyStatusTemplate,
+  isOutboxTemplate,
+  type OutboxPayloadMap,
+  type OutboxTemplate,
+} from '../domain/outbox.ts';
 import { sha256Hex } from '../hash.ts';
 import type { Logger } from '../log.ts';
 import type { EmailProvider, SendResult } from '../providers/email/types.ts';
@@ -40,8 +45,11 @@ export interface OutboxStore {
   countSentSince(since: Date): Promise<number>;
   /** Claims up to `limit` due pending rows: attempts + 1, send_after = leaseUntil, FOR UPDATE SKIP LOCKED. */
   claim(now: Date, leaseUntil: Date, limit: number): Promise<OutboxRecord[]>;
-  /** user id to email address, active users only. Missing ids have no recipient. */
-  recipients(userIds: readonly string[]): Promise<Map<string, string>>;
+  /**
+   * user id to email address. Active users only, or active and suspended ones when
+   * `includeSuspended` is true (ANY_STATUS_TEMPLATES only). Deleted users never. Missing ids have no recipient.
+   */
+  recipients(userIds: readonly string[], includeSuspended?: boolean): Promise<Map<string, string>>;
   markSent(id: string, at: Date): Promise<void>;
   markFailed(id: string, error: string): Promise<void>;
   reschedule(id: string, sendAfter: Date, error: string): Promise<void>;
@@ -98,7 +106,17 @@ export async function dispatchOutbox(deps: DispatchDeps): Promise<DispatchResult
   const rows = await store.claim(now, leaseUntil, limit);
   if (rows.length === 0) return result;
 
-  const emails = await store.recipients([...new Set(rows.map((r) => r.userId))]);
+  // Two lookups: most mail goes to active users only; a suspension notice and the data request
+  // acknowledgement also reach a suspended one (E7). The second call is skipped when unused.
+  const anyStatusIds = [
+    ...new Set(rows.filter((r) => isAnyStatusTemplate(r.template)).map((r) => r.userId)),
+  ];
+  const activeIds = [
+    ...new Set(rows.filter((r) => !isAnyStatusTemplate(r.template)).map((r) => r.userId)),
+  ];
+  const activeEmails = activeIds.length > 0 ? await store.recipients(activeIds) : new Map();
+  const anyEmails =
+    anyStatusIds.length > 0 ? await store.recipients(anyStatusIds, true) : new Map();
 
   const handle = async (row: OutboxRecord): Promise<void> => {
     if (!isOutboxTemplate(row.template)) {
@@ -107,7 +125,10 @@ export async function dispatchOutbox(deps: DispatchDeps): Promise<DispatchResult
       return;
     }
     // Staff-facing templates go to the support mailbox, not to the user the row is about (E6, ADR 0031).
-    const to = row.template === 'data_export_requested' ? deps.supportTo : emails.get(row.userId);
+    const to =
+      row.template === 'data_export_requested'
+        ? deps.supportTo
+        : (isAnyStatusTemplate(row.template) ? anyEmails : activeEmails).get(row.userId);
     if (!to) {
       await store.markFailed(row.id, 'no_recipient');
       result.failed++;

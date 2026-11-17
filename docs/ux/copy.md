@@ -911,3 +911,179 @@ Policy text (v1.1, effective 21 November 2026) lives in the content files named 
 | `policy.loadError` | We couldn’t load this page. Check your connection and try again. |
 
 Notes: the consent update mode (1.3b) shows no age checkbox; the button reuses `consent.cta`. `settings.data.pending` is shown in the Request row after a request and in the toast when the server returns an older open request (dates as "21 November 2026"). `errors.ACCOUNT_DELETED` was reworded from "has been deleted" to match the E6 spec. `delete.*`, `settings.data`, `settings.data.toast` and `settings.delete` are unchanged from sections 30 and 31; `settings.delete` is also the label of the Suspended screen link.
+
+
+## 39. E7 additions (metrics and admin)
+
+Admin screens are English only and live in the `admin.*` namespace (screens 7.0 to 7.5 of the E7 spec). Metric names are verbatim from mvp-scope section 4. Statuses always carry an icon and words. Notes: `admin.energy.largeChange` is the live warning and the server `LARGE_CHANGE` answer shows the same box; `admin.suspend.statementHint` is the DSA reminder that the person reads the statement; destructive confirmation lives in a sheet, never one tap.
+
+| Key | English |
+|---|---|
+| `settings.admin` | Admin |
+| `settings.admin.open` | Metrics, reports and prices |
+| `admin.title` | Admin |
+| `admin.loading` | Loading the latest numbers |
+| `admin.noValue` | No data |
+| `admin.deletedUser` | Deleted account |
+| `admin.nav.label` | Admin sections |
+| `admin.nav.metrics` | Metrics |
+| `admin.nav.reports` | Reports |
+| `admin.nav.suspended` | Suspended |
+| `admin.nav.energy` | Energy prices |
+| `admin.nav.ops` | Ops |
+| `admin.status.onTarget` | On target |
+| `admin.status.between` | Watch |
+| `admin.status.belowKill` | Below kill line |
+| `admin.status.noData` | No data yet |
+| `admin.target.higher` | Target {target} or more, kill line below {kill} |
+| `admin.target.lower` | Target below {target}, kill line above {kill} |
+| `admin.n` | {n} {what} |
+| `admin.n.searches` | searches |
+| `admin.n.rides` | rides |
+| `admin.n.requests` | requests |
+| `admin.n.passengers` | passengers in the cohort |
+| `admin.n.bookings` | accepted bookings |
+| `admin.corridor.south` | South |
+| `admin.corridor.west` | West |
+| `admin.corridor.campus` | Campus |
+| `admin.corridor.other` | Other |
+| `admin.metrics.title` | Metrics |
+| `admin.metrics.prevWeek` | Previous week |
+| `admin.metrics.nextWeek` | Next week |
+| `admin.metrics.thisWeek` | This week |
+| `admin.metrics.partial` | Partial week: this week is not over yet, so the numbers can still change. |
+| `admin.metrics.northStar` | Completed shared seats per week |
+| `admin.metrics.showTable` | Show as table |
+| `admin.metrics.seriesCaption` | Completed shared seats for the last 12 weeks |
+| `admin.metrics.week` | Week |
+| `admin.metrics.seats` | Seats |
+| `admin.metrics.matchRate` | Search match rate (launch corridors) |
+| `admin.metrics.matchOverall` | All searches: {value} |
+| `admin.metrics.fillRate` | Ride fill rate |
+| `admin.metrics.response` | Median request response time |
+| `admin.metrics.retention` | 4-week passenger retention |
+| `admin.metrics.cohort` | Cohort: first ride in {week} |
+| `admin.metrics.provisional` | Provisional: the 28-day window is still open. |
+| `admin.metrics.reports` | Reports per 100 completed rides |
+| `admin.metrics.cancellation` | Cancellation rate |
+| `admin.metrics.corridors` | Match rate by corridor |
+| `admin.metrics.corridorsCaption` | Search match rate and number of searches per corridor |
+| `admin.metrics.corridor` | Corridor |
+| `admin.metrics.flags` | High-volume drivers |
+| `admin.metrics.flagsEmpty` | No driver is over the limit this week. |
+| `admin.metrics.flagLine` | {n} completed rides in 7 days |
+| `admin.reports.title` | Reports |
+| `admin.reports.filter` | Show reports |
+| `admin.reports.tab.open` | Open |
+| `admin.reports.tab.dismissed` | Dismissed |
+| `admin.reports.tab.actioned` | Actioned |
+| `admin.reports.tab.all` | All |
+| `admin.reports.status.open` | Open |
+| `admin.reports.status.dismissed` | Dismissed |
+| `admin.reports.status.actioned` | Actioned |
+| `admin.reports.cardLabel` | Report about {name}: {reason} |
+| `admin.reports.reported` | Reported |
+| `admin.reports.reporter` | Reported by |
+| `admin.reports.ride` | Ride |
+| `admin.reports.counts` | {open} open, {d90} in 90 days |
+| `admin.reports.since` | (member since {date}) |
+| `admin.reports.more` | Show more |
+| `admin.reports.less` | Show less |
+| `admin.reports.loadMore` | Load more reports |
+| `admin.reports.historyLine` | {action} by {who} on {date} |
+| `admin.reports.empty.title` | No reports here |
+| `admin.reports.empty.open` | Nothing is waiting for review. New reports appear here. |
+| `admin.reports.empty.other` | No reports match this filter. |
+| `admin.action.suspend` | Suspended |
+| `admin.action.unsuspend` | Unsuspended |
+| `admin.action.dismiss_report` | Report dismissed |
+| `admin.action.energy_price_added` | Energy price added |
+| `admin.action.other` | Action |
+| `admin.action.dismissBtn` | Dismiss report |
+| `admin.action.suspendBtn` | Suspend account |
+| `admin.action.unsuspendBtn` | Unsuspend account |
+| `admin.sheet.cancel` | Cancel |
+| `admin.sheet.dismiss.title` | Dismiss this report? |
+| `admin.sheet.dismiss.body` | No action is taken against {name} and nobody is emailed. The report stays in the list as dismissed. |
+| `admin.sheet.dismiss.confirm` | Dismiss report |
+| `admin.sheet.suspend.title` | Suspend {name}? |
+| `admin.sheet.suspend.body` | A person reviewed this, so say why. {name} gets an email with the reason and can appeal by replying. Their upcoming rides and bookings are cancelled within a minute. |
+| `admin.sheet.suspend.confirm` | Suspend account |
+| `admin.sheet.unsuspend.title` | Unsuspend {name}? |
+| `admin.sheet.unsuspend.body` | {name} can use Haide again and gets an email. Rides and bookings that were cancelled stay cancelled. |
+| `admin.sheet.unsuspend.confirm` | Unsuspend account |
+| `admin.note` | Note for the record |
+| `admin.suspend.reason` | Reason |
+| `admin.suspend.statement` | Statement |
+| `admin.suspend.statementHint` | The person will see this. Do not name who reported them. |
+| `admin.suspend.statementError` | Write between {min} and {max} characters. |
+| `admin.suspend.counter` | {n} of {max} characters |
+| `admin.userStatus.active` | Active |
+| `admin.userStatus.suspended` | Suspended |
+| `admin.userStatus.deleted` | Deleted |
+| `admin.toast.dismissed` | Report dismissed |
+| `admin.toast.suspended` | Account suspended |
+| `admin.toast.unsuspended` | Account unsuspended |
+| `admin.toast.stale` | Someone already changed this. Showing the latest. |
+| `admin.toast.energyAdded` | Energy price added |
+| `admin.suspended.title` | Suspended accounts |
+| `admin.suspended.empty.title` | No one is suspended |
+| `admin.suspended.empty.body` | Suspended accounts appear here with their reason, so you can lift a suspension. |
+| `admin.suspended.ground` | Reason |
+| `admin.suspended.since` | Suspended on |
+| `admin.suspended.by` | By |
+| `admin.energy.title` | Energy prices |
+| `admin.energy.since` | In effect since {date} |
+| `admin.energy.scheduled` | Scheduled: {price} from {date} |
+| `admin.energy.formTitle` | Add a price |
+| `admin.energy.fuel` | Fuel |
+| `admin.energy.hybridHint` | Hybrid cars use the petrol price. Add a hybrid version too. |
+| `admin.energy.price` | Price (RON per {unit}) |
+| `admin.energy.priceHint` | Up to 3 decimals, for example 7.234. |
+| `admin.energy.priceErr` | Enter a price between 0.100 and 50.000. |
+| `admin.energy.consumption` | Consumption ({unit} per 100 km) |
+| `admin.energy.consumptionHint` | Up to 2 decimals, for example 6.50. |
+| `admin.energy.consumptionErr` | Enter a consumption between 1.00 and 50.00. |
+| `admin.energy.change` | Change from the latest price: {price}. Consumption: {consumption}. |
+| `admin.energy.largeChange` | This is a {pct}% change from the current price. Check the number before you save. |
+| `admin.energy.override` | I confirm this change is correct |
+| `admin.energy.overrideRequired` | Confirm the change to save it. |
+| `admin.energy.when` | When it starts |
+| `admin.energy.now` | Apply now |
+| `admin.energy.later` | Pick a date |
+| `admin.energy.at` | Starts on |
+| `admin.energy.atHint` | Bucharest time, within the next 30 days. |
+| `admin.energy.atErr` | Choose a date and time. |
+| `admin.energy.err.past` | Choose a time that is not in the past. |
+| `admin.energy.err.tooFar` | Choose a date within the next 30 days. |
+| `admin.energy.err.notAfterLatest` | Choose a time after the latest price of this fuel. |
+| `admin.energy.source` | Source |
+| `admin.energy.sourceHint` | Where the number comes from, up to 200 characters. |
+| `admin.energy.sourceErr` | Add the source of this price. |
+| `admin.energy.save` | Save price |
+| `admin.energy.history` | History |
+| `admin.energy.historyCaption` | The last 50 energy price versions |
+| `admin.energy.col.from` | From |
+| `admin.energy.col.price` | Price |
+| `admin.energy.col.cons` | Consumption |
+| `admin.energy.col.by` | Added by |
+| `admin.ops.title` | Ops |
+| `admin.ops.db` | Database size |
+| `admin.ops.emails` | Emails today and daily cap |
+| `admin.ops.outbox` | Emails waiting |
+| `admin.ops.failed` | Emails failed in 24 h |
+| `admin.ops.previews` | Route previews today |
+| `admin.ops.errors` | Errors in 24 h |
+| `admin.ops.reports` | Open reports |
+| `admin.ops.data` | Open data requests |
+| `admin.ops.deletions` | Overdue deletions |
+| `admin.ops.cron` | Scheduled jobs, last run |
+| `admin.ops.cronEmpty` | No job runs recorded yet. |
+| `admin.ops.recentErrors` | Recent errors |
+| `admin.ops.errorsFailed` | We couldn’t load the errors. Try again in a moment. |
+| `admin.ops.noErrors.title` | No errors |
+| `admin.ops.noErrors.body` | Nothing has gone wrong recently. |
+| `errors.LARGE_CHANGE` | This is a large change from the current price. Confirm it to save. |
+| `errors.FORBIDDEN` | You don’t have access to this page. |
+| `admin.metrics.rate` | Match rate |
+| `admin.metrics.searchesCol` | Searches |

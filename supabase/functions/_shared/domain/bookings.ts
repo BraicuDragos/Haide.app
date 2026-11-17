@@ -415,51 +415,13 @@ export function rideCancelledRows(
   );
 }
 
-// ---- analytics (no coordinates, phones or plates: conventions §6) ---------------------------------------------------
+// ---- analytics: the builders live in events.ts (E7), re-exported for compatibility ----------------------
 
-export type AnalyticsEvent = {
-  name:
-    | 'booking_requested'
-    | 'booking_confirmed'
-    | 'booking_rejected'
-    | 'booking_expired'
-    | 'booking_cancelled'
-    | 'ride_completed'
-    | 'no_show_reported'
-    | 'rating_submitted'
-    | 'report_submitted';
-  /** The actor. */
-  userId: string;
-  props: Record<string, string | number | boolean>;
-  at: Date;
-};
-
-export const bookingRequestedEvent = (
-  passengerId: string,
-  p: { bookingId: string; rideId: string; segmentM: number },
-  at: Date,
-): AnalyticsEvent => ({ name: 'booking_requested', userId: passengerId, props: p, at });
-
-export const bookingConfirmedEvent = (
-  driverId: string,
-  p: { bookingId: string; rideId: string; responseSeconds: number },
-  at: Date,
-): AnalyticsEvent => ({ name: 'booking_confirmed', userId: driverId, props: p, at });
-
-export const bookingRejectedEvent = (
-  driverId: string,
-  p: { bookingId: string; rideId: string; responseSeconds: number },
-  at: Date,
-): AnalyticsEvent => ({ name: 'booking_rejected', userId: driverId, props: p, at });
-
-export const bookingExpiredEvent = (
-  passengerId: string,
-  p: { bookingId: string; rideId: string },
-  at: Date,
-): AnalyticsEvent => ({ name: 'booking_expired', userId: passengerId, props: p, at });
-
-export const bookingCancelledEvent = (
-  actorId: string,
-  p: { bookingId: string; rideId: string; by: 'passenger' | 'driver' | 'system'; late: boolean },
-  at: Date,
-): AnalyticsEvent => ({ name: 'booking_cancelled', userId: actorId, props: p, at });
+export {
+  bookingCancelledEvent,
+  bookingConfirmedEvent,
+  bookingExpiredEvent,
+  bookingRejectedEvent,
+  bookingRequestedEvent,
+  type AnalyticsEvent,
+} from './events.ts';

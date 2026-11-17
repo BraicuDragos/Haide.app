@@ -7,3 +7,4 @@ export * from './search.ts';
 export * from './bookings.ts';
 export * from './safety.ts';
 export * from './privacy.ts';
+export * from './admin.ts';
