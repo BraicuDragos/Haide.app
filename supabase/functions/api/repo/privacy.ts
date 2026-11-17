@@ -91,27 +91,30 @@ export async function selectDueDeletions(
     limit ${limit}`;
 }
 
-/** The avatar object is gone. The path is cleared so no pointer to the photo stays in the database. */
-export async function markStorageDone(sql: Db, userId: string, now: Date): Promise<void> {
-  await sql`
-    update app.account_deletions set storage_done_at = ${now}, photo_path = null
-    where user_id = ${userId} and storage_done_at is null`;
+/**
+ * The avatar object is gone. The path is cleared so no pointer to the photo stays in the database.
+ * One statement keeps the table check (completed_at is set exactly when both sides are done): when the
+ * auth side is already done, this update closes the row too. Returns true when it did.
+ */
+export async function markStorageDone(sql: Db, userId: string, now: Date): Promise<boolean> {
+  const rows = await sql<{ completed_at: Ts | null }[]>`
+    update app.account_deletions set storage_done_at = ${now}, photo_path = null,
+      completed_at = case when auth_done_at is not null then ${now}::timestamptz end,
+      last_error = case when auth_done_at is not null then null else last_error end
+    where user_id = ${userId} and storage_done_at is null and completed_at is null
+    returning completed_at`;
+  return rows[0]?.completed_at !== undefined && rows[0].completed_at !== null;
 }
 
-export async function markAuthDone(sql: Db, userId: string, now: Date): Promise<void> {
-  await sql`
-    update app.account_deletions set auth_done_at = ${now}
-    where user_id = ${userId} and auth_done_at is null`;
-}
-
-/** Both sides are done: closes the row. Returns false when something is still open. */
-export async function completeDeletion(sql: Db, userId: string, now: Date): Promise<boolean> {
-  const rows = await sql<{ user_id: string }[]>`
-    update app.account_deletions set completed_at = ${now}, last_error = null
-    where user_id = ${userId} and completed_at is null
-      and storage_done_at is not null and auth_done_at is not null
-    returning user_id`;
-  return rows.length === 1;
+/** The auth user is gone. Symmetric to markStorageDone: closes the row when the storage side is done. */
+export async function markAuthDone(sql: Db, userId: string, now: Date): Promise<boolean> {
+  const rows = await sql<{ completed_at: Ts | null }[]>`
+    update app.account_deletions set auth_done_at = ${now},
+      completed_at = case when storage_done_at is not null then ${now}::timestamptz end,
+      last_error = case when storage_done_at is not null then null else last_error end
+    where user_id = ${userId} and auth_done_at is null and completed_at is null
+    returning completed_at`;
+  return rows[0]?.completed_at !== undefined && rows[0].completed_at !== null;
 }
 
 /** One failed run: attempts + 1, the scrubbed error and the next attempt time. */

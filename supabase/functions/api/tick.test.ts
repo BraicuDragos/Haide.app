@@ -182,10 +182,8 @@ describe('POST /internal/tick', () => {
                 },
               ]
             : undefined,
-        (q) =>
-          q.text.includes('set completed_at =')
-            ? [{ user_id: '7d6f5e4c-3b2a-4a19-8e07-1f2a3b4c5d6e' }]
-            : undefined,
+        (q) => (q.text.includes('set storage_done_at =') ? [{ completed_at: null }] : undefined),
+        (q) => (q.text.includes('set auth_done_at =') ? [{ completed_at: new Date() }] : undefined),
       ]),
       {},
       { clock: fixedClock('2026-11-16T05:31:00Z') },

@@ -40,9 +40,22 @@ function setup(row: Row | null, extra: Handler[] = []) {
             ...row,
           },
         ];
+  // Mirrors the single-statement mark* UPDATEs: the one that finishes the second side returns a
+  // completed_at, the first returns null (the table check forbids anything else).
+  const done = { storage: Boolean(row?.storage_done_at), auth: Boolean(row?.auth_done_at) };
   const { sql, calls } = fakeSql([
     (q) => (q.text.startsWith('select user_id, requested_at, photo_path') ? open : undefined),
-    (q) => (q.text.includes('set completed_at =') ? [{ user_id: USER }] : undefined),
+    (q) => {
+      if (q.text.includes('set storage_done_at =')) {
+        done.storage = true;
+        return [{ completed_at: done.auth ? NOW : null }];
+      }
+      if (q.text.includes('set auth_done_at =')) {
+        done.auth = true;
+        return [{ completed_at: done.storage ? NOW : null }];
+      }
+      return undefined;
+    },
     ...extra,
   ]);
   const store = fakeStorage();
@@ -67,9 +80,19 @@ describe('purgeAccount', () => {
     expect(auth.deleted).toEqual([USER]);
     const storageDone = find(calls, 'set storage_done_at =') as Query;
     expect(storageDone.text).toContain('photo_path = null'); // no pointer to the photo stays
-    expect(find(calls, 'set auth_done_at =')).toBeDefined();
-    expect(find(calls, 'set completed_at =')).toBeDefined();
+    const authDone = find(calls, 'set auth_done_at =') as Query;
+    expect(authDone).toBeDefined();
+    // one statement per side keeps the table check: completed_at is set by the UPDATE that finishes the row
+    expect(authDone.text).toContain('completed_at = case when storage_done_at is not null');
+    expect(storageDone.text).toContain('completed_at = case when auth_done_at is not null');
+    expect(find(calls, 'set completed_at =')).toBeUndefined();
     expect(find(calls, 'set attempts =')).toBeUndefined();
+  });
+
+  it('a retry whose storage side is open and auth side done completes through the storage update', async () => {
+    const { deps, auth } = setup({ auth_done_at: NOW, photo_path: null });
+    expect(await purgeAccount(deps, USER)).toBe(true);
+    expect(auth.deleted).toHaveLength(0);
   });
 
   it('skips Storage when the user had no photo', async () => {
@@ -86,7 +109,6 @@ describe('purgeAccount', () => {
     expect(store.removedStrict).toEqual([PHOTO]); // storage succeeded and is recorded
     expect(find(calls, 'set storage_done_at =')).toBeDefined();
     expect(find(calls, 'set auth_done_at =')).toBeUndefined();
-    expect(find(calls, 'set completed_at =')).toBeUndefined();
     const failure = find(calls, 'set attempts =') as Query;
     expect(failure.values[0]).toEqual(new Date('2026-11-16T05:01:00Z'));
     expect(String(failure.values[1])).toBe('auth: auth down');
@@ -99,7 +121,8 @@ describe('purgeAccount', () => {
     expect(auth.deleted).toEqual([USER]);
 
     const second = setup({ storage_done_at: NOW, auth_done_at: NOW, photo_path: null });
-    expect(await purgeAccount(second.deps, USER)).toBe(true);
+    // both sides done but the row open cannot exist (table check): nothing is repeated, nothing completes
+    expect(await purgeAccount(second.deps, USER)).toBe(false);
     expect(second.auth.deleted).toHaveLength(0);
   });
 

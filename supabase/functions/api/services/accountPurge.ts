@@ -2,7 +2,6 @@ import { nextPurgeAttemptAt } from '../../_shared/domain/privacy.ts';
 import { PURGE_BATCH } from '../../_shared/domain/rules.ts';
 import { scrubText } from '../../_shared/scrub.ts';
 import {
-  completeDeletion,
   markAuthDone,
   markStorageDone,
   recordPurgeFailure,
@@ -14,7 +13,8 @@ import type { Deps } from '../types.ts';
 /**
  * The part of an account deletion that happens after the database transaction (E6, ADR 0029): remove
  * the avatar object from Storage and the auth user from Supabase Auth. Each side is its own step with
- * its own `*_done_at`; the row is completed only when both are done. A failed step records the error
+ * its own `*_done_at`; the step that finishes the second side sets `completed_at` in the same UPDATE
+ * (the table check forbids both sides done with completed_at null). A failed step records the error
  * (scrubbed, 200 characters) and the next attempt: 1 min, 5 min, 30 min, 2 h, 12 h, then daily.
  * A step that already succeeded is not repeated. Never throws for an outside failure.
  */
@@ -39,11 +39,12 @@ export async function purgeAccount(deps: PurgeDeps, userId: string): Promise<boo
   const failures: string[] = [];
   const steps: string[] = [];
   const reasons: string[] = [];
+  let completed = false; // set by the mark* statement that closes the row
 
   if (!row.storage_done_at) {
     try {
       if (row.photo_path) await storage.removeStrict(row.photo_path);
-      await markStorageDone(sql, userId, clock.now());
+      completed = (await markStorageDone(sql, userId, clock.now())) || completed;
     } catch (e) {
       failures.push(`storage: ${e instanceof Error ? e.message : String(e)}`);
       steps.push('storage');
@@ -54,7 +55,7 @@ export async function purgeAccount(deps: PurgeDeps, userId: string): Promise<boo
   if (!row.auth_done_at) {
     try {
       await authAdmin.deleteUser(userId);
-      await markAuthDone(sql, userId, clock.now());
+      completed = (await markAuthDone(sql, userId, clock.now())) || completed;
     } catch (e) {
       failures.push(`auth: ${e instanceof Error ? e.message : String(e)}`);
       steps.push('auth');
@@ -78,7 +79,7 @@ export async function purgeAccount(deps: PurgeDeps, userId: string): Promise<boo
     });
     return false;
   }
-  return await completeDeletion(sql, userId, clock.now());
+  return completed;
 }
 
 /** Tick step 7: the due deletions, at most PURGE_BATCH per tick. Returns how many were completed. */

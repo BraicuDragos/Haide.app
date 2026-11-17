@@ -134,7 +134,9 @@ function privacyDb(o: Opts = {}) {
     if (t.includes("update app.bookings set status = 'cancelled'") && t.includes('where id ='))
       return [{ id: MY_BOOKING }];
     if (t.startsWith('select user_id, requested_at, photo_path')) return deletion ? [deletion] : [];
-    if (t.includes('set completed_at =')) return [{ user_id: USER }];
+    // one UPDATE per side; the second one to finish returns the completed_at it set
+    if (t.includes('set storage_done_at =')) return [{ completed_at: null }];
+    if (t.includes('set auth_done_at =')) return [{ completed_at: new Date(NOW) }];
     if (t.includes('from app.data_requests')) return o.dataRequest ? [o.dataRequest] : [];
     if (t.startsWith('insert into app.data_requests')) {
       return [{ id: REQUEST, requested_at: new Date(NOW), fulfilled_at: null }];
@@ -242,8 +244,8 @@ describe('DELETE /me', () => {
     // after the commit: storage and auth, then the row is closed
     expect(removedStrict).toEqual([PHOTO]);
     expect(authDeleted).toEqual([USER]);
-    expect(has(calls, 'set completed_at =')).toBe(true);
-    expect(idx(calls, 'set completed_at =')).toBeGreaterThan(idx(calls, 'app.scrub_account'));
+    expect(has(calls, 'set auth_done_at =')).toBe(true);
+    expect(idx(calls, 'set auth_done_at =')).toBeGreaterThan(idx(calls, 'app.scrub_account'));
   });
 
   it('is idempotent: an account that is already deleted answers 204 and is not scrubbed again', async () => {
@@ -317,7 +319,7 @@ describe('DELETE /me', () => {
     expect(failure.values[0]).toEqual(new Date('2026-11-16T05:01:00Z')); // 1 minute
     expect(String(failure.values[1])).toContain('storage:');
     expect(String(failure.values[1])).toContain('auth:');
-    expect(has(calls, 'set completed_at =')).toBe(false);
+    expect(has(calls, 'set auth_done_at =')).toBe(false);
   });
 
   it('does not touch a deleted row twice: a second purge sees no open row', async () => {
