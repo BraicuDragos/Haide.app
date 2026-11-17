@@ -94,6 +94,14 @@ const ALL: TemplateInput[] = [
       by: 'system',
     },
   },
+  {
+    template: 'data_export_requested',
+    payload: { requestId: 'req1', userId: 'u1', requestedAt: '2026-11-16T07:40:00.000Z' },
+  },
+  {
+    template: 'data_export_ack',
+    payload: { requestId: 'req1', dueBy: '2026-12-16T07:40:00.000Z' },
+  },
 ];
 
 const at = (i: number): TemplateInput => ALL[i] as TemplateInput;
@@ -162,6 +170,17 @@ describe('renderEmail', () => {
     expect(renderEmail(at(10), ctx).subject).toBe('New safety report: unsafe_driving');
     expect(renderEmail(at(11), ctx).subject).toBe('The 09:30 ride with Radu was cancelled');
     expect(renderEmail(at(11), ctx).text).not.toMatch(/suspend|blocked|report/i);
+  });
+
+  it('E6 templates: the support mail names the user id and the SQL, the ack promises 30 days', () => {
+    const req = renderEmail(at(12), ctx);
+    expect(req.subject).toBe('Data request req1');
+    expect(req.text).toContain("select app.export_user_data('u1');");
+    expect(req.text).toContain('Due by 2026-12-16.');
+    const ack = renderEmail(at(13), ctx);
+    expect(ack.subject).toBe('We got your request for a copy of your data');
+    expect(ack.text).toContain('within 30 days');
+    expect(ack.link).toBe('https://haide.ro/profile');
   });
 
   it('never carries a coordinate, phone, plate or email address', () => {

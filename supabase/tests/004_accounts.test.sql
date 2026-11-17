@@ -101,11 +101,11 @@ select is(
 
 -- Seed legal documents -----------------------------------------------------------------------------
 select is(
-  (select version from app.legal_documents where kind = 'terms' and published_at <= now()
-    order by published_at desc limit 1), '1.0', 'terms 1.0 is current');
+  (select version from app.legal_documents where kind = 'terms' and published_at <= '2026-11-20T00:00:00Z'
+    order by published_at desc limit 1), '1.0', 'terms 1.0 is current before the 1.1 publish date (E6)');
 select is(
-  (select version from app.legal_documents where kind = 'privacy' and published_at <= now()
-    order by published_at desc limit 1), '1.0', 'privacy 1.0 is current');
+  (select version from app.legal_documents where kind = 'privacy' and published_at <= '2026-11-20T00:00:00Z'
+    order by published_at desc limit 1), '1.0', 'privacy 1.0 is current before the 1.1 publish date (E6)');
 
 -- Behaviour as the API role -------------------------------------------------------------------------
 set local role haide_api;

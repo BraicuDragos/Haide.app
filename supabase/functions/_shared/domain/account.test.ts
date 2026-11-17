@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { isProfileComplete, memberSince, ratingSummary, requiredConsents } from './account.ts';
+import {
+  isProfileComplete,
+  memberSince,
+  needsReaccept,
+  ratingSummary,
+  requiredConsents,
+} from './account.ts';
 
 const current = { terms: '1.0', privacy: '1.0' };
 const accepted = [
@@ -56,5 +62,32 @@ describe('ratingSummary', () => {
 describe('memberSince', () => {
   it('formats YYYY-MM in UTC', () => {
     expect(memberSince(new Date('2026-11-15T23:59:00Z'))).toBe('2026-11');
+  });
+});
+
+describe('needsReaccept (E6)', () => {
+  it('is false for a new user: first consent is not a re-acceptance', () => {
+    expect(needsReaccept(current, [])).toBe(false);
+  });
+
+  it('is false when everything is accepted at the current versions', () => {
+    expect(needsReaccept(current, accepted)).toBe(false);
+  });
+
+  it('is true when an older version of terms or privacy was accepted', () => {
+    expect(needsReaccept({ terms: '1.1', privacy: '1.0' }, accepted)).toBe(true);
+    expect(needsReaccept({ terms: '1.0', privacy: '1.1' }, accepted)).toBe(true);
+    expect(needsReaccept({ terms: '1.1', privacy: '1.1' }, accepted)).toBe(true);
+  });
+
+  it('is false again once the new version was accepted too (history keeps the old rows)', () => {
+    const history = [...accepted, { kind: 'terms' as const, version: '1.1' }];
+    expect(needsReaccept({ terms: '1.1', privacy: '1.0' }, history)).toBe(false);
+  });
+
+  it('ignores age_18 and a user who only accepted one kind', () => {
+    expect(
+      needsReaccept({ terms: '1.1', privacy: '1.1' }, [{ kind: 'age_18', version: null }]),
+    ).toBe(false);
   });
 });

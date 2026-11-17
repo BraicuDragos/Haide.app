@@ -25,6 +25,22 @@ export function requiredConsents(
   return required;
 }
 
+/**
+ * E6: true when the user accepted an OLDER version of a required document (terms or privacy), so the
+ * web app shows the "updated terms" screen instead of the first-time consent. A user who never accepted
+ * anything is a new user, not a re-accepting one.
+ */
+export function needsReaccept(
+  current: CurrentLegal,
+  accepted: readonly AcceptedConsent[],
+): boolean {
+  const stale = (kind: 'terms' | 'privacy') => {
+    const mine = accepted.filter((c) => c.kind === kind);
+    return mine.length > 0 && !mine.some((c) => c.version === current[kind]);
+  };
+  return stale('terms') || stale('privacy');
+}
+
 /** data-model 4.1: first name AND phone AND photo. */
 export function isProfileComplete(p: {
   firstName: string | null;

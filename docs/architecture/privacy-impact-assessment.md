@@ -116,13 +116,13 @@ Scale: Likelihood (L) and Severity (S) each 1–3. Risk = L × S (before → aft
 ## 8. Implementation checklist (verified by qa-reviewer before GATE 3)
 
 - [ ] Role-based serializers, with tests for every endpoint (data-model §5.2)
-- [ ] Retention job + pgTAP "no exact geometry older than 90 days"
-- [ ] Account deletion flow end to end (E6-1)
+- [ ] Retention job + pgTAP "no exact geometry older than 90 days" (E6 backend: `app.coarsen_locations` in the tick, `app.location_retention_violations`, pgTAP 009 with the catalog guard; written, to be run in CI by qa-reviewer)
+- [ ] Account deletion flow end to end (E6-1) (E6 backend: `DELETE /me`, `app.scrub_account`, purge queue; integration test `tests/integration/privacy.test.ts` incl. the leak scan)
 - [ ] Photo re-encode test (EXIF/GPS removed)
 - [ ] No coordinates/phones/plates in logs, events or emails (automated tests)
 - [ ] CSP blocks third-party origins. No external fonts or scripts
 - [ ] Privacy policy lists §2.1 purposes, bases and retention, §5 processors, rights, and the ANSPDCP contact. Controller identity filled in
-- [ ] Consent records stored with versions. Re-acceptance on a version bump
+- [ ] Consent records stored with versions. Re-acceptance on a version bump (E6 backend: `consent.reaccept`, terms 1.1, `POST /me/consents` without `age18`)
 - [ ] Backups encrypted. Restore drill done once
 
 ## 9. Sign-off

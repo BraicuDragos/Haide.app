@@ -1,9 +1,17 @@
 import { describe, expect, it } from 'vitest';
+import { PURGE_BACKOFF_MIN } from './rules.ts';
 import {
   coarsenPoint,
+  dataExportAckOutbox,
+  dataExportRequestedOutbox,
+  dataRequestDueBy,
   fromUtm35,
   gridPoint,
   inCoverage,
+  isDataRequestOpen,
+  isPurgeOverdue,
+  nextPurgeAttemptAt,
+  purgeBackoffMinutes,
   roundCoord,
   roundPoint,
   roundWalkM,
@@ -91,5 +99,57 @@ describe('inCoverage', () => {
     expect(inCoverage({ lat: 45.79, lng: 24.4 })).toBe(false);
     expect(inCoverage({ lat: 45.9, lng: 24.15 })).toBe(false);
     expect(inCoverage({ lat: 45.7, lng: 23.9 })).toBe(false);
+  });
+});
+
+describe('account deletion and data requests (E6)', () => {
+  const T = new Date('2026-11-16T05:00:00Z');
+  const minutes = (d: Date) => (d.getTime() - T.getTime()) / 60_000;
+
+  it('purge backoff: 1 min, 5 min, 30 min, 2 h, 12 h, then daily', () => {
+    expect([1, 2, 3, 4, 5, 6, 7, 50].map(purgeBackoffMinutes)).toEqual([
+      1, 5, 30, 120, 720, 1440, 1440, 1440,
+    ]);
+    expect(PURGE_BACKOFF_MIN).toEqual([1, 5, 30, 120, 720, 1440]);
+    expect(minutes(nextPurgeAttemptAt(T, 3))).toBe(30);
+  });
+
+  it('purge backoff treats 0 or a negative count as the first failure', () => {
+    expect(purgeBackoffMinutes(0)).toBe(1);
+    expect(purgeBackoffMinutes(-4)).toBe(1);
+  });
+
+  it('a deletion is overdue after 7 days, not at 7', () => {
+    const at = (days: number, extraMs = 0) => new Date(T.getTime() - days * 86_400_000 - extraMs);
+    expect(isPurgeOverdue(at(6), T)).toBe(false);
+    expect(isPurgeOverdue(at(7), T)).toBe(false);
+    expect(isPurgeOverdue(at(7, 1), T)).toBe(true);
+  });
+
+  it('a data request is due 30 days after it was made', () => {
+    expect(dataRequestDueBy(T).toISOString()).toBe('2026-12-16T05:00:00.000Z');
+  });
+
+  it('an unfulfilled request younger than 30 days is open, anything else is not', () => {
+    const ago = (days: number) => new Date(T.getTime() - days * 86_400_000);
+    expect(isDataRequestOpen({ requestedAt: ago(29), fulfilledAt: null }, T)).toBe(true);
+    expect(isDataRequestOpen({ requestedAt: ago(30), fulfilledAt: null }, T)).toBe(false);
+    expect(isDataRequestOpen({ requestedAt: ago(1), fulfilledAt: ago(0) }, T)).toBe(false);
+  });
+
+  it('the outbox rows carry ids and times only, and refuse an email, phone or plate', () => {
+    const row = dataExportRequestedOutbox('u1', {
+      requestId: 'r1',
+      userId: 'u1',
+      requestedAt: '2026-11-16T05:00:00.000Z',
+    });
+    expect(row).toMatchObject({ userId: 'u1', template: 'data_export_requested' });
+    expect(
+      dataExportAckOutbox('u1', { requestId: 'r1', dueBy: '2026-12-16T05:00:00.000Z' }).template,
+    ).toBe('data_export_ack');
+    expect(() =>
+      dataExportRequestedOutbox('u1', { requestId: 'r1', userId: 'a@b.ro', requestedAt: 'x' }),
+    ).toThrow();
+    expect(() => dataExportAckOutbox('u1', { requestId: '+40721234567', dueBy: 'x' })).toThrow();
   });
 });

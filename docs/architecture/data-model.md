@@ -294,6 +294,20 @@ UNIQUE `(booking_id, rater_id)`. Immutable (no UPDATE/DELETE grants). Index `(ra
 
 **Implemented in E5** (`20261120090000_trust_safety.sql`): `reports`, `admin_actions` (append-only: UPDATE and DELETE revoked from `haide_api`) and `share_links` as above, all with RLS enabled and no policies. **`ratings.visible_at timestamptz NOT NULL`** (ADR 0025) replaces the computed visibility above: existing rows were backfilled with `created_at`; a new rating gets `completed_at + 7 d`, or `now` when the counter-rating exists (and the counter-rating is pulled to `least(visible_at, now)`). Every summary counts `visible_at <= now` (`rating_count`, `rating_avg`), index `ratings_ratee_visible_idx (ratee_id, visible_at)`. `haide_api` holds `UPDATE (visible_at)` only: stars and tags stay immutable; `ratings_tags_allowed` checks the tag set. Further named constraints: `rides_completed_has_time`, `bookings_no_show_meta`, `bookings_final_only_completed`, `reports_not_self`, `reports_other_has_details`, `reports_resolved_meta`, and the unique partial index `reliability_events_booking_kind_uidx (booking_id, kind)`. **Accepted-seat invariant (replaces the E4 one):** `rides.seats_booked = count(bookings WHERE status IN ('confirmed','completed','no_show'))`. Completion and no-show never touch it; cancelling a `confirmed` booking lowers it; a ride cancel sets it to 0. Share links keep only `sha256(token)`. New functions, all with PUBLIC EXECUTE revoked: `app.complete_rides(timestamptz, timestamptz, integer)`, `app.admin_suspend_user(uuid, text, uuid, uuid)`, `app.admin_unsuspend_user(uuid, text, uuid)`.
 
+### 4.5b Privacy (E6)
+
+**Implemented in E6** (`20261121090000_privacy.sql`, ADRs 0029 to 0031; spec `e6-privacy-spec.md`). RLS is on for both new tables with no policies.
+
+**`account_deletions`**: `user_id uuid PK` (FK profiles, kept as the tombstone), `requested_at`, `photo_path` (same regex as `profiles.photo_path`; cleared once the object is gone), `storage_done_at`, `auth_done_at`, `attempts smallint`, `next_attempt_at`, `last_error text (≤ 200, scrubbed)`, `completed_at`. CHECK `account_deletions_completed_meta`: `completed_at` is set exactly when both `*_done_at` are. Partial index `account_deletions_due_idx (next_attempt_at) WHERE completed_at IS NULL`. `DELETE` revoked from `haide_api` (proof of erasure, purged after 3 years by `run_retention`).
+
+**`data_requests`**: `id`, `user_id` (FK), `kind` (only `export`), `requested_at`, `fulfilled_at` (set by hand when the JSON was sent), `note ≤ 200`. Index `(user_id, requested_at DESC)`. `DELETE` revoked from `haide_api`.
+
+**Changes:** `admin_actions.report_id` FK re-created `ON DELETE SET NULL` (the 12-month report purge works on the append-only table). Indexes `reports_created_idx`, `analytics_events_occurred_idx`, `profiles_deleted_idx (deleted_at) WHERE status = 'deleted'`. `legal_documents`: `terms` and `privacy` version `1.1`, `published_at 2026-11-21`.
+
+**Functions** (PUBLIC EXECUTE revoked on all; `search_path = app, extensions, pg_catalog`): `app.coarsen_locations(p_now, p_limit) → (rides, bookings)` and its helpers `app.coarsen_rides_by_id`, `app.coarsen_bookings_by_id` (invoker; rides and bookings that departed more than 90 days before `p_now`, oldest first, `FOR UPDATE SKIP LOCKED`; points to `app.grid_point(p, 1000)`, route NULL, ride labels to the area name or `Sibiu`, note NULL, plate removed, booking `idempotency_key` NULL; distance, duration, prices, fractions, status and every timestamp stay; idempotent); `app.scrub_account(p_user, p_now)` (invoker, last step of `DELETE /me`: queue row, tombstone, vehicle and route previews deleted, snapshots reduced to `{fuelType}`, all rides and own bookings coarsened at any age, outgoing blocks, reliability events, share links of own bookings and rides, pending outbox rows to the user deleted, analytics `user_id` nulled; idempotent); `app.location_retention_violations(p_now) → (kind, id)` (every ride or booking past the cutoff that still holds exact geometry, a route, a note or a plate, **checked by geometry, not by the flag**; empty means compliant; also a production check in deploy.md); `app.run_retention() → jsonb` (**SECURITY DEFINER**, database clock only, one batch of 5 000 per table: rate limits, app errors, non-pending outbox, analytics, reports, admin actions, consents of accounts deleted over 3 years ago, completed deletions, fulfilled requests; EXECUTE for `haide_api`); `app.export_user_data(p_user) → jsonb` (**SECURITY DEFINER**, reads the auth email, EXECUTE revoked from `haide_api` too: SQL editor only; the user's own data, never reports about them, counterparts' phones or points, ratings not yet visible, or who rated them).
+
+**Catalog guard (pgTAP 009):** `geometry_columns` for schema `app` must set-equal the classified inventory (`areas.geom`, `areas.centroid`, `places.geom`, `route_previews.{origin,destination,route}`, `rides.{origin,destination,route,route_utm}`, `bookings.{pickup,dropoff}`) and there must be no `geography` column: a new location column fails CI until it gets a retention rule.
+
 ### 4.6 Geo reference data (gazetteer, ADR 0014)
 
 **`areas`**: `id`, `name text` (e.g. "Hipodrom"), `locality text` (e.g. "Sibiu", "Cisnădie"), `kind text` (`suburb|quarter|neighbourhood|locality`), `geom geometry(MultiPolygon,4326)`, `centroid geometry(Point,4326)`, `osm_id bigint`. GiST `(geom)`. Built as Voronoi cells of OSM place nodes clipped to locality boundaries.
@@ -355,15 +369,17 @@ Legend: ✔ allowed · ✘ denied (404 for resources, 403 for actions) · **own*
 
 | Data | Rule | Mechanism |
 |---|---|---|
-| Ride/booking exact points and route | 90 days after `departure_at`: points → 1 km grid centroid, route NULL, labels → area name, plate removed from `vehicle_snapshot` | `retention` job + pgTAP test |
+| Ride/booking exact points and route | 90 days after `departure_at`: points → 1 km grid centroid, route NULL, labels → area name, note NULL, plate removed from `vehicle_snapshot`, booking `idempotency_key` NULL | `app.coarsen_locations` in `tick` step 6 (E6, ADR 0030) + `app.location_retention_violations` + pgTAP 009 (catalog guard) |
 | Phone, plate visibility | Departure + 24 h | Serializer rule (data kept while the account exists) |
-| Deleted account | Immediate scrub. Auth user deleted. Tombstone row kept for ratings ("Deleted user") | `DELETE /me` service |
-| Consents | Account lifetime + 3 years (proof) | `retention` job |
-| Reports | 12 months | `retention` job |
-| Admin actions | 24 months | `retention` job |
-| Analytics events | 13 months. `user_id` nulled on deletion | `retention` job |
-| Outbox | 30 days | `retention` job |
-| App errors | 14 days | `retention` job |
+| Deleted account | Immediate scrub. Auth user deleted. Tombstone row kept for ratings ("Deleted user") | `DELETE /me` service + `app.scrub_account` (E6, ADR 0029) |
+| Consents | Account lifetime + 3 years (proof) | `app.run_retention()` (hourly, in `tick`) |
+| Reports | 12 months (whole row, snapshot included) | `app.run_retention()` |
+| Admin actions | 24 months | `app.run_retention()` |
+| Analytics events | 13 months. `user_id` nulled on deletion | `app.run_retention()` |
+| Outbox | 30 days (not pending) | `app.run_retention()` |
+| App errors | 14 days | `app.run_retention()` |
+| Rate limits | 2 days | `app.run_retention()` |
+| Account deletions, data requests | 3 years after completion or fulfilment | `app.run_retention()` |
 | Route previews | 30 min | `tick` |
 | Backups | 14 days | Actions artifact retention |
 

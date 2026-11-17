@@ -81,6 +81,19 @@ export type ReportReceivedPayload = {
   reason: string;
 };
 
+/** E6: to the support address (routed by the dispatcher). Ids and a time only, never the email or the data. */
+export type DataExportRequestedPayload = {
+  requestId: string;
+  userId: string;
+  requestedAt: string;
+};
+
+/** E6: acknowledgement to the user who asked for a copy of their data. */
+export type DataExportAckPayload = {
+  requestId: string;
+  dueBy: string;
+};
+
 export type OutboxPayloadMap = {
   booking_requested: BookingRequestedPayload;
   booking_confirmed: BookingConfirmedPayload;
@@ -92,6 +105,8 @@ export type OutboxPayloadMap = {
   rating_prompt_driver: RatingPromptDriverPayload;
   no_show_reported: NoShowReportedPayload;
   report_received: ReportReceivedPayload;
+  data_export_requested: DataExportRequestedPayload;
+  data_export_ack: DataExportAckPayload;
 };
 
 export type OutboxTemplate = keyof OutboxPayloadMap;
@@ -107,6 +122,8 @@ export const OUTBOX_TEMPLATES = [
   'rating_prompt_driver',
   'no_show_reported',
   'report_received',
+  'data_export_requested',
+  'data_export_ack',
 ] as const satisfies readonly OutboxTemplate[];
 
 /** One row to insert into app.outbox. Distributes over the template so payload and name stay paired. */

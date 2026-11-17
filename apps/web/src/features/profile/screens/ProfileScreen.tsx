@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { getVehicle } from '@/api/account';
 import { ApiError } from '@/api/client';
@@ -8,6 +9,7 @@ import { useMe, useSignOut, useStartAuth } from '@/auth/hooks';
 import { saveIntent } from '@/auth/intent';
 import { nextStep, STEP_PATH } from '@/auth/onboarding';
 import { ScreenSkeleton } from '@/auth/RequireAuth';
+import { PrivacyRows } from '@/features/privacy/PrivacyRows';
 import { t } from '@/i18n';
 import { Avatar } from '@/ui/Avatar';
 import { Button } from '@/ui/Button';
@@ -45,7 +47,7 @@ function Row({
   );
 }
 
-function PolicyRows() {
+function PolicyRows({ children }: { children?: ReactNode }) {
   return (
     <section aria-labelledby="privacy-heading" className="flex flex-col gap-1">
       <h2 id="privacy-heading" className="type-h3 px-4">
@@ -54,6 +56,7 @@ function PolicyRows() {
       <ul className="group mx-4">
         <Row to="/policy/privacy" icon="doc" label={t('settings.policy')} />
         <Row to="/policy/terms" icon="doc" label={t('settings.terms')} />
+        {children}
       </ul>
     </section>
   );
@@ -198,7 +201,9 @@ function SignedIn() {
 
         <SafetyRows />
 
-        <PolicyRows />
+        <PolicyRows>
+          <PrivacyRows />
+        </PolicyRows>
 
         <div className="px-4">
           <Button variant="secondary" block onClick={() => void signOut()}>

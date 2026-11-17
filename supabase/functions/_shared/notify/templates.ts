@@ -1,3 +1,4 @@
+import { dataRequestDueBy } from '../domain/privacy.ts';
 import { bucharestDayKey, bucharestTime, BUCHAREST_TZ } from '../domain/time.ts';
 import type { OutboxPayloadMap, OutboxTemplate } from '../domain/outbox.ts';
 import { t } from '../i18n/en.ts';
@@ -189,6 +190,27 @@ function parts(input: TemplateInput, ctx: RenderContext): Parts {
         path: '',
       };
     }
+    case 'data_export_requested': {
+      const p = input.payload;
+      const requestedAt = date(p.requestedAt);
+      return {
+        subject: t('email.dataRequest.subject', { requestId: str(p.requestId, 'unknown') }),
+        body: t('email.dataRequest.body', {
+          requestId: str(p.requestId, 'unknown'),
+          userId: str(p.userId, 'unknown'),
+          requestedAt: requestedAt.toISOString(),
+          dueBy: dataRequestDueBy(requestedAt).toISOString().slice(0, 10),
+        }),
+        // The support mailbox gets no app link that would imply a user action.
+        path: '',
+      };
+    }
+    case 'data_export_ack':
+      return {
+        subject: t('email.dataAck.subject'),
+        body: t('email.dataAck.body'),
+        path: '/profile',
+      };
   }
 }
 

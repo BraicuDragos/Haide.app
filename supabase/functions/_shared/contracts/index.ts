@@ -6,3 +6,4 @@ export * from './rides.ts';
 export * from './search.ts';
 export * from './bookings.ts';
 export * from './safety.ts';
+export * from './privacy.ts';

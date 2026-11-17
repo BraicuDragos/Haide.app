@@ -2,6 +2,7 @@ import type { Db } from '../../_shared/db.ts';
 import type { AnalyticsEvent } from '../../_shared/domain/bookings.ts';
 import type { OutboxRow } from '../../_shared/domain/outbox.ts';
 import type { OutboxRecord, OutboxStore } from '../../_shared/notify/dispatch.ts';
+import { runRetention } from './privacy.ts';
 
 /**
  * SQL for the outbox, analytics events and the tick job's housekeeping (E4, ADR 0022).
@@ -99,24 +100,12 @@ export async function purgeRoutePreviews(sql: Db, now: Date): Promise<number> {
   return rows[0]?.n ?? 0;
 }
 
-/** Hourly: old rate-limit windows, old client/server errors, old finished outbox rows. */
-export async function purgeHousekeeping(sql: Db, now: Date): Promise<number> {
-  const days = (n: number) => new Date(now.getTime() - n * 86_400_000);
-  const one = (rows: { n: number }[]) => rows[0]?.n ?? 0;
-  const a = await one(
-    await sql<{ n: number }[]>`
-      with d as (delete from app.rate_limits where window_start < ${days(2)} returning 1)
-      select count(*)::int as n from d`,
-  );
-  const b = await one(
-    await sql<{ n: number }[]>`
-      with d as (delete from app.app_errors where created_at < ${days(14)} returning 1)
-      select count(*)::int as n from d`,
-  );
-  const c = await one(
-    await sql<{ n: number }[]>`
-      with d as (delete from app.outbox where status <> 'pending' and created_at < ${days(30)} returning 1)
-      select count(*)::int as n from d`,
-  );
-  return a + b + c;
+/**
+ * Hourly housekeeping (E6, ADR 0030): one call to app.run_retention(), the only path that deletes
+ * rate limits, errors, finished outbox rows, analytics, reports, admin actions, consents and the
+ * proof tables. It uses the database clock and takes no argument. Returns the rows deleted.
+ */
+export async function purgeHousekeeping(sql: Db): Promise<number> {
+  const counts = await runRetention(sql);
+  return Object.values(counts).reduce((a, b) => a + b, 0);
 }

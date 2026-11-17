@@ -24,6 +24,9 @@ export default function SuspendedScreen() {
       <Link to="/find" className="btn btn-ghost">
         {t('find.title')}
       </Link>
+      <Link to="/delete" className="btn btn-ghost">
+        {t('settings.delete')}
+      </Link>
     </div>
   );
 }

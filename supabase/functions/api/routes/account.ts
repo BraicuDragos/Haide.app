@@ -57,7 +57,11 @@ function toMe(a: Account, deps: Deps): MeResponse {
     photoUrl: avatarUrl(deps.env, a.photoPath),
     status: a.status,
     role: a.role,
-    consent: { upToDate: a.consentRequired.length === 0, required: a.consentRequired },
+    consent: {
+      upToDate: a.consentRequired.length === 0,
+      required: a.consentRequired,
+      reaccept: a.consentReaccept,
+    },
     profileComplete: isProfileComplete(a),
     hasVehicle: a.hasVehicle,
     createdAt: a.createdAt.toISOString(),
@@ -66,10 +70,18 @@ function toMe(a: Account, deps: Deps): MeResponse {
 
 // GET /legal/current: public
 accountRoutes.get('/legal/current', rateLimit('legal', RATE_LIMITS.publicRead), async (c) => {
-  const { versions, urls } = await currentLegal(c.get('deps').sql, c.get('deps').clock.now());
+  const { versions, urls, publishedAt } = await currentLegal(
+    c.get('deps').sql,
+    c.get('deps').clock.now(),
+  );
+  const iso = (v: Date | string | undefined) => (v ? new Date(v).toISOString() : '');
   const body: LegalCurrentResponse = {
-    terms: { version: versions.terms, url: urls.terms },
-    privacy: { version: versions.privacy, url: urls.privacy },
+    terms: { version: versions.terms, url: urls.terms, publishedAt: iso(publishedAt.terms) },
+    privacy: {
+      version: versions.privacy,
+      url: urls.privacy,
+      publishedAt: iso(publishedAt.privacy),
+    },
   };
   return c.json(body);
 });
@@ -77,7 +89,8 @@ accountRoutes.get('/legal/current', rateLimit('legal', RATE_LIMITS.publicRead), 
 // GET /me
 accountRoutes.get('/me', requireActive, (c) => c.json(toMe(c.get('account'), c.get('deps'))));
 
-// POST /me/consents: all three are required and the versions must be the current ones.
+// POST /me/consents: terms and privacy at the current versions. age18 is required until it was given
+// once; accepting updated terms does not ask for it again (E6).
 accountRoutes.post(
   '/me/consents',
   requireActive,
@@ -87,12 +100,14 @@ accountRoutes.post(
     const body = parse(consentBodySchema, await readJson(c));
     const { versions } = await currentLegal(sql, clock.now());
     const fields: Record<string, string> = {};
+    const needsAge18 = c.get('account').consentRequired.includes('age18');
+    if (needsAge18 && body.age18 !== true) fields.age18 = 'required';
     if (body.termsVersion !== versions.terms) fields.termsVersion = 'not_current';
     if (body.privacyVersion !== versions.privacy) fields.privacyVersion = 'not_current';
     if (Object.keys(fields).length > 0) {
       throw new AppError('VALIDATION_FAILED', 'Accept the current document versions.', { fields });
     }
-    await recordConsents(sql, c.get('account').id, versions);
+    await recordConsents(sql, c.get('account').id, versions, needsAge18);
     return c.body(null, 204);
   },
 );

@@ -6,6 +6,7 @@ import { createEmailProvider } from '../_shared/providers/email/index.ts';
 import { createRoutingProvider } from '../_shared/providers/routing/index.ts';
 import { createApp } from './app.ts';
 import { encodeAvatar } from './services/avatar.ts';
+import { createAuthAdmin } from './services/authAdmin.ts';
 import { createAvatarStorage } from './services/storage.ts';
 import { createTokenVerifier } from './middleware/auth.ts';
 
@@ -19,6 +20,7 @@ const app = createApp({
   log: jsonLogger,
   verifyToken: createTokenVerifier(env),
   storage: createAvatarStorage(env),
+  authAdmin: createAuthAdmin(env),
   encodeAvatar,
   routing: createRoutingProvider(env),
   email: createEmailProvider(env, jsonLogger),

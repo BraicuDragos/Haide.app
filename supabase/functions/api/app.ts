@@ -7,6 +7,7 @@ import { requestLogging } from './middleware/logging.ts';
 import { accountRoutes } from './routes/account.ts';
 import { bookingRoutes } from './routes/bookings.ts';
 import { placesRoutes } from './routes/places.ts';
+import { privacyRoutes } from './routes/privacy.ts';
 import { rideRoutes } from './routes/rides.ts';
 import { safetyRoutes } from './routes/safety.ts';
 import { searchRoutes } from './routes/search.ts';
@@ -38,6 +39,7 @@ export function createApp(deps: Deps) {
   app.route('/', bookingRoutes);
   app.route('/', safetyRoutes);
   app.route('/', shareRoutes);
+  app.route('/', privacyRoutes);
 
   app.onError(onError);
   app.notFound(onNotFound);

@@ -1,8 +1,17 @@
 import {
+  assertPayloadSafe,
+  type DataExportAckPayload,
+  type DataExportRequestedPayload,
+  type OutboxRow,
+} from './outbox.ts';
+import {
   COARSEN_GRID_M,
   COORD_DECIMALS,
   COVERAGE_BBOX,
+  DATA_REQUEST_DUE_DAYS,
   PUBLIC_GRID_M,
+  PURGE_BACKOFF_MIN,
+  PURGE_OVERDUE_DAYS,
   WALK_ROUND_M,
 } from './rules.ts';
 
@@ -132,4 +141,62 @@ export function inCoverage(p: Point): boolean {
     p.lng >= COVERAGE_BBOX.west &&
     p.lng <= COVERAGE_BBOX.east
   );
+}
+
+// ---- account deletion and data requests (E6, ADR 0029 and 0031) -----------------------------------------
+
+const MIN_MS = 60_000;
+const DAY_MS = 86_400_000;
+
+/**
+ * Minutes to wait before the next purge attempt, after `failures` failed attempts in total (1-based):
+ * 1 min, 5 min, 30 min, 2 h, 12 h, then daily.
+ */
+export function purgeBackoffMinutes(failures: number): number {
+  const i = Math.max(1, Math.floor(failures)) - 1;
+  return PURGE_BACKOFF_MIN[Math.min(i, PURGE_BACKOFF_MIN.length - 1)] as number;
+}
+
+export function nextPurgeAttemptAt(now: Date, failures: number): Date {
+  return new Date(now.getTime() + purgeBackoffMinutes(failures) * MIN_MS);
+}
+
+/** An open deletion older than 7 days is an operations alarm (the 30-day promise is at risk). */
+export function isPurgeOverdue(requestedAt: Date, now: Date): boolean {
+  return now.getTime() - requestedAt.getTime() > PURGE_OVERDUE_DAYS * DAY_MS;
+}
+
+/** GDPR Art. 12(3): the owner answers a data request within one month. */
+export function dataRequestDueBy(requestedAt: Date): Date {
+  return new Date(requestedAt.getTime() + DATA_REQUEST_DUE_DAYS * DAY_MS);
+}
+
+/** A request is repeated (no new emails) while an unfulfilled one from the last 30 days exists. */
+export function isDataRequestOpen(
+  r: { requestedAt: Date; fulfilledAt: Date | null },
+  now: Date,
+): boolean {
+  return (
+    r.fulfilledAt === null &&
+    now.getTime() - r.requestedAt.getTime() < DATA_REQUEST_DUE_DAYS * DAY_MS
+  );
+}
+
+// ---- outbox rows (payloads are scanned: no email, phone, plate or coordinate) ---------------------------
+
+/** `userId` is the requester: the dispatcher routes this template to EMAIL_SUPPORT_TO instead. */
+export function dataExportRequestedOutbox(
+  requesterId: string,
+  payload: DataExportRequestedPayload,
+): OutboxRow<'data_export_requested'> {
+  assertPayloadSafe(payload);
+  return { userId: requesterId, template: 'data_export_requested', payload };
+}
+
+export function dataExportAckOutbox(
+  requesterId: string,
+  payload: DataExportAckPayload,
+): OutboxRow<'data_export_ack'> {
+  assertPayloadSafe(payload);
+  return { userId: requesterId, template: 'data_export_ack', payload };
 }
