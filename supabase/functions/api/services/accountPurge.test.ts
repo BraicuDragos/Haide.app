@@ -144,6 +144,29 @@ describe('purgeAccount', () => {
   });
 });
 
+describe('purgeAccount logging', () => {
+  it('logs the failing step and a scrubbed reason, never the message text', async () => {
+    const { deps } = setup({});
+    const logged: { event: string; fields?: Record<string, unknown> }[] = [];
+    deps.log = (_level, event, fields) => logged.push({ event, fields });
+    deps.authAdmin = {
+      deleteUser: () => Promise.reject(new Error('auth delete failed: 500 radu@example.com')),
+    };
+    await purgeAccount(deps, USER);
+    deps.authAdmin = {
+      deleteUser: () => Promise.reject(new Error('auth delete failed: 401')),
+    };
+    await purgeAccount(deps, USER);
+    expect(logged[1]).toEqual({
+      event: 'account_purge_step_failed',
+      fields: { attempts: 1, steps: 'auth', reasons: 'http_401' },
+    });
+    // a message that does not end in a status falls back to the error class
+    expect(logged[0]?.fields?.reasons).toBe('Error');
+    expect(JSON.stringify(logged)).not.toContain('radu@example.com');
+  });
+});
+
 describe('runAccountPurges', () => {
   it('takes the due rows, at most PURGE_BATCH, and counts the completed ones', async () => {
     const { deps, calls, auth } = setup({}, [

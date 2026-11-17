@@ -21,6 +21,13 @@ import type { Deps } from '../types.ts';
 
 const ERROR_MAX = 200;
 
+/** A reason that is safe to log: an HTTP status when the message ends in one, else the error class. */
+function safeReason(e: unknown): string {
+  const status = e instanceof Error ? /:\s(\d{3})$/.exec(e.message)?.[1] : undefined;
+  if (status) return `http_${status}`;
+  return e instanceof Error && /^\w{1,40}$/.test(e.name) ? e.name : 'unknown';
+}
+
 type PurgeDeps = Pick<Deps, 'sql' | 'storage' | 'authAdmin' | 'clock' | 'log'>;
 
 /** Runs the open steps of one deletion. Returns true when the deletion is now complete. */
@@ -30,6 +37,8 @@ export async function purgeAccount(deps: PurgeDeps, userId: string): Promise<boo
   if (!row) return false; // unknown or already completed
 
   const failures: string[] = [];
+  const steps: string[] = [];
+  const reasons: string[] = [];
 
   if (!row.storage_done_at) {
     try {
@@ -37,6 +46,8 @@ export async function purgeAccount(deps: PurgeDeps, userId: string): Promise<boo
       await markStorageDone(sql, userId, clock.now());
     } catch (e) {
       failures.push(`storage: ${e instanceof Error ? e.message : String(e)}`);
+      steps.push('storage');
+      reasons.push(safeReason(e));
     }
   }
 
@@ -46,6 +57,8 @@ export async function purgeAccount(deps: PurgeDeps, userId: string): Promise<boo
       await markAuthDone(sql, userId, clock.now());
     } catch (e) {
       failures.push(`auth: ${e instanceof Error ? e.message : String(e)}`);
+      steps.push('auth');
+      reasons.push(safeReason(e));
     }
   }
 
@@ -58,7 +71,11 @@ export async function purgeAccount(deps: PurgeDeps, userId: string): Promise<boo
       nextPurgeAttemptAt(now, row.attempts + 1),
       scrubText(failures.join('; '), ERROR_MAX),
     );
-    log('warn', 'account_purge_step_failed', { attempts: row.attempts + 1 });
+    log('warn', 'account_purge_step_failed', {
+      attempts: row.attempts + 1,
+      steps: steps.join(','),
+      reasons: reasons.join(','),
+    });
     return false;
   }
   return await completeDeletion(sql, userId, clock.now());
