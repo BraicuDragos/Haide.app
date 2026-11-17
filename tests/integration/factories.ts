@@ -73,6 +73,21 @@ function makeUser(id: string, email: string, token: string): TestUser {
   };
 }
 
+type LegalVersions = { terms: { version: string }; privacy: { version: string } };
+let legalPromise: Promise<LegalVersions> | undefined;
+
+/**
+ * Current document versions, fetched once per test process. `GET /legal/current` is rate limited
+ * per IP (60/min): a call per created user trips 429 for every later test.
+ */
+function currentLegal(): Promise<LegalVersions> {
+  legalPromise ??= fetch(`${BASE}/legal/current`).then(async (res) => {
+    if (!res.ok) throw new Error(`legal/current failed with ${res.status}`);
+    return (await res.json()) as LegalVersions;
+  });
+  return legalPromise;
+}
+
 /** A user that is signed in only: no consent, no profile. */
 export async function createBareUser(): Promise<TestUser> {
   const id = crypto.randomUUID();
@@ -91,10 +106,7 @@ export async function createUser(
     if (!res.ok) throw new Error(`${what} failed with ${res.status}: ${await res.text()}`);
   };
   // The current document versions change with each legal text (1.0, then 1.1 from E6): ask the API.
-  const legal = (await (await fetch(`${BASE}/legal/current`)).json()) as {
-    terms: { version: string };
-    privacy: { version: string };
-  };
+  const legal = await currentLegal();
   await must(
     await user.send('POST', '/me/consents', {
       age18: true,
