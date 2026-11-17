@@ -97,6 +97,8 @@ jobs:
           [ -n "${JWT_SECRET:-}" ] && [ -n "${SERVICE_ROLE_KEY:-}" ] || { echo "supabase status did not print the local keys"; exit 1; }
           # Used by the integration tests (mint tokens) and the Playwright build (browser client key).
           echo "LOCAL_JWT_SECRET=${JWT_SECRET}" >> "$GITHUB_ENV"
+          # The integration tests create auth users through GoTrue's admin API with this key.
+          echo "INT_SERVICE_ROLE_KEY=${SERVICE_ROLE_KEY}" >> "$GITHUB_ENV"
           echo "VITE_SUPABASE_PUBLISHABLE_KEY=${PUBLISHABLE_KEY:-$ANON_KEY}" >> "$GITHUB_ENV"
           # Throwaway values for this job only: nothing here is a real secret.
           # SUPABASE_URL is injected by the CLI (container-internal address): do not set it here.

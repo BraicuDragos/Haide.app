@@ -48,6 +48,9 @@ import {
 const DB_SKIP = process.env.INT_DB === 'skip';
 const CRON = process.env.CRON_SECRET;
 const LEGAL_BUMP = process.env.INT_LEGAL_BUMP === '1';
+/** Local stack API root and its service_role key (JWT form): for GoTrue's admin API. */
+const AUTH_URL = (process.env.INT_SUPABASE_URL ?? 'http://127.0.0.1:54321').replace(/\/+$/, '');
+const SERVICE_KEY = process.env.INT_SERVICE_ROLE_KEY;
 
 type Point = { lat: number; lng: number };
 type Lane = { from: Point; to: Point };
@@ -135,14 +138,34 @@ describe.skipIf(!BASE || !SECRET || DB_SKIP)('privacy against the local stack', 
 
   // ---- helpers over the database ------------------------------------------------------------------------------------
 
-  /** The purge removes the auth user, and the tick resolves addresses through it: give the user a row. */
+  /**
+   * The purge removes the auth user, and the tick resolves addresses through it: give the user a real one.
+   * Created through GoTrue's admin API so every column is the way GoTrue writes it (a hand-made row with NULL
+   * columns makes GoTrue fail to load it). The profile trigger is on conflict do nothing, so the profile
+   * that createUser made is kept. Falls back to a raw insert without the service key.
+   */
   const withAuthRow = async (u: TestUser) => {
+    if (SERVICE_KEY) {
+      const res = await fetch(`${AUTH_URL}/auth/v1/admin/users`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${SERVICE_KEY}`,
+          apikey: SERVICE_KEY,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ id: u.id, email: u.email, email_confirm: true }),
+      });
+      // 422 = this id or email already exists (a second call for the same user)
+      if (res.ok || res.status === 422) return;
+    }
     await sql`
       insert into auth.users (id, instance_id, aud, role, email, encrypted_password,
         confirmation_token, recovery_token, email_change_token_new, email_change,
-        email_change_token_current, phone_change, phone_change_token, reauthentication_token)
+        email_change_token_current, phone_change, phone_change_token, reauthentication_token,
+        raw_app_meta_data, raw_user_meta_data, created_at, updated_at, email_confirmed_at)
       values (${u.id}::uuid, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', ${u.email}, '',
-        '', '', '', '', '', '', '', '')
+        '', '', '', '', '', '', '', '', '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb,
+        now(), now(), now())
       on conflict (id) do nothing`;
   };
   const count = async (query: Promise<{ n: number }[]>) => (await query)[0]?.n ?? 0;
