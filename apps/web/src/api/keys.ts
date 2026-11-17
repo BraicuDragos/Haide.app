@@ -22,4 +22,6 @@ export const keys = {
   },
   summary: ['summary'] as const,
   user: (id: string) => ['users', id] as const,
+  blocks: ['blocks'] as const,
+  sharedTrip: (token: string) => ['share', token] as const,
 } as const;

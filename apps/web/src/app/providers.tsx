@@ -5,14 +5,25 @@ import { keys } from '@/api/keys';
 import { AuthProvider } from '@/auth/AuthProvider';
 import { ToastProvider } from '@/ui/Toast';
 
-const GATE_CODES = new Set(['CONSENT_REQUIRED', 'PROFILE_INCOMPLETE', 'VEHICLE_REQUIRED']);
+// ACCOUNT_SUSPENDED: the cached /me is stale too, and the refetch (403) is what shows the suspended screen.
+const GATE_CODES = new Set([
+  'CONSENT_REQUIRED',
+  'PROFILE_INCOMPLETE',
+  'VEHICLE_REQUIRED',
+  'ACCOUNT_SUSPENDED',
+]);
 
 function makeClient(): QueryClient {
   const client: QueryClient = new QueryClient({
     // A gate error means our cached /me is stale (for example a terms version bump): refetch it.
     queryCache: new QueryCache({
-      onError: (err) => {
-        if (err instanceof ApiError && GATE_CODES.has(err.code)) {
+      onError: (err, query) => {
+        // Not for /me itself: a suspended account answers 403 there, and invalidating it would refetch in a loop.
+        if (
+          err instanceof ApiError &&
+          GATE_CODES.has(err.code) &&
+          query.queryKey[0] !== keys.me[0]
+        ) {
           void client.invalidateQueries({ queryKey: keys.me });
         }
       },

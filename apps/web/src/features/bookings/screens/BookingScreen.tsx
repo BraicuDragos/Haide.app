@@ -8,6 +8,8 @@ import type { BookingView } from '@/api/types';
 import { useBack } from '@/app/useBack';
 import { RequireAuth } from '@/auth/RequireAuth';
 import { RideStops } from '@/features/rides/components/RideStops';
+import { Call112Button } from '@/features/safety/Call112Button';
+import { LazyNoShowSheet, LazyReportSheet, LazyShareSheet } from '@/features/safety/sheets';
 import { t, tError, type MessageKey } from '@/i18n';
 import { dayLabel } from '@/lib/dates';
 import { isExactPoint, whenLabel } from '@/lib/booking';
@@ -104,8 +106,11 @@ function banner(b: BookingView): {
   icon: IconName;
   tone: string;
 } {
+  // Same rule as the list pill: the whole ride was cancelled by someone other than the passenger.
   const rideCancelled =
-    b.status === 'cancelled' && b.timeline.some((s) => s.status === 'ride_cancelled');
+    b.status === 'cancelled' &&
+    (b.timeline.some((s) => s.status === 'ride_cancelled') ||
+      (b.rideStatus === 'cancelled' && b.cancelledBy !== 'passenger'));
   if (rideCancelled)
     return {
       title: 'booking.rideCancelled.title',
@@ -152,7 +157,12 @@ function banner(b: BookingView): {
     case 'no_show':
       return {
         title: 'booking.noShow.title',
-        body: null,
+        body:
+          b.noShowBy === 'driver'
+            ? 'booking.noShow.byDriver'
+            : b.noShowBy === 'passenger'
+              ? 'booking.noShow.byYou'
+              : null,
         icon: 'alert',
         tone: 'bg-surface-subtle text-text',
       };
@@ -161,8 +171,10 @@ function banner(b: BookingView): {
         title:
           b.cancelledBy === 'driver'
             ? 'booking.cancelledByDriver.title'
-            : 'booking.cancelled.title',
-        body: null,
+            : b.cancelledBy === 'system'
+              ? 'booking.cancelledSystem.title'
+              : 'booking.cancelled.title',
+        body: b.cancelledBy === 'system' ? 'booking.cancelledSystem.body' : null,
         icon: 'close',
         tone: 'bg-surface-subtle text-text',
       };
@@ -172,6 +184,7 @@ function banner(b: BookingView): {
 function Detail({ booking: b }: { booking: BookingView }) {
   const qc = useQueryClient();
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [sheet, setSheet] = useState<'share' | 'report' | 'noshow' | null>(null);
   const driver = b.driver.firstName ?? '';
   const info = banner(b);
 
@@ -195,6 +208,9 @@ function Detail({ booking: b }: { booking: BookingView }) {
   const open = b.status === 'requested' || b.status === 'confirmed';
   const price = b.price.finalBani ?? b.price.lockedBani ?? b.price.quotedBani;
   const dropped = b.price.droppedFromBani !== null && b.price.lockedBani !== null;
+  // Report a problem: any state from acceptance on (not before the driver answered, not a declined request).
+  const afterAccepted =
+    b.status === 'confirmed' || b.status === 'completed' || b.status === 'no_show';
 
   return (
     <>
@@ -211,12 +227,34 @@ function Detail({ booking: b }: { booking: BookingView }) {
           </div>
         </div>
 
+        <Call112Button window={b.actions.call112Window} />
+
+        {b.rating?.given ? (
+          <p className="flex items-center gap-2 font-semibold">
+            <Icon name="done" className="text-savings" />
+            <span>{t('booking.rating.sent', { driver })}</span>
+            <span className="text-sm leading-5 font-normal text-text-muted">
+              {t('booking.rating.stars', { n: b.rating.given.stars })}
+            </span>
+          </p>
+        ) : (
+          b.actions.canRate && (
+            <Link to={`/rate/${b.id}`} className="btn btn-primary">
+              {t('driverRide.rate', { name: driver })}
+            </Link>
+          )
+        )}
+
         <div className="flex items-end justify-between gap-3">
           <div>
             <p className="type-numeral">{formatTime(b.pickupEtaAt)}</p>
             <p className="text-text-muted">{dayLabel(b.departureAt)}</p>
           </div>
-          <BookingStatusPill status={b.status} rideStatus={b.rideStatus} />
+          <BookingStatusPill
+            status={b.status}
+            rideStatus={b.rideStatus}
+            cancelledBy={b.cancelledBy}
+          />
         </div>
 
         <section aria-labelledby="bk-progress" className="flex flex-col gap-2">
@@ -277,37 +315,39 @@ function Detail({ booking: b }: { booking: BookingView }) {
           )}
         </section>
 
-        <section aria-labelledby="bk-pay" className="card flex flex-col gap-3 p-4">
-          <h2 id="bk-pay" className="type-h3">
-            {t(b.status === 'requested' ? 'booking.pay.lineUpTo' : 'booking.pay.line', {
-              price: formatRon(price),
-              driver,
-            })}
-          </h2>
-          <p aria-hidden="true" className="type-price text-price">
-            {b.status === 'requested' && (
-              <span className="type-body mr-2 text-text-muted">{t('booking.pay.upTo')}</span>
-            )}
-            <PriceRoll
-              value={bani(price)}
-              {...(dropped ? { from: bani(b.price.droppedFromBani ?? price) } : {})}
-              label={formatRon(price)}
-              animate
-            />{' '}
-            <span className="type-body text-text-muted">RON</span>
-          </p>
-          {dropped && (
-            <p className="flex items-start gap-2 font-semibold text-savings">
-              <span aria-hidden="true" className="drop-dot" />
-              <span>{t('booking.priceDropped', { price: formatRon(price) })}</span>
+        {b.status !== 'no_show' && (
+          <section aria-labelledby="bk-pay" className="card flex flex-col gap-3 p-4">
+            <h2 id="bk-pay" className="type-h3">
+              {t(b.status === 'requested' ? 'booking.pay.lineUpTo' : 'booking.pay.line', {
+                price: formatRon(price),
+                driver,
+              })}
+            </h2>
+            <p aria-hidden="true" className="type-price text-price">
+              {b.status === 'requested' && (
+                <span className="type-body mr-2 text-text-muted">{t('booking.pay.upTo')}</span>
+              )}
+              <PriceRoll
+                value={bani(price)}
+                {...(dropped ? { from: bani(b.price.droppedFromBani ?? price) } : {})}
+                label={formatRon(price)}
+                animate
+              />{' '}
+              <span className="type-body text-text-muted">RON</span>
             </p>
-          )}
-          {open && <p className="text-sm leading-5">{t('booking.priceNever')}</p>}
-          {b.price.finalBani !== null && (
-            <p className="text-sm leading-5">{t('booking.pay.final', { driver })}</p>
-          )}
-          <p className="text-sm leading-5 text-text-muted">{t('booking.pay.how')}</p>
-        </section>
+            {dropped && (
+              <p className="flex items-start gap-2 font-semibold text-savings">
+                <span aria-hidden="true" className="drop-dot" />
+                <span>{t('booking.priceDropped', { price: formatRon(price) })}</span>
+              </p>
+            )}
+            {open && <p className="text-sm leading-5">{t('booking.priceNever')}</p>}
+            {b.price.finalBani !== null && (
+              <p className="text-sm leading-5">{t('booking.pay.final', { driver })}</p>
+            )}
+            <p className="text-sm leading-5 text-text-muted">{t('booking.pay.how')}</p>
+          </section>
+        )}
 
         <ContactCard booking={b} />
 
@@ -361,6 +401,31 @@ function Detail({ booking: b }: { booking: BookingView }) {
           </Link>
         ) : null}
 
+        {(b.actions.canShare || b.actions.canReportDriverNoShow || afterAccepted) && (
+          <section aria-label={t('pub.safety')} className="flex flex-col gap-3">
+            {b.actions.canShare && (
+              <Button
+                variant="secondary"
+                block
+                icon={<Icon name="share" />}
+                onClick={() => setSheet('share')}
+              >
+                {t('rideday.share')}
+              </Button>
+            )}
+            {b.actions.canReportDriverNoShow && (
+              <Button variant="secondary" block onClick={() => setSheet('noshow')}>
+                {t('rideday.driverMissing')}
+              </Button>
+            )}
+            {afterAccepted && (
+              <Button variant="ghost" block onClick={() => setSheet('report')}>
+                {t('rideday.problem')}
+              </Button>
+            )}
+          </section>
+        )}
+
         {b.actions.canCancel && (
           <Button variant="danger" block onClick={() => setCancelOpen(true)}>
             {t('booking.cancel')}
@@ -369,6 +434,21 @@ function Detail({ booking: b }: { booking: BookingView }) {
       </div>
 
       <CancelSheet booking={b} open={cancelOpen} onClose={() => setCancelOpen(false)} />
+      <LazyShareSheet open={sheet === 'share'} onClose={() => setSheet(null)} booking={b} />
+      <LazyNoShowSheet
+        open={sheet === 'noshow'}
+        onClose={() => setSheet(null)}
+        bookingId={b.id}
+        rideId={b.rideId}
+        as="passenger"
+        name={driver}
+      />
+      <LazyReportSheet
+        open={sheet === 'report'}
+        onClose={() => setSheet(null)}
+        user={{ id: b.driver.id, firstName: b.driver.firstName }}
+        bookingId={b.id}
+      />
     </>
   );
 }

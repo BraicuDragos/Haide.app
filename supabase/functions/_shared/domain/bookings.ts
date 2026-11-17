@@ -1,4 +1,4 @@
-import type { BookingStatus } from '../contracts/rides.ts';
+import type { BookingStatus, RideStatus } from '../contracts/rides.ts';
 import type { Clock } from './clock.ts';
 import { DomainError } from './errors.ts';
 import {
@@ -12,7 +12,9 @@ import {
   type RideCancelledPayload,
 } from './outbox.ts';
 import { relock, seatPriceBani } from './pricing.ts';
+import { canRateNow, rateUntil } from './ratings.ts';
 import { CONTACT_WINDOW_H } from './rules.ts';
+import { call112Window, call112WindowDto, canMarkNoShow, canShare, show112 } from './safety.ts';
 import { bookingCutoffPassed, contactWindowOpen, isLateCancel } from './time.ts';
 
 /**
@@ -23,17 +25,18 @@ import { bookingCutoffPassed, contactWindowOpen, isLateCancel } from './time.ts'
 // ---- state machine -----------------------------------------------------------------------------------
 
 /**
- * Allowed transitions in E4. `completed` and `no_show` are reached in E5 (the completion job and the
- * no-show endpoints), so nothing leaves or enters them here. Every write is a guarded UPDATE:
- * `… WHERE id = $1 AND status = <from>`.
+ * Allowed transitions (E4, extended in E5). `confirmed` becomes `completed` in the tick and
+ * `no_show` (or `cancelled`) by a party. A `completed` booking can still become `no_show` for 24 h
+ * after departure (a party reports it after the tick ran). Every other state is terminal. Every write
+ * is a guarded UPDATE: `… WHERE id = $1 AND status IN (<from>)`.
  */
 export const BOOKING_TRANSITIONS: Readonly<Record<BookingStatus, readonly BookingStatus[]>> = {
   requested: ['confirmed', 'rejected', 'expired', 'cancelled'],
-  confirmed: ['cancelled'],
+  confirmed: ['cancelled', 'completed', 'no_show'],
   rejected: [],
   expired: [],
   cancelled: [],
-  completed: [],
+  completed: ['no_show'],
   no_show: [],
 };
 
@@ -261,6 +264,10 @@ export type TimelineInput = {
   decidedAt: Date | null;
   cancelledAt: Date | null;
   cancelledBy: 'passenger' | 'driver' | 'system' | null;
+  /** The ride's status and completion time (E5). */
+  rideStatus: RideStatus;
+  completedAt: Date | null;
+  noShowAt: Date | null;
 };
 
 /** Ordered status history reconstructed from the booking's own timestamps. */
@@ -283,11 +290,23 @@ export function buildTimeline(
       break;
     case 'cancelled':
       if (b.cancelledAt) {
+        // The whole ride was cancelled (by the driver or by a suspension), not just this booking.
+        const rideCancelled = b.rideStatus === 'cancelled' && b.cancelledBy !== 'passenger';
         out.push({
-          status: b.cancelledBy === 'driver' ? 'ride_cancelled' : 'cancelled',
+          status: rideCancelled ? 'ride_cancelled' : 'cancelled',
           at: b.cancelledAt.toISOString(),
         });
       }
+      break;
+    case 'completed':
+      if (b.completedAt) out.push({ status: 'completed', at: b.completedAt.toISOString() });
+      break;
+    case 'no_show':
+      // A booking the tick had already completed shows both steps. One reported first shows only the no-show.
+      if (b.completedAt && b.noShowAt && b.completedAt.getTime() <= b.noShowAt.getTime()) {
+        out.push({ status: 'completed', at: b.completedAt.toISOString() });
+      }
+      if (b.noShowAt) out.push({ status: 'no_show', at: b.noShowAt.toISOString() });
       break;
     default:
       break;
@@ -295,24 +314,56 @@ export function buildTimeline(
   return out;
 }
 
-/** Passenger-side actions. The E5 flags stay false in E4. */
-export function bookingActions(
-  b: { status: BookingStatus; departureAt: Date; viewerIsPassenger: boolean },
-  clock: Clock,
-) {
+export type ActionsInput = {
+  status: BookingStatus;
+  departureAt: Date;
+  viewerIsPassenger: boolean;
+  rideStatus: RideStatus;
+  /** The ride's completion time. */
+  completedAt: Date | null;
+  /** The viewer has rated this booking. */
+  viewerRated: boolean;
+  /** Either party has rated this booking. */
+  anyRated: boolean;
+};
+
+/** What the viewer can do right now. Every flag and window comes from here: the client has no rules. */
+export function bookingActions(b: ActionsInput, clock: Clock) {
   const canCancel =
     b.viewerIsPassenger &&
     canTransition(b.status, 'cancelled') &&
     b.departureAt.getTime() > clock.now().getTime();
+  const noShow = canMarkNoShow(
+    { status: b.status, departureAt: b.departureAt, hasRating: b.anyRated },
+    clock,
+  );
+  const window = call112Window({ status: b.status, departureAt: b.departureAt });
   return {
     canCancel,
     lateCancelIfNow: canCancel && b.status === 'confirmed' && isLateCancel(b.departureAt, clock),
-    canReportDriverNoShow: false,
-    canRate: false,
-    canShare: false,
-    show112: false,
+    canReportDriverNoShow: b.viewerIsPassenger && noShow,
+    canMarkNoShow: !b.viewerIsPassenger && noShow,
+    canRate: canRateNow(
+      { status: b.status, completedAt: b.completedAt, alreadyRated: b.viewerRated },
+      clock,
+    ),
+    canShare: canShare(
+      {
+        viewerIsPassenger: b.viewerIsPassenger,
+        status: b.status,
+        rideStatus: b.rideStatus,
+        departureAt: b.departureAt,
+      },
+      clock,
+    ),
+    show112: show112(window, clock),
+    call112Window: call112WindowDto(window),
   };
 }
+
+/** End of the rating window for a completed ride, else null. */
+export const rateUntilOrNull = (completedAt: Date | null): Date | null =>
+  completedAt ? rateUntil(completedAt) : null;
 
 /** Request seconds between request and decision (analytics `responseSeconds`). */
 export const responseSeconds = (requestedAt: Date, decidedAt: Date): number =>
@@ -372,7 +423,11 @@ export type AnalyticsEvent = {
     | 'booking_confirmed'
     | 'booking_rejected'
     | 'booking_expired'
-    | 'booking_cancelled';
+    | 'booking_cancelled'
+    | 'ride_completed'
+    | 'no_show_reported'
+    | 'rating_submitted'
+    | 'report_submitted';
   /** The actor. */
   userId: string;
   props: Record<string, string | number | boolean>;
@@ -405,6 +460,6 @@ export const bookingExpiredEvent = (
 
 export const bookingCancelledEvent = (
   actorId: string,
-  p: { bookingId: string; rideId: string; by: 'passenger' | 'driver'; late: boolean },
+  p: { bookingId: string; rideId: string; by: 'passenger' | 'driver' | 'system'; late: boolean },
   at: Date,
 ): AnalyticsEvent => ({ name: 'booking_cancelled', userId: actorId, props: p, at });

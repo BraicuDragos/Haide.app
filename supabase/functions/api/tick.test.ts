@@ -119,19 +119,20 @@ describe('POST /internal/tick', () => {
     expect(find(calls, 'update app.outbox set attempts')).toBeDefined(); // dispatch still ran
   });
 
-  it('purges expired route previews every minute and housekeeping only at minute 0 UTC', async () => {
+  it('purges expired previews and share links every minute and housekeeping only at minute 0 UTC', async () => {
     const answer: Handler = (q) => (q.text.includes('delete from') ? [{ n: 2 }] : undefined);
 
     const quiet = makeApp(dbWith([answer]), {}, { clock: fixedClock('2026-11-16T05:31:00Z') });
-    expect(tickResponseSchema.parse(await (await tick(quiet.app)).json()).purged).toBe(2);
+    expect(tickResponseSchema.parse(await (await tick(quiet.app)).json()).purged).toBe(4);
     expect(all(quiet.calls, 'delete from').map((c) => c.text)).toEqual([
       expect.stringContaining('app.route_previews'),
+      expect.stringContaining('app.share_links'),
     ]);
 
     const hourly = makeApp(dbWith([answer]), {}, { clock: fixedClock('2026-11-16T06:00:00Z') });
-    expect(tickResponseSchema.parse(await (await tick(hourly.app)).json()).purged).toBe(8);
+    expect(tickResponseSchema.parse(await (await tick(hourly.app)).json()).purged).toBe(10);
     const deletes = all(hourly.calls, 'delete from').map((c) => c.text);
-    expect(deletes).toHaveLength(4);
+    expect(deletes).toHaveLength(5);
     expect(deletes.some((t) => t.includes('app.rate_limits'))).toBe(true);
     expect(deletes.some((t) => t.includes('app.app_errors'))).toBe(true);
     const outboxPurge = deletes.find((t) => t.includes('app.outbox')) as string;

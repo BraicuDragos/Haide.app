@@ -52,6 +52,8 @@ export interface RequestOptions {
   headers?: Record<string, string>;
   /** ms, default 10 000 */
   timeoutMs?: number;
+  /** Never attach the session token (public pages such as the share link). */
+  anonymous?: boolean;
 }
 
 export async function apiRequest<T>(path: string, opts: RequestOptions = {}): Promise<T> {
@@ -64,7 +66,7 @@ export async function apiRequest<T>(path: string, opts: RequestOptions = {}): Pr
   const isForm = typeof FormData !== 'undefined' && opts.body instanceof FormData;
   // multipart: the browser sets the boundary itself.
   if (opts.body !== undefined && !isForm) headers['Content-Type'] = 'application/json';
-  const token = await tokenProvider();
+  const token = opts.anonymous ? null : await tokenProvider();
   if (token) headers.Authorization = `Bearer ${token}`;
 
   const timeout = AbortSignal.timeout(opts.timeoutMs ?? 10_000);

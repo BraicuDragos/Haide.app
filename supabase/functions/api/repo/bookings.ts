@@ -79,6 +79,42 @@ export async function lockRideOfBookingForPassenger(
   return rows[0];
 }
 
+/**
+ * Locks the ride of a booking for either party (no-show, ratings, share link): null when the booking
+ * is unknown or the caller is neither its passenger nor the ride's driver (the caller answers 404).
+ */
+export async function lockRideOfBookingForParty(
+  sql: Db,
+  bookingId: string,
+  userId: string,
+): Promise<LockedRide | undefined> {
+  const rows = await sql<LockedRide[]>`
+    select r.id, r.driver_id, r.status, r.departure_at, r.duration_s, r.seats_offered,
+           r.seats_booked, r.is_free, r.rate_micro_per_km, p.status as driver_status
+    from app.rides r
+    join app.bookings b on b.ride_id = r.id
+    join app.profiles p on p.id = r.driver_id
+    where b.id = ${bookingId} and (r.driver_id = ${userId} or b.passenger_id = ${userId})
+    for update of r`;
+  return rows[0];
+}
+
+/** Locks the ride of a booking with no party check (system cancellations: blocks and the sweep). */
+export async function lockRideOfBooking(
+  sql: Db,
+  bookingId: string,
+): Promise<LockedRide | undefined> {
+  const rows = await sql<LockedRide[]>`
+    select r.id, r.driver_id, r.status, r.departure_at, r.duration_s, r.seats_offered,
+           r.seats_booked, r.is_free, r.rate_micro_per_km, p.status as driver_status
+    from app.rides r
+    join app.bookings b on b.ride_id = r.id
+    join app.profiles p on p.id = r.driver_id
+    where b.id = ${bookingId}
+    for update of r`;
+  return rows[0];
+}
+
 // ---- request ----------------------------------------------------------------------------------------------
 
 export async function findBookingByKey(
@@ -262,6 +298,27 @@ export async function cancelBookingByPassenger(
   return rows.length === 1;
 }
 
+/**
+ * System cancel (block cascade, suspended passenger): requested or confirmed becomes cancelled by
+ * `system`, never a late cancellation. `notify` bumps passenger_event_at (the passenger sees it).
+ */
+export async function cancelBookingBySystem(
+  sql: Db,
+  bookingId: string,
+  from: 'requested' | 'confirmed',
+  notify: boolean,
+  now: Date,
+): Promise<boolean> {
+  const rows = await sql<{ id: string }[]>`
+    update app.bookings
+    set status = 'cancelled', cancelled_at = ${now}, cancelled_by = 'system', late_cancel = false,
+        passenger_event_at = case when ${notify}::boolean then ${now}::timestamptz else passenger_event_at end,
+        updated_at = ${now}
+    where id = ${bookingId} and status = ${from}::app.booking_status
+    returning id`;
+  return rows.length === 1;
+}
+
 export async function adjustSeatsBooked(
   sql: Db,
   rideId: string,
@@ -333,13 +390,23 @@ export async function cancelRideBookings(
   sql: Db,
   rideId: string,
   now: Date,
+  by: 'driver' | 'system' = 'driver',
 ): Promise<CancelledByRide[]> {
-  const rows = await sql<CancelledByRide[]>`
-    update app.bookings
-    set status = 'cancelled', cancelled_at = ${now}, cancelled_by = 'driver',
-        passenger_event_at = ${now}, updated_at = ${now}
-    where ride_id = ${rideId} and status in ('requested', 'confirmed')
-    returning id, passenger_id, pickup_label, dropoff_label`;
+  // Two literal statements, not a bound value: the cancelled_by text is part of the contract tests.
+  const rows =
+    by === 'driver'
+      ? await sql<CancelledByRide[]>`
+          update app.bookings
+          set status = 'cancelled', cancelled_at = ${now}, cancelled_by = 'driver',
+              passenger_event_at = ${now}, updated_at = ${now}
+          where ride_id = ${rideId} and status in ('requested', 'confirmed')
+          returning id, passenger_id, pickup_label, dropoff_label`
+      : await sql<CancelledByRide[]>`
+          update app.bookings
+          set status = 'cancelled', cancelled_at = ${now}, cancelled_by = 'system',
+              passenger_event_at = ${now}, updated_at = ${now}
+          where ride_id = ${rideId} and status in ('requested', 'confirmed')
+          returning id, passenger_id, pickup_label, dropoff_label`;
   await sql`update app.rides set seats_booked = 0, updated_at = ${now} where id = ${rideId}`;
   return rows;
 }
@@ -393,6 +460,19 @@ export type BookingViewRow = {
   decided_at: Ts | null;
   cancelled_at: Ts | null;
   cancelled_by: 'passenger' | 'driver' | 'system' | null;
+  /** The ride's completion time and the booking's no-show facts (E5). */
+  completed_at: Ts | null;
+  no_show_at: Ts | null;
+  no_show_by: 'driver' | 'passenger' | null;
+  /** The passenger's and the driver's own ratings of this booking (the serializer picks the viewer's). */
+  rp_stars: number | null;
+  rp_tags: string[] | null;
+  rp_created_at: Ts | null;
+  rd_stars: number | null;
+  rd_tags: string[] | null;
+  rd_created_at: Ts | null;
+  /** When the live share link (if any) stops working. */
+  share_expires_at: Ts | null;
   unseen: boolean;
   car_make: string | null;
   car_model: string | null;
@@ -424,6 +504,10 @@ export async function selectBookingView(
       b.pickup_fraction, b.segment_m, b.walk_pickup_m, b.walk_dropoff_m,
       b.price_quoted_bani, b.price_locked_bani, b.final_price_bani,
       b.requested_at, b.expires_at, b.decided_at, b.cancelled_at, b.cancelled_by,
+      r.completed_at, b.no_show_at, b.no_show_by,
+      rp.stars as rp_stars, rp.tags as rp_tags, rp.created_at as rp_created_at,
+      rd.stars as rd_stars, rd.tags as rd_tags, rd.created_at as rd_created_at,
+      sl.expires_at as share_expires_at,
       (b.passenger_event_at is not null
         and b.passenger_event_at > coalesce(b.seen_by_passenger_at, '-infinity'::timestamptz)) as unseen,
       r.vehicle_snapshot ->> 'make' as car_make,
@@ -439,6 +523,9 @@ export async function selectBookingView(
     join app.rides r on r.id = b.ride_id
     join app.profiles dp on dp.id = r.driver_id
     join app.profiles pp on pp.id = b.passenger_id
+    left join app.ratings rp on rp.booking_id = b.id and rp.rater_id = b.passenger_id
+    left join app.ratings rd on rd.booking_id = b.id and rd.rater_id = r.driver_id
+    left join app.share_links sl on sl.booking_id = b.id
     where b.id = ${bookingId}`;
   return rows[0];
 }
@@ -460,6 +547,10 @@ export type BookingListRow = {
   price_locked_bani: number | null;
   final_price_bani: number | null;
   unseen: boolean;
+  cancelled_by: 'passenger' | 'driver' | 'system' | null;
+  /** The ride's completion time, and whether the passenger already rated (E5). */
+  completed_at: Ts | null;
+  rated: boolean;
 };
 
 type After = { departureAt: Date; id: string } | null;
@@ -478,7 +569,8 @@ export async function listUpcomingBookings(
   return await sql<BookingListRow[]>`
     select b.id, b.ride_id, b.status, r.status as ride_status, r.departure_at, r.duration_s,
            b.pickup_fraction, b.pickup_label, b.dropoff_label, r.driver_id, b.price_quoted_bani,
-           b.price_locked_bani, b.final_price_bani,
+           b.price_locked_bani, b.final_price_bani, b.cancelled_by, r.completed_at,
+           exists (select 1 from app.ratings x where x.booking_id = b.id and x.rater_id = b.passenger_id) as rated,
            (b.passenger_event_at is not null
              and b.passenger_event_at > coalesce(b.seen_by_passenger_at, '-infinity'::timestamptz)) as unseen
     from app.bookings b
@@ -504,7 +596,8 @@ export async function listPastBookings(
   return await sql<BookingListRow[]>`
     select b.id, b.ride_id, b.status, r.status as ride_status, r.departure_at, r.duration_s,
            b.pickup_fraction, b.pickup_label, b.dropoff_label, r.driver_id, b.price_quoted_bani,
-           b.price_locked_bani, b.final_price_bani,
+           b.price_locked_bani, b.final_price_bani, b.cancelled_by, r.completed_at,
+           exists (select 1 from app.ratings x where x.booking_id = b.id and x.rater_id = b.passenger_id) as rated,
            (b.passenger_event_at is not null
              and b.passenger_event_at > coalesce(b.seen_by_passenger_at, '-infinity'::timestamptz)) as unseen
     from app.bookings b
@@ -558,9 +651,16 @@ export type PassengerRow = {
   price_locked_bani: number | null;
   final_price_bani: number | null;
   phone_e164: string | null;
+  no_show_by: 'driver' | 'passenger' | null;
+  /** The driver's own rating of this passenger, when there is one. */
+  rating_stars: number | null;
+  rating_tags: string[] | null;
+  rating_created_at: Ts | null;
+  /** Either party has rated this booking. */
+  any_rated: boolean;
 };
 
-/** Confirmed passengers of a ride (E5 adds completed and no_show). */
+/** Confirmed, completed and no_show passengers of a ride. */
 export async function selectRidePassengers(sql: Db, rideId: string): Promise<PassengerRow[]> {
   return await sql<PassengerRow[]>`
     select b.id, b.status, b.passenger_id, b.pickup_label, b.dropoff_label,
@@ -572,10 +672,14 @@ export async function selectRidePassengers(sql: Db, rideId: string): Promise<Pas
       ST_X(app.grid_point(b.pickup, 300)) as pickup_grid_lng,
       ST_Y(app.grid_point(b.dropoff, 300)) as dropoff_grid_lat,
       ST_X(app.grid_point(b.dropoff, 300)) as dropoff_grid_lng,
-      b.price_locked_bani, b.final_price_bani, p.phone_e164
+      b.price_locked_bani, b.final_price_bani, p.phone_e164, b.no_show_by,
+      dr.stars as rating_stars, dr.tags as rating_tags, dr.created_at as rating_created_at,
+      exists (select 1 from app.ratings ax where ax.booking_id = b.id) as any_rated
     from app.bookings b
+    join app.rides r on r.id = b.ride_id
     join app.profiles p on p.id = b.passenger_id
-    where b.ride_id = ${rideId} and b.status = 'confirmed'
+    left join app.ratings dr on dr.booking_id = b.id and dr.rater_id = r.driver_id
+    where b.ride_id = ${rideId} and b.status in ('confirmed', 'completed', 'no_show')
     order by b.requested_at asc, b.id asc`;
 }
 

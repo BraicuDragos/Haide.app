@@ -809,11 +809,11 @@ describe('GET /rides/{id} (public view)', () => {
     expect(ridePublicViewSchema.parse(await driver.json()).status).toBe('cancelled');
   });
 
-  it('expired rides are hidden too, completed ones stay visible', async () => {
+  it('expired and completed rides are hidden from non-parties', async () => {
     const expired = makeApp([rideDb({ publicRide: publicRow({ status: 'expired' }) }).handler]);
     expect((await expired.app.request(`${BASE}/rides/${RIDE_ID}`)).status).toBe(404);
     const done = makeApp([rideDb({ publicRide: publicRow({ status: 'completed' }) }).handler]);
-    expect((await done.app.request(`${BASE}/rides/${RIDE_ID}`)).status).toBe(200);
+    expect((await done.app.request(`${BASE}/rides/${RIDE_ID}`)).status).toBe(404);
   });
 
   it('a suspended driver’s ride is a 404, a deleted driver shows as "Deleted user"', async () => {

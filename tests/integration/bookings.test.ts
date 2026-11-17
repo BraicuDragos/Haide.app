@@ -514,8 +514,8 @@ describe.skipIf(!BASE || !SECRET || DB_SKIP)('bookings against the database', ()
 
   type RideRow = { seats_booked: number; seats_offered: number; status: string };
   /**
-   * The invariants after every concurrency case: seats_booked = count(confirmed) (also on a cancelled
-   * ride), no seat over the offer, every lock at or below its quote, and the driver never collects
+   * The invariants after every concurrency case: seats_booked = accepted seats, i.e. confirmed + completed + no_show
+   * (E5; also on a cancelled ride), no seat over the offer, every lock at or below its quote, and the driver never collects
    * more than n/(n+1) of the trip cost.
    */
   async function assertInvariants(rideId: string) {
@@ -524,7 +524,11 @@ describe.skipIf(!BASE || !SECRET || DB_SKIP)('bookings against the database', ()
     const confirmed = await sql<{ price_locked_bani: number; price_quoted_bani: number }[]>`
       select price_locked_bani, price_quoted_bani from app.bookings
       where ride_id = ${rideId}::uuid and status = 'confirmed'`;
-    expect(ride?.seats_booked).toBe(confirmed.length);
+    // E5: seats_booked counts accepted seats (confirmed, completed, no_show). Prices relock confirmed only.
+    const [accepted] = await sql<{ n: number }[]>`
+      select count(*)::int as n from app.bookings
+      where ride_id = ${rideId}::uuid and status in ('confirmed', 'completed', 'no_show')`;
+    expect(ride?.seats_booked).toBe(accepted?.n);
     expect(ride?.seats_booked ?? 99).toBeLessThanOrEqual(ride?.seats_offered ?? 0);
     for (const c of confirmed) expect(c.price_locked_bani).toBeLessThanOrEqual(c.price_quoted_bani);
     const [rideCost] = await sql<{ distance_m: number; rate_micro_per_km: number }[]>`

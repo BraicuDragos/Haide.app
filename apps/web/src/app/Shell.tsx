@@ -1,5 +1,8 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Outlet, useLocation } from 'react-router';
+import { ApiError } from '@/api/client';
+import { useAuth } from '@/auth/AuthProvider';
+import { useMe } from '@/auth/hooks';
 import { t } from '@/i18n';
 import { Icon } from '@/ui/Icon';
 import { ErrorBoundary } from './ErrorBoundary';
@@ -10,6 +13,11 @@ import { useNavigationCounter } from './useScreenHeading';
 export function routeTemplate(pathname: string): string {
   return TABS.some((tab) => tab.to === pathname) ? pathname : '/:other';
 }
+
+const SuspendedScreen = lazy(() => import('@/features/common/screens/SuspendedScreen'));
+
+/** Public browsing stays available to a suspended account (5.7). Everything else shows the suspended screen. */
+const OPEN_TO_SUSPENDED = ['/find', '/results', '/ride/', '/user/', '/policy/', '/auth'];
 
 function useOnline(): boolean {
   const [online, setOnline] = useState(() => navigator.onLine);
@@ -35,6 +43,13 @@ export function Shell() {
   const online = useOnline();
   useNavigationCounter();
   const isRoot = TABS.some((tab) => tab.to === loc.pathname);
+  const { status } = useAuth();
+  const me = useMe();
+  const suspended =
+    status === 'signedIn' &&
+    me.error instanceof ApiError &&
+    me.error.code === 'ACCOUNT_SUSPENDED' &&
+    !OPEN_TO_SUSPENDED.some((p) => loc.pathname === p || loc.pathname.startsWith(p));
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-xl flex-col bg-bg md:border-x md:border-(color:--hair)">
@@ -55,10 +70,16 @@ export function Shell() {
       )}
       <main id="main" tabIndex={-1} className="flex min-w-0 flex-1 flex-col">
         <ErrorBoundary route={routeTemplate(loc.pathname)} resetKey={loc.key}>
-          <Outlet />
+          {suspended ? (
+            <Suspense fallback={null}>
+              <SuspendedScreen />
+            </Suspense>
+          ) : (
+            <Outlet />
+          )}
         </ErrorBoundary>
       </main>
-      {isRoot && <TabBar />}
+      {isRoot && !suspended && <TabBar />}
     </div>
   );
 }

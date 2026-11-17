@@ -29,6 +29,7 @@ export async function loadOwnerView(
     ...passengers.map((p) => p.passenger_id),
   ]);
   const departureAt = new Date(row.departure_at);
+  const completedAt = row.completed_at ? new Date(row.completed_at) : null;
   const ride = {
     rateMicroPerKm: row.rate_micro_per_km,
     isFree: row.is_free,
@@ -41,7 +42,7 @@ export async function loadOwnerView(
     }),
     passengers: passengers.flatMap((p) => {
       const u = users.get(p.passenger_id);
-      return u ? [toPassengerItem(p, u, departureAt, deps.clock)] : [];
+      return u ? [toPassengerItem(p, u, { departureAt, completedAt }, deps.clock)] : [];
     }),
   });
 }

@@ -1,4 +1,4 @@
-import type { BookingStatus, RideStatus } from '@/api/types';
+import type { BookingStatus, CancelledBy, RideStatus } from '@/api/types';
 import { t, type MessageKey } from '@/i18n';
 import { Icon, type IconName } from '@/ui/Icon';
 
@@ -10,12 +10,17 @@ const TONE_CLASS: Record<Tone, string> = {
   off: 'bg-surface-subtle text-text-muted',
 };
 
-/** Label key and look per state. Icon plus word: colour is never the only cue (copy.md section 21). */
+/**
+ * Label key and look per state. Icon plus word: colour is never the only cue (copy.md section 21).
+ * "Ride cancelled" when the whole ride was cancelled by someone other than the passenger (the driver or the system):
+ * a passenger who cancelled first keeps "Cancelled" even if the ride was cancelled later.
+ */
 export function statusParts(
   status: BookingStatus,
   rideStatus?: RideStatus,
+  cancelledBy?: CancelledBy | null,
 ): { label: MessageKey; icon: IconName; tone: Tone } {
-  if (status === 'cancelled' && rideStatus === 'cancelled')
+  if (status === 'cancelled' && rideStatus === 'cancelled' && cancelledBy !== 'passenger')
     return { label: 'status.rideCancelled', icon: 'close', tone: 'off' };
   switch (status) {
     case 'requested':
@@ -38,11 +43,13 @@ export function statusParts(
 export function BookingStatusPill({
   status,
   rideStatus,
+  cancelledBy,
 }: {
   status: BookingStatus;
   rideStatus?: RideStatus;
+  cancelledBy?: CancelledBy | null | undefined;
 }) {
-  const { label, icon, tone } = statusParts(status, rideStatus);
+  const { label, icon, tone } = statusParts(status, rideStatus, cancelledBy);
   return (
     <span
       className={`inline-flex min-h-7 items-center gap-1 rounded-full px-3 text-sm leading-5 font-semibold ${TONE_CLASS[tone]}`}

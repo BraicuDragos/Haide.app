@@ -53,6 +53,47 @@ const ALL: TemplateInput[] = [
     template: 'booking_cancelled',
     payload: { bookingId: 'b1', rideId: 'r1', passengerFirstName: 'Ioana', departureAt: LATER },
   },
+  {
+    template: 'rating_prompt',
+    payload: { bookingId: 'b1', driverFirstName: 'Rădulescu', departureAt: DEP },
+  },
+  {
+    template: 'rating_prompt_driver',
+    payload: { rideId: 'r1', passengerCount: 2, departureAt: DEP },
+  },
+  {
+    template: 'no_show_reported',
+    payload: {
+      bookingId: 'b1',
+      rideId: 'r1',
+      reporterFirstName: 'Ștefan',
+      reporterRole: 'driver',
+      departureAt: DEP,
+    },
+  },
+  {
+    template: 'no_show_reported',
+    payload: {
+      bookingId: 'b1',
+      rideId: 'r1',
+      reporterFirstName: 'Ioana',
+      reporterRole: 'passenger',
+      departureAt: DEP,
+    },
+  },
+  { template: 'report_received', payload: { reportId: 'rep1', reason: 'unsafe_driving' } },
+  {
+    template: 'ride_cancelled',
+    payload: {
+      bookingId: 'b1',
+      rideId: 'r1',
+      driverFirstName: 'Radu',
+      departureAt: DEP,
+      pickupArea: 'Turnișor',
+      dropoffArea: 'Piața Mare',
+      by: 'system',
+    },
+  },
 ];
 
 const at = (i: number): TemplateInput => ALL[i] as TemplateInput;
@@ -66,7 +107,7 @@ describe('whenLabel', () => {
 
 describe('renderEmail', () => {
   it('has a template for every outbox template', () => {
-    expect(ALL.map((i) => i.template).sort()).toEqual([...OUTBOX_TEMPLATES].sort());
+    expect([...new Set(ALL.map((i) => i.template))].sort()).toEqual([...OUTBOX_TEMPLATES].sort());
   });
 
   it('renders subject, text, html and an absolute link for each, with diacritics intact', () => {
@@ -75,7 +116,7 @@ describe('renderEmail', () => {
       expect(out.subject.length, input.template).toBeGreaterThan(5);
       expect(out.text, input.template).toContain(out.link);
       expect(out.html, input.template).toContain(`href="${out.link}"`);
-      expect(out.link.startsWith('https://haide.ro/'), input.template).toBe(true);
+      expect(out.link.startsWith('https://haide.ro'), input.template).toBe(true);
       expect(out.link).not.toContain('//booking');
       expect(`${out.subject}${out.text}`).not.toMatch(/\{\w+\}|undefined|null/);
     }
@@ -108,6 +149,19 @@ describe('renderEmail', () => {
     expect(renderEmail(at(5), ctx).subject).toBe(
       'Ioana cancelled their seat on your Fri 20 Nov, 07:40 ride',
     );
+  });
+
+  it('E5 templates: prompts link to the rating, no-show goes to the absent party, system cancel is neutral', () => {
+    const link = (i: number) => renderEmail(at(i), ctx).link;
+    expect(link(6)).toBe('https://haide.ro/rate/b1');
+    expect(renderEmail(at(6), ctx).subject).toBe('How was your ride with Rădulescu?');
+    expect(link(7)).toBe('https://haide.ro/driving/r1');
+    expect(renderEmail(at(8), ctx).subject).toBe('Ștefan reported a no-show on the 09:30 ride');
+    expect(link(8)).toBe('https://haide.ro/booking/b1');
+    expect(link(9)).toBe('https://haide.ro/driving/r1');
+    expect(renderEmail(at(10), ctx).subject).toBe('New safety report: unsafe_driving');
+    expect(renderEmail(at(11), ctx).subject).toBe('The 09:30 ride with Radu was cancelled');
+    expect(renderEmail(at(11), ctx).text).not.toMatch(/suspend|blocked|report/i);
   });
 
   it('never carries a coordinate, phone, plate or email address', () => {

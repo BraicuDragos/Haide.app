@@ -368,6 +368,8 @@ describe('POST /internal/tick', () => {
     expect(res.status).toBe(200);
     expect(tickResponseSchema.parse(await res.json())).toEqual({
       expired: 0,
+      completed: 0,
+      swept: 0,
       sent: 0,
       failed: 0,
       purged: 0,

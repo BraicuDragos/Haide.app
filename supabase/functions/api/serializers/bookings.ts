@@ -1,5 +1,6 @@
 import type { PublicUser } from '../../_shared/contracts/account.ts';
 import type { BookingListItem, BookingView } from '../../_shared/contracts/bookings.ts';
+import type { RatingGiven } from '../../_shared/contracts/ratings.ts';
 import type {
   ExactOrApproxPoint,
   RidePassengerItem,
@@ -14,6 +15,8 @@ import {
   revealFor,
 } from '../../_shared/domain/bookings.ts';
 import type { Clock } from '../../_shared/domain/clock.ts';
+import { canRateNow, rateUntil } from '../../_shared/domain/ratings.ts';
+import { canMarkNoShow } from '../../_shared/domain/safety.ts';
 import { roundCoord, roundWalkM } from '../../_shared/domain/privacy.ts';
 import { roundEta } from '../../_shared/domain/search.ts';
 import type { BookingListRow, BookingViewRow, PassengerRow, RequestRow } from '../repo/bookings.ts';
@@ -26,6 +29,16 @@ import { parseLineString } from './rides.ts';
  */
 
 const iso = (d: Date | string): string => new Date(d).toISOString();
+
+/** A stored rating as the contract shows it, or null when there is none. */
+function ratingGiven(
+  stars: number | null,
+  tags: string[] | null,
+  createdAt: Date | string | null,
+): RatingGiven | null {
+  if (stars === null || createdAt === null) return null;
+  return { stars, tags: (tags ?? []) as RatingGiven['tags'], createdAt: iso(createdAt) };
+}
 
 /** When the driver passes the pickup, rounded to 5 minutes (ADR 0005). */
 export function pickupEta(departureAt: Date | string, durationS: number, fraction: number): Date {
@@ -57,6 +70,14 @@ export function toBookingView(
   const revealed = revealFor({ status: row.status, departureAt }, clock);
 
   const phone = viewerIsPassenger ? row.driver_phone : row.passenger_phone;
+  const completedAt = row.completed_at ? new Date(row.completed_at) : null;
+  // Only the viewer's own rating is ever shown, never whether the counterpart rated.
+  const given = viewerIsPassenger
+    ? ratingGiven(row.rp_stars, row.rp_tags, row.rp_created_at)
+    : ratingGiven(row.rd_stars, row.rd_tags, row.rd_created_at);
+  const anyRated = row.rp_stars !== null || row.rd_stars !== null;
+  const shareExpiry = row.share_expires_at ? new Date(row.share_expires_at) : null;
+  const shareActive = shareExpiry !== null && shareExpiry.getTime() > clock.now().getTime();
 
   return {
     id: row.id,
@@ -122,9 +143,36 @@ export function toBookingView(
       decidedAt: row.decided_at ? new Date(row.decided_at) : null,
       cancelledAt: row.cancelled_at ? new Date(row.cancelled_at) : null,
       cancelledBy: row.cancelled_by,
+      rideStatus: row.ride_status,
+      completedAt,
+      noShowAt: row.no_show_at ? new Date(row.no_show_at) : null,
     }),
     unseen: viewerIsPassenger ? row.unseen : false,
-    actions: bookingActions({ status: row.status, departureAt, viewerIsPassenger }, clock),
+    actions: bookingActions(
+      {
+        status: row.status,
+        departureAt,
+        viewerIsPassenger,
+        rideStatus: row.ride_status,
+        completedAt,
+        viewerRated: given !== null,
+        anyRated,
+      },
+      clock,
+    ),
+    completedAt: completedAt ? completedAt.toISOString() : null,
+    noShowBy: row.no_show_by,
+    rating: {
+      given,
+      rateUntil:
+        row.status === 'completed' && completedAt ? rateUntil(completedAt).toISOString() : null,
+    },
+    share: viewerIsPassenger
+      ? {
+          active: shareActive,
+          expiresAt: shareActive && shareExpiry ? shareExpiry.toISOString() : null,
+        }
+      : null,
   };
 }
 
@@ -156,6 +204,15 @@ export function toBookingListItem(
     driver,
     priceBani: price.finalBani ?? price.lockedBani ?? price.quotedBani,
     unseen: row.unseen,
+    cancelledBy: row.cancelled_by,
+    canRate: canRateNow(
+      {
+        status: row.status,
+        completedAt: row.completed_at ? new Date(row.completed_at) : null,
+        alreadyRated: row.rated,
+      },
+      clock,
+    ),
   };
 }
 
@@ -187,10 +244,12 @@ export function toRequestItem(
 export function toPassengerItem(
   row: PassengerRow,
   passenger: PublicUser,
-  departureAt: Date,
+  ride: { departureAt: Date; completedAt: Date | null },
   clock: Clock,
 ): RidePassengerItem {
+  const { departureAt, completedAt } = ride;
   const revealed = revealFor({ status: row.status, departureAt }, clock);
+  const given = ratingGiven(row.rating_stars, row.rating_tags, row.rating_created_at);
   const price = bookingPrice(
     {
       status: row.status,
@@ -224,7 +283,14 @@ export function toPassengerItem(
     phoneE164: revealed ? row.phone_e164 : null,
     priceLockedBani: row.price_locked_bani,
     finalPriceBani: price.finalBani,
-    canMarkNoShow: false,
-    canRate: false,
+    noShowBy: row.no_show_by,
+    canMarkNoShow: canMarkNoShow(
+      { status: row.status, departureAt, hasRating: row.any_rated },
+      clock,
+    ),
+    canRate: canRateNow({ status: row.status, completedAt, alreadyRated: given !== null }, clock),
+    rateUntil:
+      row.status === 'completed' && completedAt ? rateUntil(completedAt).toISOString() : null,
+    ratingGiven: given,
   };
 }

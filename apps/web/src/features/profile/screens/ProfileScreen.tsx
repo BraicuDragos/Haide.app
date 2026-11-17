@@ -59,6 +59,20 @@ function PolicyRows() {
   );
 }
 
+/** Safety group (6.3): blocked people, with unblock on the next screen. */
+function SafetyRows() {
+  return (
+    <section aria-labelledby="safety-heading" className="flex flex-col gap-1">
+      <h2 id="safety-heading" className="type-h3 px-4">
+        {t('settings.safety')}
+      </h2>
+      <ul className="group mx-4">
+        <Row to="/settings/blocked" icon="shield" label={t('settings.blocked')} />
+      </ul>
+    </section>
+  );
+}
+
 /** ODbL attribution for the OpenStreetMap-derived map tiles and gazetteer. */
 function About() {
   return (
@@ -181,6 +195,8 @@ function SignedIn() {
         </ul>
 
         <DisplaySettings />
+
+        <SafetyRows />
 
         <PolicyRows />
 

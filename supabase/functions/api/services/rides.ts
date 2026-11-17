@@ -23,30 +23,27 @@ import {
   normalizeNote,
   previewExpiresAt,
 } from '../../_shared/domain/rides.ts';
-import { rideCancelledRows, bookingCancelledEvent } from '../../_shared/domain/bookings.ts';
 import { RELIABILITY_WINDOW_DAYS } from '../../_shared/domain/rules.ts';
 import { asDb } from '../../_shared/db.ts';
 import { AppError } from '../../_shared/errors.ts';
 import { getPublicProfile, getVehicle } from '../repo/accounts.ts';
-import { cancelRideBookings, selectViewerBooking } from '../repo/bookings.ts';
-import { insertAnalyticsEvents, insertOutboxRows } from '../repo/outbox.ts';
+import { selectViewerBooking } from '../repo/bookings.ts';
 import {
   countDriverRidesBetween,
   describePoint,
   energyPriceFor,
-  insertLateCancelEvent,
   insertPreview,
   insertRideFromPreview,
   insertRidePublishedEvent,
   listPastRides,
   listUpcomingRides,
   lockDriverPublishing,
-  markRideCancelled,
   selectOwnerRide,
   selectPublicRide,
 } from '../repo/rides.ts';
 import { publicRideVisible, toListItem, toPublicView } from '../serializers/rides.ts';
 import { toPublicUser } from '../serializers/users.ts';
+import { cancelRideTx } from './cancellations.ts';
 import { loadOwnerView } from './ownerView.ts';
 import type { Account, Deps } from '../types.ts';
 
@@ -256,36 +253,18 @@ export async function cancelRide(deps: Deps, account: Account, id: string): Prom
       );
     }
     const late = isLateRideCancel(ctx, clock);
-    await markRideCancelled(tx, rideId, now, late);
-    if (late) await insertLateCancelEvent(tx, account.id, rideId, now);
-
-    // Every requested or confirmed booking is cancelled by the driver, each passenger is told
-    // (an outbox row per booking with their own areas) and the seat counter returns to 0.
-    const cancelled = await cancelRideBookings(tx, rideId, now);
-    if (cancelled.length > 0) {
-      await insertOutboxRows(
-        tx,
-        rideCancelledRows(
-          cancelled.map((b) => ({
-            passengerId: b.passenger_id,
-            payload: {
-              bookingId: b.id,
-              rideId,
-              driverFirstName: account.firstName,
-              departureAt: ctx.departureAt.toISOString(),
-              pickupArea: b.pickup_label,
-              dropoffArea: b.dropoff_label,
-            },
-          })),
-        ),
-      );
-      await insertAnalyticsEvents(
-        tx,
-        cancelled.map((b) =>
-          bookingCancelledEvent(account.id, { bookingId: b.id, rideId, by: 'driver', late }, now),
-        ),
-      );
-    }
+    await cancelRideTx(
+      tx,
+      {
+        id: rideId,
+        driverId: account.id,
+        driverFirstName: account.firstName,
+        departureAt: ctx.departureAt,
+      },
+      now,
+      'driver',
+      late,
+    );
     return await loadOwnerView(deps, tx, rideId, account.id);
   });
 }
@@ -305,8 +284,12 @@ export async function getPublicRide(
     ? ((await selectViewerBooking(sql, rideId, viewerId)) ?? null)
     : null;
   if (!publicRideVisible(row, viewerId, viewerBooking !== null)) throw notFound();
+  // A completed ride is over: only its driver and its passengers can still open it (E5).
+  if (row.status === 'completed' && viewerId !== row.driver_id && viewerBooking === null) {
+    throw notFound();
+  }
   const since = new Date(clock.now().getTime() - RELIABILITY_WINDOW_DAYS * DAY_MS);
-  const profile = await getPublicProfile(sql, row.driver_id, since);
+  const profile = await getPublicProfile(sql, row.driver_id, since, clock.now());
   if (!profile || profile.status === 'suspended') throw notFound();
   return toPublicView(row, toPublicUser(profile, env), viewerId, viewerBooking);
 }

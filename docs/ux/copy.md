@@ -869,3 +869,19 @@ These exist in the deck for states the build must handle but the prototype does 
 | `error.session` | You’ve been signed out. Sign in to continue. |
 | `error.suspended` | Your account is paused after a report. Email support to find out why. |
 | `error.fieldRequired` | Fill in this field. |
+
+## 37. Driver side of trust and safety (E5-2, E5-3, E5-4, E5-7)
+
+The driver ride screen (`/driving/:id`) reuses the keys of sections 23 to 27: `rideday.call112`, `rideday.call112.hint` and `a11y.call112` (Call 112, shown from 15 minutes before to 2 hours after departure, window from the server), `rideday.noShow*` (Mark no-show sheet), `driverRide.rate` and `driverRide.pax.rated` (Rate), `driverRide.completed` (completed ride) and `driverRide.noShow.byPassenger` (a passenger reported that the driver did not show). The Report and Block buttons on a passenger card reuse `report.title` ("Report {name}") and `block.confirm` ("Block {name}"), so each button names the person. Rate opens the same Rate screen as the passenger side (section 25), with the passenger tags. New keys:
+
+| Key | English |
+|---|---|
+| `driverRide.completed.none` | This ride is over. Nobody rode, so there is nothing to rate. |
+| `driverRide.noShow.byYou` | You marked {name} as a no-show. |
+| `driverRide.pax.noShow` | Marked as a no-show |
+| `driverRide.pax.done` | Ride completed |
+| `driverRide.pax.noShow.label` | Mark no-show for {name} |
+
+Notes: `driverRide.pax.noShow.label` is the accessible name of the Mark no-show button; it starts with the visible text so voice control works. A no-show passenger shows no price and no phone. The "also block" choice lives in the Report sheet (`report.alsoBlock`); the separate Block button is for blocking without a report.
+
+Also in this pass: the share button uses the Lucide `share` icon (was `swap`), and the rating confirmation keeps its heading (`<h2>`) inside a `role="status"` wrapper.

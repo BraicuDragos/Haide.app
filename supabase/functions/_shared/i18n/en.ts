@@ -21,6 +21,18 @@ export const en = {
   'email.bookingCancelled.subject': '{name} cancelled their seat on your {time} ride',
   'email.bookingCancelled.body':
     'Your price per passenger is recalculated. It never goes up for passengers already accepted.',
+  'email.rideCancelled.system.subject': 'The {time} ride with {driver} was cancelled',
+  'email.ratePrompt.subject': 'How was your ride with {driver}?',
+  'email.ratePrompt.body':
+    'Rate {driver} within 7 days. They see your rating once you’ve both rated.',
+  'email.ratePromptDriver.subject': 'Rate your passengers from the {time} ride',
+  'email.ratePromptDriver.body':
+    'You have 7 days. Ratings stay hidden until both sides have rated.',
+  'email.noShow.subject': '{name} reported a no-show on the {time} ride',
+  'email.noShow.body':
+    'It shows on your profile for 90 days. If this is wrong, open Haide and report a problem.',
+  'email.report.subject': 'New safety report: {reason}',
+  'email.report.body': 'Review it in the database until the reports queue ships.',
   'email.priceDropped.body': 'Price changed to {price} because a second passenger joined.',
   'email.openLabel': 'Open Haide',
   'email.open': 'Open Haide: {link}',

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { publicUserSchema, fuelTypeSchema } from './account.ts';
 import { latLngSchema } from './geo.ts';
+import { call112WindowSchema, ratingGivenSchema } from './ratings.ts';
 
 /**
  * Ride contracts (E2): POST /rides/preview, POST /rides, GET /me/rides, GET /me/rides/{id},
@@ -116,7 +117,8 @@ export type CreateRideBody = z.input<typeof createRideBodySchema>;
 export type CreateRideRequest = z.output<typeof createRideBodySchema>;
 
 // ---- Owner view: POST /rides (201), GET /me/rides/{id}, POST /rides/{id}/cancel (200) -----------
-// E4: `requests` (open requests, never any point) and `passengers` (confirmed bookings) are filled.
+// E4: `requests` (open requests, never any point) and `passengers` are filled. E5: `passengers` holds
+// confirmed, completed and no_show bookings.
 
 const ownerPlaceSchema = z.object({ point: latLngSchema, label: z.string() });
 
@@ -153,8 +155,14 @@ export const ridePassengerItemSchema = z.object({
   phoneE164: z.string().nullable(),
   priceLockedBani: z.number().int().nullable(),
   finalPriceBani: z.number().int().nullable(),
+  /** Who reported the no-show, when `status` is `no_show` (E5). */
+  noShowBy: z.enum(['driver', 'passenger']).nullable(),
   canMarkNoShow: z.boolean(),
   canRate: z.boolean(),
+  /** completedAt + 7 days, null until the ride is completed. */
+  rateUntil: z.string().nullable(),
+  /** The driver's own rating of this passenger. */
+  ratingGiven: ratingGivenSchema.nullable(),
 });
 export type RidePassengerItem = z.infer<typeof ridePassengerItemSchema>;
 
@@ -186,6 +194,12 @@ export const rideOwnerViewSchema = z.object({
   lateCancel: z.boolean(),
   cancelledAt: z.string().nullable(),
   createdAt: z.string(),
+  /** Set once the ride is completed (E5). */
+  completedAt: z.string().nullable(),
+  /** `call112Window.from <= now < call112Window.until` at the time of the response. */
+  show112: z.boolean(),
+  /** Null unless the ride has a confirmed or completed passenger. */
+  call112Window: call112WindowSchema.nullable(),
 });
 export type RideOwnerView = z.infer<typeof rideOwnerViewSchema>;
 
@@ -208,6 +222,8 @@ export const rideListItemSchema = z.object({
   seatsBooked: z.number().int(),
   /** Open requests (`requested`, not past their expiry). */
   pendingRequests: z.number().int(),
+  /** Completed passengers the driver can still rate (E5). */
+  toRate: z.number().int().min(0),
 });
 export type RideListItem = z.infer<typeof rideListItemSchema>;
 

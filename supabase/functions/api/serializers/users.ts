@@ -16,8 +16,8 @@ export function toPublicUser(row: PublicProfileRow, env: Env): PublicUser {
     photoUrl: deleted ? null : avatarUrl(env, row.photo_path),
     memberSince: memberSince(new Date(row.created_at)),
     rating: ratingSummary(row.rating_count, row.rating_avg),
-    // Counted from completed bookings once E4 lands.
-    ridesCompleted: 0,
+    // Completed bookings as a passenger plus completed rides as a driver (E5).
+    ridesCompleted: Number(row.rides_completed ?? 0),
     lateCancellations90d: row.late_cancellations,
     noShows90d: row.no_shows,
     bio: deleted ? null : row.bio,

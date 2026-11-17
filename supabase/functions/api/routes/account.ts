@@ -226,7 +226,7 @@ accountRoutes.get('/users/:id', rateLimit('users', RATE_LIMITS.publicRead), asyn
   const id = c.req.param('id');
   if (!UUID_RE.test(id)) throw new AppError('NOT_FOUND', 'User not found.');
   const since = new Date(clock.now().getTime() - RELIABILITY_WINDOW_DAYS * DAY_MS);
-  const row = await getPublicProfile(sql, id.toLowerCase(), since);
+  const row = await getPublicProfile(sql, id.toLowerCase(), since, clock.now());
   if (!row || row.status === 'suspended') throw new AppError('NOT_FOUND', 'User not found.');
   return c.json(toPublicUser(row, env));
 });

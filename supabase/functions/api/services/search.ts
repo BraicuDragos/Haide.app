@@ -44,7 +44,9 @@ async function toItems(deps: Deps, rows: readonly MatchRow[]): Promise<SearchIte
   const { sql, clock, env } = deps;
   const since = new Date(clock.now().getTime() - RELIABILITY_WINDOW_DAYS * DAY_MS);
   const ids = [...new Set(rows.map((r) => r.driver_id))];
-  const profiles = new Map((await getPublicProfiles(sql, ids, since)).map((p) => [p.id, p]));
+  const profiles = new Map(
+    (await getPublicProfiles(sql, ids, since, clock.now())).map((p) => [p.id, p]),
+  );
   const items: SearchItem[] = [];
   for (const row of rows) {
     const profile = profiles.get(row.driver_id);

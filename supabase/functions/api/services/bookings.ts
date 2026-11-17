@@ -86,6 +86,10 @@ export function mapBookingDbError(e: unknown): never {
   if (err?.code === '23505' && err.constraint_name === 'bookings_idempotency_uniq') {
     throw reusedKey();
   }
+  // Two ratings from the same rater in parallel: the unique key is the backstop (E5).
+  if (err?.code === '23505' && err.constraint_name === 'ratings_booking_id_rater_id_key') {
+    throw new AppError('ALREADY_RATED', 'You have already rated this ride.');
+  }
   throw e;
 }
 
@@ -94,7 +98,7 @@ const reusedKey = () =>
     fields: { idempotencyKey: 'reused' },
   });
 
-async function tx<T>(deps: Deps, fn: (db: Db) => Promise<T>): Promise<T> {
+export async function tx<T>(deps: Deps, fn: (db: Db) => Promise<T>): Promise<T> {
   try {
     return (await deps.sql.begin(async (txn) => {
       const db = asDb(txn);
@@ -109,7 +113,7 @@ async function tx<T>(deps: Deps, fn: (db: Db) => Promise<T>): Promise<T> {
 
 // ---- view ---------------------------------------------------------------------------------------------------
 
-async function loadBookingView(
+export async function loadBookingView(
   deps: Deps,
   db: Db,
   bookingId: string,

@@ -28,3 +28,8 @@ Every significant decision (business, brand, UX, architecture) gets a file
 | [0021](0021-booking-concurrency-ride-row-lock.md) | Booking concurrency: the ride row lock is the single serialization point | Architecture | Proposed | software-architect |
 | [0022](0022-notification-delivery-outbox-tick-brevo.md) | Notification delivery: transactional outbox, per-minute tick with leased claims, Brevo HTTP API | Infrastructure | Proposed | software-architect |
 | [0023](0023-confirmed-booking-reveal-scope.md) | Reveal scope for confirmed bookings: own segment only, serializer-enforced 24 h window | Architecture | Proposed | software-architect |
+| [0024](0024-ride-completion-in-tick-and-no-show.md) | Ride completion as a tick step; accepted seats include completed and no-show; no-show refused once rated | Architecture | Proposed | software-architect |
+| [0025](0025-blind-ratings-stored-visible-at.md) | Blind ratings: stored `visible_at` with a column-level update grant | Architecture | Proposed | software-architect |
+| [0026](0026-share-trip-link-hashed-token.md) | Share-trip link: passenger-only, hashed 128-bit token, one link per booking, own segment only | Architecture | Proposed | software-architect |
+| [0027](0027-suspension-flag-and-tick-safety-sweep.md) | Suspension: status flag set by SQL, cascades done by a tick safety sweep | Architecture | Proposed | software-architect |
+| [0028](0028-block-cancels-active-bookings.md) | Blocking cancels active future bookings between the pair, without penalty | Architecture | Proposed | software-architect |

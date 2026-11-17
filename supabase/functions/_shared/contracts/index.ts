@@ -5,3 +5,4 @@ export * from './system.ts';
 export * from './rides.ts';
 export * from './search.ts';
 export * from './bookings.ts';
+export * from './safety.ts';

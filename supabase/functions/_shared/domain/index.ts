@@ -12,3 +12,5 @@ export * from './corridors.ts';
 export * from './search.ts';
 export * from './outbox.ts';
 export * from './bookings.ts';
+export * from './ratings.ts';
+export * from './safety.ts';

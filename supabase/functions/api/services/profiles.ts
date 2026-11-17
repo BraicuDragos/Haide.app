@@ -20,7 +20,7 @@ export async function publicUsersById(
   const out = new Map<string, PublicUser>();
   if (unique.length === 0) return out;
   const since = new Date(deps.clock.now().getTime() - RELIABILITY_WINDOW_DAYS * DAY_MS);
-  for (const p of await getPublicProfiles(db, unique, since)) {
+  for (const p of await getPublicProfiles(db, unique, since, deps.clock.now())) {
     out.set(p.id, toPublicUser(p, deps.env));
   }
   return out;

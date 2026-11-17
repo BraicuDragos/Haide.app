@@ -286,9 +286,13 @@ UNIQUE `(booking_id, rater_id)`. Immutable (no UPDATE/DELETE grants). Index `(ra
 
 **`blocks`**: PK `(blocker_id, blocked_id)`, `created_at`, `CHECK (blocker_id <> blocked_id)`. Index `(blocked_id)` for the reverse lookup. Created in E3 (migration `20261118090000_search.sql`) because the match filter reads it; RLS enabled with no policies, no access for `anon`/`authenticated`. The endpoints that write it arrive with E5.
 
+**Implemented in E5** (`20261120090000_trust_safety.sql`): `POST /blocks` and `DELETE /blocks/{userId}` write it. A block never deletes history: it cancels active future bookings between the pair (ADR 0028).
+
 **`share_links`** (E5-6): `id`, `booking_id`, `token_hash bytea UNIQUE`, `created_by`, `expires_at`, `created_at`.
 
 **`admin_actions`**: `id`, `admin_id`, `action text`, `target_user_id`, `report_id NULL`, `details jsonb`, `created_at`. Kept 24 months.
+
+**Implemented in E5** (`20261120090000_trust_safety.sql`): `reports`, `admin_actions` (append-only: UPDATE and DELETE revoked from `haide_api`) and `share_links` as above, all with RLS enabled and no policies. **`ratings.visible_at timestamptz NOT NULL`** (ADR 0025) replaces the computed visibility above: existing rows were backfilled with `created_at`; a new rating gets `completed_at + 7 d`, or `now` when the counter-rating exists (and the counter-rating is pulled to `least(visible_at, now)`). Every summary counts `visible_at <= now` (`rating_count`, `rating_avg`), index `ratings_ratee_visible_idx (ratee_id, visible_at)`. `haide_api` holds `UPDATE (visible_at)` only: stars and tags stay immutable; `ratings_tags_allowed` checks the tag set. Further named constraints: `rides_completed_has_time`, `bookings_no_show_meta`, `bookings_final_only_completed`, `reports_not_self`, `reports_other_has_details`, `reports_resolved_meta`, and the unique partial index `reliability_events_booking_kind_uidx (booking_id, kind)`. **Accepted-seat invariant (replaces the E4 one):** `rides.seats_booked = count(bookings WHERE status IN ('confirmed','completed','no_show'))`. Completion and no-show never touch it; cancelling a `confirmed` booking lowers it; a ride cancel sets it to 0. Share links keep only `sha256(token)`. New functions, all with PUBLIC EXECUTE revoked: `app.complete_rides(timestamptz, timestamptz, integer)`, `app.admin_suspend_user(uuid, text, uuid, uuid)`, `app.admin_unsuspend_user(uuid, text, uuid)`.
 
 ### 4.6 Geo reference data (gazetteer, ADR 0014)
 

@@ -6,6 +6,7 @@ import {
   type CurrentLegal,
 } from '../../_shared/domain/account.ts';
 import type { Account } from '../types.ts';
+import { selectPublicProfiles, type PublicProfileRow } from './ratingSummary.ts';
 
 type LegalRow = { kind: 'terms' | 'privacy'; version: string; url: string };
 
@@ -171,34 +172,17 @@ export async function upsertVehicle(
   return toVehicle(row);
 }
 
-export type PublicProfileRow = {
-  id: string;
-  first_name: string | null;
-  bio: string | null;
-  photo_path: string | null;
-  status: Account['status'];
-  created_at: Date | string;
-  rating_count: number;
-  rating_avg: number | null;
-  late_cancellations: number;
-  no_shows: number;
-};
+export type { PublicProfileRow } from './ratingSummary.ts';
 
-/** Everything the public profile needs in one round trip. Never selects phone or plate. */
+/**
+ * One public profile (never phone or plate). `since` starts the 90-day reliability window; `now`
+ * judges which ratings are visible (blind ratings, ADR 0025). The query lives in ratingSummary.ts.
+ */
 export async function getPublicProfile(
   sql: Db,
   userId: string,
   since: Date,
+  now: Date,
 ): Promise<PublicProfileRow | undefined> {
-  const rows = await sql<PublicProfileRow[]>`
-    select p.id, p.first_name, p.bio, p.photo_path, p.status, p.created_at,
-      (select count(*)::int from app.ratings r where r.ratee_id = p.id) as rating_count,
-      (select avg(r.stars)::float8 from app.ratings r where r.ratee_id = p.id) as rating_avg,
-      (select count(*)::int from app.reliability_events e
-        where e.user_id = p.id and e.kind = 'late_cancellation' and e.occurred_at > ${since}) as late_cancellations,
-      (select count(*)::int from app.reliability_events e
-        where e.user_id = p.id and e.kind = 'no_show' and e.occurred_at > ${since}) as no_shows
-    from app.profiles p
-    where p.id = ${userId}`;
-  return rows[0];
+  return (await selectPublicProfiles(sql, [userId], since, now))[0];
 }
