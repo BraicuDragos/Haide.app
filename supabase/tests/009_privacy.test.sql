@@ -3,7 +3,7 @@
 -- export_user_data, and the grants of all of them.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(143);
+select plan(146);
 
 -- Fixtures ---------------------------------------------------------------------------------------------------------
 -- Users u(1) D driver, u(2) P passenger, u(5) S scrubbed, u(6) T scrubbed without a photo,
@@ -157,7 +157,7 @@ select ok(has_table_privilege('haide_api', 'app.data_requests', 'INSERT')
   and has_table_privilege('haide_api', 'app.data_requests', 'SELECT'),
   'haide_api can record and read a data request');
 
--- Constraints, indexes, foreign key and legal texts (12) -----------------------------------------------------------------
+-- Constraints, indexes, foreign key and legal texts (15) -----------------------------------------------------------------
 select ok(exists (select 1 from pg_constraint where conname = 'account_deletions_completed_meta'),
   'constraint account_deletions_completed_meta exists');
 select throws_ok($$insert into app.account_deletions (user_id, completed_at) values (pg_temp.u(2), now())$$,
@@ -166,6 +166,24 @@ select throws_ok($$insert into app.account_deletions (user_id, last_error) value
   '23514', null, 'last_error is at most 200 characters');
 select throws_ok($$insert into app.account_deletions (user_id, photo_path) values (pg_temp.u(2), 'avatars/../secret.jpg')$$,
   '23514', null, 'photo_path must look like an avatar path');
+-- The purge marks each side with one UPDATE that also sets completed_at when the other side is done
+-- (same SQL shape as repo/privacy.ts): in sequence they never violate the table check.
+insert into app.account_deletions (user_id, requested_at, photo_path)
+  values (pg_temp.u(1), now(), 'avatars/6f1d8a5e-0000-4000-8000-000000000001.jpg');
+select lives_ok($$update app.account_deletions set storage_done_at = now(), photo_path = null,
+    completed_at = case when auth_done_at is not null then now() end,
+    last_error = case when auth_done_at is not null then null else last_error end
+  where user_id = pg_temp.u(1) and storage_done_at is null and completed_at is null$$,
+  'marking storage done first leaves the row open without violating the check');
+select lives_ok($$update app.account_deletions set auth_done_at = now(),
+    completed_at = case when storage_done_at is not null then now() end,
+    last_error = case when storage_done_at is not null then null else last_error end
+  where user_id = pg_temp.u(1) and auth_done_at is null and completed_at is null$$,
+  'marking auth done second closes the row in the same statement');
+select ok((select completed_at is not null and storage_done_at is not null and auth_done_at is not null
+             and photo_path is null from app.account_deletions where user_id = pg_temp.u(1)),
+  'the sequence ends with completed_at set and the photo path cleared');
+delete from app.account_deletions where user_id = pg_temp.u(1);
 select throws_ok($$insert into app.data_requests (user_id, kind) values (pg_temp.u(2), 'import')$$,
   '23514', null, 'the only data request kind is export');
 select ok(exists (select 1 from pg_indexes where schemaname = 'app' and indexname = i), 'index ' || i || ' exists')
