@@ -16,6 +16,14 @@ export type AvatarStorage = {
   upload(path: string, jpeg: Uint8Array): Promise<void>;
   /** Best effort: never throws. */
   remove(path: string): Promise<void>;
+  /** E6: throws on any failure except 404 (already gone), so the account purge can retry. */
+  removeStrict(path: string): Promise<void>;
+};
+
+/** Supabase Auth admin API (secret key). E6: removes the auth user of a deleted account. */
+export type AuthAdmin = {
+  /** Throws on any failure except 404 (already gone). */
+  deleteUser(userId: string): Promise<void>;
 };
 
 /** Decodes an upload and re-encodes it as a metadata-free square JPEG. Throws PHOTO_INVALID. */
@@ -29,6 +37,7 @@ export type Deps = {
   log: Logger;
   verifyToken: TokenVerifier;
   storage: AvatarStorage;
+  authAdmin: AuthAdmin;
   encodeAvatar: AvatarEncoder;
   /** Car routing (openrouteservice, or the fixture provider in dev and CI). */
   routing: RoutingProvider;
@@ -49,6 +58,8 @@ export type Account = {
   createdAt: Date;
   hasVehicle: boolean;
   consentRequired: ConsentRequired[];
+  /** E6: an older version of terms or privacy was accepted, a newer one is current. */
+  consentReaccept: boolean;
 };
 
 export type AppBindings = {

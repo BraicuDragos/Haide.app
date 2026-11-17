@@ -32,6 +32,14 @@ export const COMPLETE_BATCH = 200; // rides completed per tick
 export const SWEEP_BATCH = 50; // rides or bookings handled per sweep query per tick
 export const SHARE_TOKEN_BYTES = 16; // 128-bit share-link token
 
+// Privacy (E6)
+export const COARSEN_BATCH = 500; // rides and bookings coarsened per tick (each)
+export const PURGE_BATCH = 10; // account purges (storage + auth user) attempted per tick
+/** Retry delay in minutes after failure 1, 2, ...; the last value repeats (daily). */
+export const PURGE_BACKOFF_MIN = [1, 5, 30, 120, 720, 1440] as const;
+export const PURGE_OVERDUE_DAYS = 7; // an open deletion this old raises an app_errors alarm
+export const DATA_REQUEST_DUE_DAYS = 30; // GDPR Art. 12(3): one month to answer
+
 // Search (E3)
 export const MIN_SEARCH_SEPARATION_M = 1000; // from and to at least 1 km apart
 export const SEARCH_MAX_RESULTS = 50;
@@ -70,6 +78,8 @@ export const RATE_LIMITS = {
   report: { max: 10, windowS: 86400 },
   block: { max: 30, windowS: 3600 },
   shareView: { max: 30, windowS: 60 },
+  // Privacy (E6): "Request my data", 3 a day.
+  dataRequest: { max: 3, windowS: 86400 },
 } as const;
 
 // Accounts (E1)

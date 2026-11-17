@@ -15,7 +15,8 @@ export function toPublicUser(row: PublicProfileRow, env: Env): PublicUser {
     firstName: deleted ? null : row.first_name,
     photoUrl: deleted ? null : avatarUrl(env, row.photo_path),
     memberSince: memberSince(new Date(row.created_at)),
-    rating: ratingSummary(row.rating_count, row.rating_avg),
+    // Ratings stay in the database for the counterpart, but a tombstone shows no summary (E6).
+    rating: deleted ? null : ratingSummary(row.rating_count, row.rating_avg),
     // Completed bookings as a passenger plus completed rides as a driver (E5).
     ridesCompleted: Number(row.rides_completed ?? 0),
     lateCancellations90d: row.late_cancellations,

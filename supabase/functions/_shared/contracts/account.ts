@@ -29,7 +29,12 @@ export type ConsentRequired = z.infer<typeof consentRequiredSchema>;
 
 // ---- GET /legal/current (public) -----------------------------------------------------------
 
-const legalDocSchema = z.object({ version: z.string(), url: z.string() });
+const legalDocSchema = z.object({
+  version: z.string(),
+  url: z.string(),
+  /** E6: when this version became current (ISO). */
+  publishedAt: z.string(),
+});
 export const legalCurrentResponseSchema = z.object({
   terms: legalDocSchema,
   privacy: legalDocSchema,
@@ -47,7 +52,12 @@ export const meResponseSchema = z.object({
   photoUrl: z.string().nullable(),
   status: profileStatusSchema,
   role: userRoleSchema,
-  consent: z.object({ upToDate: z.boolean(), required: z.array(consentRequiredSchema) }),
+  consent: z.object({
+    upToDate: z.boolean(),
+    required: z.array(consentRequiredSchema),
+    /** E6: a required document has an older accepted version (show the "updated terms" screen). */
+    reaccept: z.boolean(),
+  }),
   profileComplete: z.boolean(),
   hasVehicle: z.boolean(),
   createdAt: z.string(),
@@ -57,7 +67,8 @@ export type MeResponse = z.infer<typeof meResponseSchema>;
 // ---- POST /me/consents (204) ----------------------------------------------------------------
 
 export const consentBodySchema = z.object({
-  age18: z.literal(true),
+  /** Required until an age_18 consent exists; optional when re-accepting updated terms (E6). */
+  age18: z.literal(true).optional(),
   termsVersion: z.string().min(1).max(20),
   privacyVersion: z.string().min(1).max(20),
 });

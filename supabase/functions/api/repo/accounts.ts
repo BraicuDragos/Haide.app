@@ -1,6 +1,7 @@
 import type { Db } from '../../_shared/db.ts';
 import type { VehicleResponse } from '../../_shared/contracts/account.ts';
 import {
+  needsReaccept,
   requiredConsents,
   type AcceptedConsent,
   type CurrentLegal,
@@ -8,15 +9,25 @@ import {
 import type { Account } from '../types.ts';
 import { selectPublicProfiles, type PublicProfileRow } from './ratingSummary.ts';
 
-type LegalRow = { kind: 'terms' | 'privacy'; version: string; url: string };
+type LegalRow = {
+  kind: 'terms' | 'privacy';
+  version: string;
+  url: string;
+  published_at?: Date | string;
+};
 
 /** Current version per kind: the latest `published_at <= now()` (data-model 4.1). */
 export async function currentLegal(
   sql: Db,
   at: Date,
-): Promise<{ versions: CurrentLegal; urls: { terms: string; privacy: string } }> {
+): Promise<{
+  versions: CurrentLegal;
+  urls: { terms: string; privacy: string };
+  /** When each current version was published (E6). */
+  publishedAt: { terms: Date | string | undefined; privacy: Date | string | undefined };
+}> {
   const rows = await sql<LegalRow[]>`
-    select distinct on (kind) kind, version, url
+    select distinct on (kind) kind, version, url, published_at
     from app.legal_documents
     where published_at <= ${at}
     order by kind, published_at desc`;
@@ -26,6 +37,7 @@ export async function currentLegal(
   return {
     versions: { terms: terms.version, privacy: privacy.version },
     urls: { terms: terms.url, privacy: privacy.url },
+    publishedAt: { terms: terms.published_at, privacy: privacy.published_at },
   };
 }
 
@@ -85,15 +97,27 @@ export async function loadAccount(
     createdAt: new Date(profile.created_at),
     hasVehicle: profile.has_vehicle,
     consentRequired: requiredConsents(legal.versions, accepted),
+    consentReaccept: needsReaccept(legal.versions, accepted),
   };
 }
 
-/** Writes the three consent rows (terms, privacy, age_18) in one statement. */
+/**
+ * Writes the consent rows in one statement: terms, privacy and (first acceptance only) age_18. Someone
+ * who accepts updated terms already has an age_18 row, so `withAge18` is false (E6).
+ */
 export async function recordConsents(
   sql: Db,
   userId: string,
   versions: CurrentLegal,
+  withAge18 = true,
 ): Promise<void> {
+  if (!withAge18) {
+    await sql`
+      insert into app.consents (user_id, kind, document_version)
+      values (${userId}, 'terms', ${versions.terms}),
+             (${userId}, 'privacy', ${versions.privacy})`;
+    return;
+  }
   await sql`
     insert into app.consents (user_id, kind, document_version)
     values (${userId}, 'terms', ${versions.terms}),

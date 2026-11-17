@@ -63,7 +63,8 @@ export function toOwnerView(
       [destination.lng, destination.lat] as [number, number],
     ],
   };
-  const car = row.vehicle_snapshot;
+  // After retention (plate) or account deletion (everything but the fuel type) parts of the snapshot are gone.
+  const car: Partial<typeof row.vehicle_snapshot> = row.vehicle_snapshot;
   // Call 112 is for a ride that has a confirmed or completed passenger.
   const window = extras.passengers.some((p) => p.status === 'confirmed' || p.status === 'completed')
     ? call112Window({ status: 'confirmed', departureAt })
@@ -83,8 +84,13 @@ export function toOwnerView(
     isFree: row.is_free,
     priceTable: priceTable(row.distance_m, row.rate_micro_per_km, row.seats_offered, row.is_free),
     tripCostBani: tripCostBani(row.distance_m, row.rate_micro_per_km),
-    fuelType: car.fuelType,
-    car: { make: car.make, model: car.model, colour: car.colour, plate: car.plate },
+    fuelType: row.vehicle_snapshot.fuelType,
+    car: {
+      make: car.make ?? '',
+      model: car.model ?? '',
+      colour: car.colour ?? '',
+      plate: car.plate ?? '',
+    },
     requests: extras.requests,
     passengers: extras.passengers,
     canCancel: canCancelRide(ctx, clock),
@@ -159,7 +165,8 @@ export function toPublicView(
     isFree: row.is_free,
     priceTable: priceTable(row.distance_m, row.rate_micro_per_km, row.seats_offered, row.is_free),
     // Picked field by field: the plate can never slip through.
-    car: { make: row.car.make, model: row.car.model, colour: row.car.colour },
+    // After account deletion the snapshot keeps only the fuel type: SQL NULLs arrive here, the contract wants strings.
+    car: { make: row.car.make ?? '', model: row.car.model ?? '', colour: row.car.colour ?? '' },
     driver,
     viewer: {
       isDriver: viewerId !== null && viewerId === row.driver_id,

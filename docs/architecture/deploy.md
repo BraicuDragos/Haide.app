@@ -131,7 +131,7 @@ Then, manually, once:
 4. A second account searches, requests, and the driver gets the email. Approve → passenger sees phone and plate. Cancel → email.
 5. `/admin` shows metrics and ops (DB size, emails today).
 6. Delete both test accounts. Their profiles show "Deleted user".
-7. Supabase → Database → Cron: `tick`, `complete-rides` and `retention` show successful runs.
+7. Supabase → Database → Cron: `haide-tick` shows successful runs (there is no separate `complete-rides` or `retention` job since E5/E6). In the SQL editor `select * from app.location_retention_violations(now());` returns no rows, and `select count(*) from app.account_deletions where completed_at is null;` is 0 after a test deletion (the tick finishes it within minutes).
 8. Next morning: a `backup` artifact exists. Do a test restore into the local stack (`age -d -i haide-backup.key dump.sql.age | psql <local>`).
 
 ### 5.3 Routine deploys
@@ -153,9 +153,12 @@ Every merge to `main` triggers `deploy.yml`. It waits for the owner's approval o
 | Energy price check (pricing §3 update rule) | Monthly, or when the national average moves > 3 % | Admin → Energy prices (E7-4). Before E7: an SQL insert into `app.energy_prices` (new row, never update) |
 | Quota check | Monthly | Supabase → Usage (egress, invocations, DB size). Admin ops tile (emails/day, ORS/day) |
 | Map tiles and gazetteer refresh | Quarterly | `scripts/geo/build-tiles.sh`, `scripts/geo/build-gazetteer.ts` → PR |
-| Suspend a user (before E7 UI) | On report | SQL Editor: `select app.admin_suspend_user('<uuid>', '<reason>');` |
+| Suspend a user (before E7 UI) | On report | SQL Editor: `select app.admin_suspend_user('<uuid>', '<reason>');` (a user who deleted their account stays `deleted`) |
 | Suspend a user with a report (before E7 UI) | On report | SQL Editor: `select app.admin_suspend_user('<uuid>', '<reason>', null, '<report uuid>');` (arguments: user, reason, admin id or null, report id or null; returns false when the user is not active). The next tick cancels their future rides and bookings (ADR 0027) |
 | Unsuspend a user (before E7 UI) | On appeal | SQL Editor: `select app.admin_unsuspend_user('<uuid>', '<note>');` (arguments: user, note, admin id or null). Cancelled rides and bookings stay cancelled |
-| Data export request (E6-4) | On request (≤ 30 days) | Admin → user → Export, then email the JSON from `privacy@haide.ro` |
+| Data export request (E6-4, ADR 0031) | On request (≤ 30 days; the `data_export_requested` email to `EMAIL_SUPPORT_TO` names the user id and the request id) | SQL Editor: `select app.export_user_data('<uuid>');`. Copy the JSON, send it from `privacy@haide.ro` to **the account email only** (that is the identity check), then `update app.data_requests set fulfilled_at = now() where id = '<request uuid>';`. The function is not callable through the API role. Reports about the user, other people's phones and points, and ratings not yet visible are left out on purpose (GDPR Art. 15(4)) |
+| Retention monitors (E6, weekly and after every deploy) | Weekly | SQL Editor: `select * from app.location_retention_violations(now());` must return **no rows** (exact points older than 90 days). `select user_id, requested_at, attempts, last_error from app.account_deletions where completed_at is null order by requested_at;` lists deletions whose avatar or auth user could not be removed yet; any older than 7 days also raises an `account_purge_overdue` row in `app_errors` (check the Admin ops tile) and breaks the 30-day erasure promise: fix the cause (Supabase secret key, Storage or Auth outage) and the tick finishes them |
+| Legal text v1.2 (before launch, GATE 3) | Once | The controller identity (owner need #1) is added as version **1.2**, never by editing 1.1: new content files in `apps/web/src/features/policy/content`, a migration inserting `legal_documents` rows `1.2` with the publish date, and the integration test `INT_LEGAL_BUMP` updated. Users are asked to accept again |
+| Auth audit log (E6) | Once | In Supabase → Authentication, turn the audit log off in the database if the setting exists. If it does not, add `delete from auth.audit_log_entries where created_at < now() - interval '30 days'` to `app.run_retention` in a new migration (IP addresses are personal data; the DPIA promises 30 days) |
 | Breach | On incident | DPIA §7: contain, assess, notify ANSPDCP within 72 h if risk |
 | Backup restore drill | Quarterly | §5.2 step 8 |

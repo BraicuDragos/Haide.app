@@ -72,3 +72,20 @@ export const requireAdmin: MiddlewareHandler<AppBindings> = async (c, next) => {
   if (account.role !== 'admin') throw new AppError('FORBIDDEN', 'Admins only.');
   await next();
 };
+
+/**
+ * E6: an authenticated caller whose account exists, whatever its status or consent. For the routes
+ * that must keep working when the account is suspended or has not accepted the new terms
+ * (`DELETE /me`). A deleted account is a no-op for them, not an error.
+ */
+export const requireAccount: MiddlewareHandler<AppBindings> = async (c, next) => {
+  await accountOf(c);
+  await next();
+};
+
+/** Suspended is fine, deleted is `ACCOUNT_DELETED` (`POST /me/data-export-request`). */
+export const requireNotDeleted: MiddlewareHandler<AppBindings> = async (c, next) => {
+  const account = await accountOf(c);
+  if (account.status === 'deleted') throw new AppError('ACCOUNT_DELETED', 'Account deleted.');
+  await next();
+};

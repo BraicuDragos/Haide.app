@@ -1,13 +1,17 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type FormEvent, type ReactNode, type Ref } from 'react';
-import { Link } from 'react-router';
-import { getLegal, postConsents } from '@/api/account';
+import { Link, useNavigate, useSearchParams } from 'react-router';
+import { getLegal, getMe, postConsents } from '@/api/account';
 import { ApiError } from '@/api/client';
 import { keys } from '@/api/keys';
 import { useSignOut, useAdvance, useMe } from '@/auth/hooks';
+import { safePath } from '@/auth/intent';
+import { destination } from '@/auth/onboarding';
 import { RequireAuth, ScreenSkeleton } from '@/auth/RequireAuth';
+import { loadPolicy } from '@/features/policy/content';
 import { StepProgress } from '@/features/onboarding/StepProgress';
 import { t, tError } from '@/i18n';
+import type { Me } from '@/api/types';
 import { Button } from '@/ui/Button';
 import { Icon } from '@/ui/Icon';
 import { Notice } from '@/ui/Notice';
@@ -181,11 +185,165 @@ function Consent() {
   );
 }
 
-/** Screen 1.3: 18+ and Terms/Privacy, two separate errors. Decline signs out (ADR 0010). */
+const UPDATE_DRAFT_KEY = 'haide.consentUpdateDraft';
+
+/**
+ * Screen 1.3b: terms or privacy changed since the person accepted. Shows what changed, links to both documents and asks
+ * for one checkbox (age is already on record). Accepting goes back to where the Shell interrupted them.
+ */
+function UpdatedTerms() {
+  const qc = useQueryClient();
+  const navigate = useNavigate();
+  const signOut = useSignOut();
+  const [params] = useSearchParams();
+  const requested = params.get('returnTo');
+  const returnTo = safePath(requested) && !requested.startsWith('/auth') ? requested : '/find';
+  const legal = useQuery({ queryKey: keys.legal, queryFn: ({ signal }) => getLegal(signal) });
+  const changes = useQuery({
+    queryKey: ['policy', 'changes'],
+    staleTime: Infinity,
+    queryFn: async () => {
+      const [terms, privacy] = await Promise.all([loadPolicy('terms'), loadPolicy('privacy')]);
+      return { terms: terms.changes, privacy: privacy.changes };
+    },
+  });
+  const [accepted, setAccepted] = useState(() => {
+    try {
+      return sessionStorage.getItem(UPDATE_DRAFT_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const [err, setErr] = useState<string>();
+  const [error, setError] = useState<string>();
+  const [busy, setBusy] = useState(false);
+  const boxRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(UPDATE_DRAFT_KEY, accepted ? '1' : '0');
+    } catch {
+      /* optional convenience */
+    }
+  }, [accepted]);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setError(undefined);
+    if (!accepted) {
+      setErr(t('consent.update.err'));
+      return boxRef.current?.focus();
+    }
+    setErr(undefined);
+    if (!legal.data) return setError(t('consent.err.load'));
+    setBusy(true);
+    try {
+      await postConsents({
+        termsVersion: legal.data.terms.version,
+        privacyVersion: legal.data.privacy.version,
+      });
+      try {
+        sessionStorage.removeItem(UPDATE_DRAFT_KEY);
+      } catch {
+        /* ignore */
+      }
+      const me = await qc.fetchQuery<Me>({
+        queryKey: keys.me,
+        queryFn: () => getMe(),
+        staleTime: 0,
+      });
+      qc.setQueryData(keys.me, me);
+      void navigate(destination(me, { kind: 'other', returnTo }), { replace: true });
+    } catch (e2) {
+      setError(tError(e2 instanceof ApiError ? e2.code : undefined));
+      setBusy(false);
+    }
+  }
+
+  const lists = [
+    { key: 'terms', title: t('policy.terms.title'), items: changes.data?.terms },
+    { key: 'privacy', title: t('policy.privacy.title'), items: changes.data?.privacy },
+  ];
+
+  return (
+    <>
+      <PageHeader title={t('consent.update.title')} />
+      <form onSubmit={(e) => void submit(e)} noValidate className="flex flex-col gap-5 px-4 py-5">
+        <p className="max-w-[44ch]">{t('consent.update.body')}</p>
+        <section aria-labelledby="changes-h" className="card flex flex-col gap-4 p-4">
+          <h2 id="changes-h" className="type-h3">
+            {t('consent.update.changes')}
+          </h2>
+          {changes.isPending && <p className="text-text-muted">{t('a11y.loading')}</p>}
+          {changes.isError && <Notice tone="error">{t('policy.loadError')}</Notice>}
+          {lists.map(
+            (l) =>
+              l.items && (
+                <div key={l.key} className="flex flex-col gap-2">
+                  <h3 className="font-semibold">{l.title}</h3>
+                  <ul className="flex list-disc flex-col gap-1.5 pl-5 leading-6 text-text-muted">
+                    {l.items.map((c) => (
+                      <li key={c}>{c}</li>
+                    ))}
+                  </ul>
+                </div>
+              ),
+          )}
+          <div className="flex flex-col">
+            <Link
+              to="/policy/terms"
+              className="flex min-h-11 items-center font-semibold text-link underline"
+            >
+              {t('consent.update.readTerms')}
+            </Link>
+            <Link
+              to="/policy/privacy"
+              className="flex min-h-11 items-center font-semibold text-link underline"
+            >
+              {t('consent.update.readPrivacy')}
+            </Link>
+          </div>
+        </section>
+        <Check
+          id="consent-update"
+          inputRef={boxRef}
+          checked={accepted}
+          onChange={setAccepted}
+          error={err}
+        >
+          {t('consent.update.accept')}
+        </Check>
+        {(error || legal.isError) && <Notice tone="error">{error ?? t('consent.err.load')}</Notice>}
+        <div className="flex flex-col gap-2">
+          <Button type="submit" block loading={busy}>
+            {t('consent.cta')}
+          </Button>
+          <Link to="/delete" className="btn btn-ghost btn-block">
+            {t('consent.update.delete')}
+          </Link>
+          <Button variant="ghost" block disabled={busy} onClick={() => void signOut()}>
+            {t('consent.update.signOut')}
+          </Button>
+        </div>
+      </form>
+    </>
+  );
+}
+
+function ConsentRoute() {
+  const me = useMe();
+  // Once the update mode has shown, it stays: accepting flips `reaccept` off before the screen navigates away, and the
+  // first-time flow must not take over in between.
+  const update = useRef(false);
+  if (me.data?.consent.reaccept === true) update.current = true;
+  return update.current ? <UpdatedTerms /> : <Consent />;
+}
+
+/** Screen 1.3: 18+ and Terms/Privacy, two separate errors. Decline signs out (ADR 0010). Updated terms: 1.3b. */
 export function ConsentScreen() {
   return (
     <RequireAuth title={t('consent.title')} keepIntent>
-      <Consent />
+      <ConsentRoute />
     </RequireAuth>
   );
 }

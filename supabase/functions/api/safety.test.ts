@@ -1007,7 +1007,7 @@ describe('tick steps', () => {
     const { app, calls } = makeApp(
       [
         (q) =>
-          q.text.includes("p.status = 'suspended'") &&
+          q.text.includes("p.status in ('suspended', 'deleted')") &&
           q.text.includes('select r.id from app.rides r')
             ? [{ id: RIDE }]
             : undefined,
@@ -1055,7 +1055,7 @@ describe('tick steps', () => {
     const { app, calls } = makeApp(
       [
         (q) => {
-          if (q.text.includes("p.status = 'suspended'")) throw new Error('db down');
+          if (q.text.includes("p.status in ('suspended', 'deleted')")) throw new Error('db down');
           return undefined;
         },
         counts,
@@ -1074,7 +1074,7 @@ describe('tick steps', () => {
     const order = [
       'from app.expire_requests',
       'from app.complete_rides',
-      "p.status = 'suspended'",
+      "p.status in ('suspended', 'deleted')",
       'update app.outbox set attempts',
       'delete from app.route_previews',
       'delete from app.share_links',

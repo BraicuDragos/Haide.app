@@ -48,7 +48,7 @@ export async function completeRides(
   }));
 }
 
-/** Published rides that have not departed, driven by a suspended user. */
+/** Published rides that have not departed, driven by a suspended or deleted user (E6: a write that raced the deletion). */
 export async function selectSuspendedDriverRides(
   sql: Db,
   now: Date,
@@ -56,12 +56,12 @@ export async function selectSuspendedDriverRides(
 ): Promise<{ id: string }[]> {
   return await sql<{ id: string }[]>`
     select r.id from app.rides r join app.profiles p on p.id = r.driver_id
-    where r.status = 'published' and r.departure_at > ${now} and p.status = 'suspended'
+    where r.status = 'published' and r.departure_at > ${now} and p.status in ('suspended', 'deleted')
     order by r.departure_at, r.id
     limit ${limit}`;
 }
 
-/** Active bookings of a suspended passenger on rides that have not departed. */
+/** Active bookings of a suspended or deleted passenger on rides that have not departed. */
 export async function selectSuspendedPassengerBookings(
   sql: Db,
   now: Date,
@@ -71,7 +71,8 @@ export async function selectSuspendedPassengerBookings(
     select b.id from app.bookings b
     join app.rides r on r.id = b.ride_id
     join app.profiles p on p.id = b.passenger_id
-    where b.status in ('requested', 'confirmed') and r.departure_at > ${now} and p.status = 'suspended'
+    where b.status in ('requested', 'confirmed') and r.departure_at > ${now}
+      and p.status in ('suspended', 'deleted')
     order by r.departure_at, b.id
     limit ${limit}`;
 }

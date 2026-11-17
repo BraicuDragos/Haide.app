@@ -1,5 +1,7 @@
 import type { TickResponse } from '../../_shared/contracts/system.ts';
 import { bookingExpiredEvent, bookingExpiredOutbox } from '../../_shared/domain/bookings.ts';
+import { COARSEN_BATCH, PURGE_OVERDUE_DAYS } from '../../_shared/domain/rules.ts';
+import { sha256Hex } from '../../_shared/hash.ts';
 import { dispatchOutbox } from '../../_shared/notify/dispatch.ts';
 import { scrubText } from '../../_shared/scrub.ts';
 import { asDb } from '../../_shared/db.ts';
@@ -11,13 +13,16 @@ import {
   purgeHousekeeping,
   purgeRoutePreviews,
 } from '../repo/outbox.ts';
+import { coarsenLocations, selectOverdueDeletions } from '../repo/privacy.ts';
 import { purgeShareLinks } from '../repo/shareLinks.ts';
 import { recordAppError } from '../repo/system.ts';
+import { runAccountPurges } from './accountPurge.ts';
 import { completeFinishedRides, runSafetySweep } from './safety.ts';
 import type { Deps } from '../types.ts';
 
 /**
- * POST /internal/tick, run by pg_cron through pg_net every minute (e4-bookings-spec §7, ADR 0022).
+ * POST /internal/tick, run by pg_cron through pg_net every minute (e4-bookings-spec §7, ADR 0022, and
+ * e6-privacy-spec §7: steps 6 to 8 are retention and account purges).
  * Each step has its own try/catch: a failure is logged and recorded, and the next step still runs.
  * The clock is injected, so tests drive time.
  */
@@ -30,6 +35,8 @@ export async function runTick(deps: Deps): Promise<TickResponse> {
     sent: 0,
     failed: 0,
     purged: 0,
+    coarsened: 0,
+    accountsPurged: 0,
   };
   const now = clock.now();
 
@@ -101,6 +108,7 @@ export async function runTick(deps: Deps): Promise<TickResponse> {
       log,
       dailyCap: env.EMAIL_DAILY_CAP,
       baseUrl: env.APP_BASE_URL,
+      supportTo: env.EMAIL_SUPPORT_TO,
     });
     result.sent = sent.sent;
     result.failed = sent.failed;
@@ -120,14 +128,55 @@ export async function runTick(deps: Deps): Promise<TickResponse> {
     await failStep('purge_share_links', e);
   }
 
-  // 6. Hourly housekeeping (minute 0 UTC).
+  // 6. Coarsen exact locations of rides and bookings that departed more than 90 days ago (ADR 0030).
+  try {
+    const c = await coarsenLocations(sql, now, COARSEN_BATCH);
+    result.coarsened = c.rides + c.bookings;
+  } catch (e) {
+    await failStep('coarsen', e);
+  }
+
+  // 7. Finish account deletions: remove the avatar object and the auth user (ADR 0029).
+  try {
+    result.accountsPurged = await runAccountPurges(deps);
+  } catch (e) {
+    await failStep('account_purge', e);
+  }
+
+  // 8. Hourly housekeeping (minute 0 UTC): the retention purge, then the overdue-deletion alarm.
   if (now.getUTCMinutes() === 0) {
     try {
-      result.purged += await purgeHousekeeping(sql, now);
+      result.purged += await purgeHousekeeping(sql);
     } catch (e) {
       await failStep('housekeeping', e);
+    }
+    try {
+      await alarmOverdueDeletions(deps, now);
+    } catch (e) {
+      await failStep('purge_overdue_alarm', e);
     }
   }
 
   return result;
+}
+
+const OVERDUE_ALARM_MAX = 20;
+
+/**
+ * A deletion still open after 7 days puts the 30-day erasure promise at risk: one app_errors row per
+ * such deletion, per hour, with a hash of the id (never the id itself in the message).
+ */
+async function alarmOverdueDeletions(deps: Deps, now: Date): Promise<void> {
+  const cutoff = new Date(now.getTime() - PURGE_OVERDUE_DAYS * 86_400_000);
+  const open = await selectOverdueDeletions(deps.sql, cutoff, OVERDUE_ALARM_MAX);
+  for (const row of open) {
+    await recordAppError(deps.sql, {
+      source: 'server',
+      message: 'account_purge_overdue',
+      stack: null,
+      route: '/internal/tick',
+      appVersion: deps.env.APP_VERSION,
+      userIdHash: (await sha256Hex(row.user_id)).slice(0, 16),
+    });
+  }
 }

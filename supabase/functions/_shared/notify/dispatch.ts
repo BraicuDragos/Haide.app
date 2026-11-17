@@ -55,6 +55,8 @@ export type DispatchDeps = {
   /** EMAIL_DAILY_CAP (default 280, the Brevo free tier is 300). */
   dailyCap: number;
   baseUrl: string;
+  /** EMAIL_SUPPORT_TO: the recipient of staff-facing templates (E6 data requests). */
+  supportTo?: string;
   batch?: number;
   concurrency?: number;
 };
@@ -104,7 +106,8 @@ export async function dispatchOutbox(deps: DispatchDeps): Promise<DispatchResult
       result.failed++;
       return;
     }
-    const to = emails.get(row.userId);
+    // Staff-facing templates go to the support mailbox, not to the user the row is about (E6, ADR 0031).
+    const to = row.template === 'data_export_requested' ? deps.supportTo : emails.get(row.userId);
     if (!to) {
       await store.markFailed(row.id, 'no_recipient');
       result.failed++;

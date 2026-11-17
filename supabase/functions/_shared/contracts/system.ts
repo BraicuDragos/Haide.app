@@ -26,5 +26,9 @@ export const tickResponseSchema = z.object({
   failed: z.number().int(),
   /** Route previews, expired share links and hourly housekeeping rows deleted. */
   purged: z.number().int(),
+  /** Rides plus bookings whose exact locations were coarsened (E6). */
+  coarsened: z.number().int(),
+  /** Account deletions finished (storage object and auth user removed) (E6). */
+  accountsPurged: z.number().int(),
 });
 export type TickResponse = z.infer<typeof tickResponseSchema>;

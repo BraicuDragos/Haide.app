@@ -7,8 +7,12 @@ export const getLegal = (signal?: AbortSignal) =>
 
 export const getMe = (signal?: AbortSignal) => apiRequest<Me>('/me', { signal });
 
-export const postConsents = (body: { age18: true; termsVersion: string; privacyVersion: string }) =>
-  apiRequest<void>('/me/consents', { method: 'POST', body });
+/** `age18` may be left out when the account already has an age confirmation (updated terms, e6 spec section 4). */
+export const postConsents = (body: {
+  age18?: true;
+  termsVersion: string;
+  privacyVersion: string;
+}) => apiRequest<void>('/me/consents', { method: 'POST', body });
 
 export const patchProfile = (body: { firstName?: string; phone?: string; bio?: string }) =>
   apiRequest<Me>('/me/profile', { method: 'PATCH', body });

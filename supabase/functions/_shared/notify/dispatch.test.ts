@@ -238,4 +238,43 @@ describe('dispatchOutbox', () => {
     expect(await run(store, provider)).toEqual({ sent: 2, failed: 1, retried: 0 });
     expect(calls.sent.sort()).toEqual(['a', 'c']);
   });
+  it('routes data_export_requested to the support address, not to the requester (E6)', async () => {
+    const data = {
+      requestId: 'req1',
+      userId: 'u-a',
+      requestedAt: '2026-11-16T07:40:00.000Z',
+    };
+    const { store, calls } = fakeStore([
+      row('a', { template: 'data_export_requested', payload: data }),
+    ]);
+    const { provider, sent } = fakeProvider();
+    const out = await run(store, provider, { supportTo: 'support@haide.ro' });
+    expect(out).toEqual({ sent: 1, failed: 0, retried: 0 });
+    expect(calls.sent).toEqual(['a']);
+    expect(sent[0]).toMatchObject({ to: 'support@haide.ro', tag: 'data_export_requested' });
+    expect((sent[0] as EmailMessage).subject).toBe('Data request req1');
+    expect((sent[0] as EmailMessage).text).toContain("select app.export_user_data('u-a');");
+  });
+
+  it('fails a support-routed row when no support address is configured', async () => {
+    const { store, calls } = fakeStore([
+      row('a', { template: 'data_export_requested', payload: {} }),
+    ]);
+    const { provider, sent } = fakeProvider();
+    expect(await run(store, provider)).toEqual({ sent: 0, failed: 1, retried: 0 });
+    expect(sent).toHaveLength(0);
+    expect(calls.failed).toEqual([{ id: 'a', error: 'no_recipient' }]);
+  });
+
+  it('sends the data request acknowledgement to the user (E6)', async () => {
+    const { store } = fakeStore([
+      row('a', {
+        template: 'data_export_ack',
+        payload: { requestId: 'req1', dueBy: '2026-12-16T07:40:00.000Z' },
+      }),
+    ]);
+    const { provider, sent } = fakeProvider();
+    await run(store, provider, { supportTo: 'support@haide.ro' });
+    expect(sent[0]).toMatchObject({ to: 'u-a@example.com', tag: 'data_export_ack' });
+  });
 });

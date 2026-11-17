@@ -33,3 +33,6 @@ Every significant decision (business, brand, UX, architecture) gets a file
 | [0026](0026-share-trip-link-hashed-token.md) | Share-trip link: passenger-only, hashed 128-bit token, one link per booking, own segment only | Architecture | Proposed | software-architect |
 | [0027](0027-suspension-flag-and-tick-safety-sweep.md) | Suspension: status flag set by SQL, cascades done by a tick safety sweep | Architecture | Proposed | software-architect |
 | [0028](0028-block-cancels-active-bookings.md) | Blocking cancels active future bookings between the pair, without penalty | Architecture | Proposed | software-architect |
+| [0029](0029-account-deletion-immediate-tombstone-and-purge-queue.md) | Account deletion: immediate tombstone in one transaction, external purge retried by the tick | Architecture | Proposed | software-architect |
+| [0030](0030-retention-in-tick-coarsening-and-definer-purge.md) | Retention inside the tick: coarsening every minute, row purges through one SECURITY DEFINER function | Architecture | Proposed | software-architect |
+| [0031](0031-data-access-requests-by-email-and-sql-export.md) | Data access requests: in-app request by email, export by an admin-only SQL function | Architecture | Proposed | software-architect |

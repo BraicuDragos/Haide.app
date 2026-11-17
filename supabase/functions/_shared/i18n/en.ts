@@ -33,6 +33,12 @@ export const en = {
     'It shows on your profile for 90 days. If this is wrong, open Haide and report a problem.',
   'email.report.subject': 'New safety report: {reason}',
   'email.report.body': 'Review it in the database until the reports queue ships.',
+  'email.dataRequest.subject': 'Data request {requestId}',
+  'email.dataRequest.body':
+    "User {userId} asked for a copy of their data at {requestedAt}. In the SQL editor run: select app.export_user_data('{userId}'); then send the JSON from privacy@ to the account email and set fulfilled_at on data request {requestId}. Due by {dueBy}.",
+  'email.dataAck.subject': 'We got your request for a copy of your data',
+  'email.dataAck.body':
+    'We’ll email it to this address within 30 days. If you didn’t ask for this, reply to this email.',
   'email.priceDropped.body': 'Price changed to {price} because a second passenger joined.',
   'email.openLabel': 'Open Haide',
   'email.open': 'Open Haide: {link}',
