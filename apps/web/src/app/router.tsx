@@ -37,6 +37,12 @@ const rate = () => import('@/features/ratings/screens/RateScreen');
 const blocked = () => import('@/features/profile/screens/BlockedPeopleScreen');
 const deleteAccount = () => import('@/features/privacy/DeleteAccountScreen');
 const sharedTrip = () => import('@/features/share/screens/SharedTripScreen');
+const adminLayout = () => import('@/features/admin/AdminLayout');
+const adminMetrics = () => import('@/features/admin/screens/MetricsScreen');
+const adminReports = () => import('@/features/admin/screens/ReportsScreen');
+const adminUsers = () => import('@/features/admin/screens/SuspendedScreen');
+const adminEnergy = () => import('@/features/admin/screens/EnergyScreen');
+const adminOps = () => import('@/features/admin/screens/OpsScreen');
 
 export const router = createBrowserRouter([
   // The public share page lives outside the shell: no tab bar, no account calls (e5 spec 5.5b).
@@ -56,6 +62,18 @@ export const router = createBrowserRouter([
       { path: 'rate/:bookingId', ...lazyScreen(rate, (m) => m.default) },
       { path: 'settings/blocked', ...lazyScreen(blocked, (m) => m.default) },
       { path: 'delete', ...lazyScreen(deleteAccount, (m) => m.default) },
+      {
+        path: 'admin',
+        handle: { wide: true },
+        ...lazyScreen(adminLayout, (m) => m.default),
+        children: [
+          { index: true, ...lazyScreen(adminMetrics, (m) => m.default) },
+          { path: 'reports', ...lazyScreen(adminReports, (m) => m.default) },
+          { path: 'users', ...lazyScreen(adminUsers, (m) => m.default) },
+          { path: 'energy', ...lazyScreen(adminEnergy, (m) => m.default) },
+          { path: 'ops', ...lazyScreen(adminOps, (m) => m.default) },
+        ],
+      },
       { path: 'profile', element: <ProfileScreen /> },
       { path: 'profile/edit', ...lazyScreen(form, (m) => m.EditProfileScreen) },
       { path: 'profile/car', ...lazyScreen(form, (m) => () => <m.VehicleScreen mode="edit" />) },

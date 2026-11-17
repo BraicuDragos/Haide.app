@@ -1,4 +1,7 @@
 import en from './en.json';
+// Messages that live next to a lazy feature (type-only import: no bytes in the entry chunk). The feature registers them
+// at runtime with registerMessages() when its chunk loads.
+import type admin from '@/features/admin/admin.en.json';
 
 /**
  * Minimal i18n: flat dotted keys, `{param}` interpolation, `key.one` / `key.other` plurals via Intl.PluralRules.
@@ -6,10 +9,15 @@ import en from './en.json';
  * Add a language by adding `<lang>.json` and switching `messages`. Romanian will need `few`: the suffix mechanism
  * below already looks up `key.<category>` before falling back to `key.other`.
  */
-export type MessageKey = keyof typeof en;
+export type MessageKey = keyof typeof en | keyof typeof admin;
 type Params = Record<string, string | number>;
 
-const messages: Record<string, string> = en;
+const messages: Record<string, string> = { ...en };
+
+/** Adds the messages of a lazy-loaded feature. Call at module top level of the feature's entry chunk. */
+export function registerMessages(extra: Record<string, string>): void {
+  Object.assign(messages, extra);
+}
 const locale = 'en';
 const plural = new Intl.PluralRules(locale);
 

@@ -76,6 +76,20 @@ function SafetyRows() {
   );
 }
 
+/** Admin entry (E7): only rendered for role admin. The routes and the API check the role again. */
+function AdminRows() {
+  return (
+    <section aria-labelledby="admin-heading" className="flex flex-col gap-1">
+      <h2 id="admin-heading" className="type-h3 px-4">
+        {t('settings.admin')}
+      </h2>
+      <ul className="group mx-4">
+        <Row to="/admin" icon="shield" label={t('settings.admin.open')} />
+      </ul>
+    </section>
+  );
+}
+
 /** ODbL attribution for the OpenStreetMap-derived map tiles and gazetteer. */
 function About() {
   return (
@@ -200,6 +214,8 @@ function SignedIn() {
         <DisplaySettings />
 
         <SafetyRows />
+
+        {u.role === 'admin' && <AdminRows />}
 
         <PolicyRows>
           <PrivacyRows />
