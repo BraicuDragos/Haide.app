@@ -105,6 +105,13 @@ export async function createUser(
   const must = async (res: Response, what: string) => {
     if (!res.ok) throw new Error(`${what} failed with ${res.status}: ${await res.text()}`);
   };
+  // Onboarding calls are idempotent: one retry on a 5xx absorbs a transient hiccup on a busy runner.
+  const retry5xx = async (call: () => Promise<Response>): Promise<Response> => {
+    const res = await call();
+    if (res.status < 500) return res;
+    await new Promise((r) => setTimeout(r, 300));
+    return call();
+  };
   // The current document versions change with each legal text (1.0, then 1.1 from E6): ask the API.
   const legal = await currentLegal();
   await must(
@@ -116,10 +123,12 @@ export async function createUser(
     'consent',
   );
   await must(
-    await user.send('PATCH', '/me/profile', {
-      firstName: opts.firstName ?? 'Radu',
-      phone: '0721 234 567',
-    }),
+    await retry5xx(() =>
+      user.send('PATCH', '/me/profile', {
+        firstName: opts.firstName ?? 'Radu',
+        phone: '0721 234 567',
+      }),
+    ),
     'profile',
   );
   const photo = new Jimp({ width: 64, height: 48, color: 0x1e8c5aff });

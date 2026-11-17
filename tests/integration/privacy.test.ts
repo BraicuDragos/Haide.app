@@ -138,8 +138,11 @@ describe.skipIf(!BASE || !SECRET || DB_SKIP)('privacy against the local stack', 
   /** The purge removes the auth user, and the tick resolves addresses through it: give the user a row. */
   const withAuthRow = async (u: TestUser) => {
     await sql`
-      insert into auth.users (id, instance_id, aud, role, email)
-      values (${u.id}::uuid, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', ${u.email})
+      insert into auth.users (id, instance_id, aud, role, email, encrypted_password,
+        confirmation_token, recovery_token, email_change_token_new, email_change,
+        email_change_token_current, phone_change, phone_change_token, reauthentication_token)
+      values (${u.id}::uuid, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', ${u.email}, '',
+        '', '', '', '', '', '', '', '')
       on conflict (id) do nothing`;
   };
   const count = async (query: Promise<{ n: number }[]>) => (await query)[0]?.n ?? 0;
@@ -335,8 +338,15 @@ describe.skipIf(!BASE || !SECRET || DB_SKIP)('privacy against the local stack', 
 
   it('refuses a missing or wrong confirmation and deletes nothing', async () => {
     const u = await createUser({ firstName: 'Vlad' });
-    for (const body of [undefined, {}, { confirm: 'delete' }, { confirm: 'yes' }]) {
-      const res = await deleteMe(u, body);
+    // No body at all goes through send() directly: deleteMe's default would add the confirmation.
+    const attempts = [
+      () => u.send('DELETE', '/me'),
+      () => deleteMe(u, {}),
+      () => deleteMe(u, { confirm: 'delete' }),
+      () => deleteMe(u, { confirm: 'yes' }),
+    ];
+    for (const attempt of attempts) {
+      const res = await attempt();
       expect(res.status).toBe(400);
       expect((await errorOf(res)).code).toBe('CONFIRMATION_REQUIRED');
     }
@@ -487,6 +497,7 @@ describe.skipIf(!BASE || !SECRET || DB_SKIP)('privacy against the local stack', 
 
   it('a data request is recorded, mailed to support and acknowledged, and a repeat is deduplicated', async () => {
     const u = await createUser({ firstName: 'Data' });
+    await withAuthRow(u); // the export reads the address from auth.users
     const first = await u.send('POST', '/me/data-export-request', {});
     expect(first.status).toBe(202);
     const body = dataExportRequestResponseSchema.parse(await first.json());
@@ -580,9 +591,7 @@ describe.skipIf(!BASE || !SECRET || DB_SKIP)('privacy against the local stack', 
     await withAuthRow(u);
     expect((await deleteMe(u)).status).toBe(204);
     // put the row back as if both outside calls had failed once, then let the tick finish it
-    await sql`insert into auth.users (id, instance_id, aud, role, email)
-      values (${u.id}::uuid, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', ${u.email})
-      on conflict (id) do nothing`;
+    await withAuthRow(u);
     await sql`update app.account_deletions
       set completed_at = null, auth_done_at = null, attempts = 1, next_attempt_at = now() - interval '1 minute'
       where user_id = ${u.id}::uuid`;
