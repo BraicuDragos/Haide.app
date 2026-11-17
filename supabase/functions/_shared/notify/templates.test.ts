@@ -102,6 +102,14 @@ const ALL: TemplateInput[] = [
     template: 'data_export_ack',
     payload: { requestId: 'req1', dueBy: '2026-12-16T07:40:00.000Z' },
   },
+  {
+    template: 'account_suspended',
+    payload: {
+      reasonCode: 'harassment',
+      statement: 'You sent repeated unwanted messages after a passenger asked you to stop.',
+    },
+  },
+  { template: 'account_reinstated', payload: {} },
 ];
 
 const at = (i: number): TemplateInput => ALL[i] as TemplateInput;
@@ -181,6 +189,33 @@ describe('renderEmail', () => {
     expect(ack.subject).toBe('We got your request for a copy of your data');
     expect(ack.text).toContain('within 30 days');
     expect(ack.link).toBe('https://haide.ro/profile');
+  });
+
+  it('E7 templates: the suspension notice has the ground, the statement and how to appeal', () => {
+    const out = renderEmail(at(14), ctx);
+    expect(out.subject).toBe('Your Haide account is suspended');
+    expect(out.text).toContain('Ground: Terms: harassment.');
+    expect(out.text).toContain('You sent repeated unwanted messages');
+    expect(out.text).toContain('A person reviewed this, it was not automatic.');
+    expect(out.text).toContain('Your upcoming rides and bookings are cancelled.');
+    expect(out.text).toContain('To appeal, reply to this email.');
+    expect(out.html).toContain('<br>');
+    expect(out.link).toBe('https://haide.ro');
+    expect(renderEmail(at(15), ctx).subject).toBe('Your Haide account is active again');
+    // The report queue link for the admins' notice.
+    expect(renderEmail(at(10), ctx).link).toBe('https://haide.ro/admin/reports');
+  });
+
+  it('an unknown ground reads as other, and a hostile statement is escaped', () => {
+    const out = renderEmail(
+      {
+        template: 'account_suspended',
+        payload: { reasonCode: 'toString', statement: '<b>x</b> hello there' },
+      },
+      ctx,
+    );
+    expect(out.text).toContain('Ground: Terms: other conduct that breaks the rules.');
+    expect(out.html).not.toContain('<b>x</b>');
   });
 
   it('never carries a coordinate, phone, plate or email address', () => {

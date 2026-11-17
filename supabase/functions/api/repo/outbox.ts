@@ -1,5 +1,5 @@
 import type { Db } from '../../_shared/db.ts';
-import type { AnalyticsEvent } from '../../_shared/domain/bookings.ts';
+import type { AnalyticsEvent } from '../../_shared/domain/events.ts';
 import type { OutboxRow } from '../../_shared/domain/outbox.ts';
 import type { OutboxRecord, OutboxStore } from '../../_shared/notify/dispatch.ts';
 import { runRetention } from './privacy.ts';
@@ -67,11 +67,15 @@ export function createOutboxStore(sql: Db): OutboxStore {
       }));
     },
 
-    async recipients(userIds) {
+    async recipients(userIds, includeSuspended) {
       const out = new Map<string, string>();
       if (userIds.length === 0) return out;
-      const rows = await sql<{ user_id: string; email: string }[]>`
-        select user_id, email from app.outbox_recipients(string_to_array(${userIds.join(',')}::text, ',')::uuid[])`;
+      // ANY_STATUS_TEMPLATES (E7) ask for suspended users too: the 2-argument overload.
+      const rows = includeSuspended
+        ? await sql<{ user_id: string; email: string }[]>`
+            select user_id, email from app.outbox_recipients(string_to_array(${userIds.join(',')}::text, ',')::uuid[], true)`
+        : await sql<{ user_id: string; email: string }[]>`
+            select user_id, email from app.outbox_recipients(string_to_array(${userIds.join(',')}::text, ',')::uuid[])`;
       for (const r of rows) out.set(r.user_id, r.email);
       return out;
     },

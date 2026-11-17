@@ -94,6 +94,19 @@ export type DataExportAckPayload = {
   dueBy: string;
 };
 
+/**
+ * E7: to a user an admin suspended (statement of reasons, DSA Art. 17). `reasonCode` is a report reason
+ * (the ground), `statement` is the admin's text (NFC, trimmed, 10..300 characters, no contact details).
+ * Sent even though the account is now suspended (ANY_STATUS_TEMPLATES).
+ */
+export type AccountSuspendedPayload = {
+  reasonCode: string;
+  statement: string;
+};
+
+/** E7: to a user an admin reinstated. Nothing to say beyond the fact. */
+export type AccountReinstatedPayload = Record<string, never>;
+
 export type OutboxPayloadMap = {
   booking_requested: BookingRequestedPayload;
   booking_confirmed: BookingConfirmedPayload;
@@ -107,6 +120,8 @@ export type OutboxPayloadMap = {
   report_received: ReportReceivedPayload;
   data_export_requested: DataExportRequestedPayload;
   data_export_ack: DataExportAckPayload;
+  account_suspended: AccountSuspendedPayload;
+  account_reinstated: AccountReinstatedPayload;
 };
 
 export type OutboxTemplate = keyof OutboxPayloadMap;
@@ -124,12 +139,26 @@ export const OUTBOX_TEMPLATES = [
   'report_received',
   'data_export_requested',
   'data_export_ack',
+  'account_suspended',
+  'account_reinstated',
 ] as const satisfies readonly OutboxTemplate[];
 
 /** One row to insert into app.outbox. Distributes over the template so payload and name stay paired. */
 export type OutboxRow<T extends OutboxTemplate = OutboxTemplate> = {
   [K in T]: { userId: string; template: K; payload: OutboxPayloadMap[K] };
 }[T];
+
+/**
+ * Templates sent to the user whatever the account status (never to a deleted one): a suspension
+ * notice and the acknowledgement of a data request must reach a suspended user (E7, E6).
+ */
+export const ANY_STATUS_TEMPLATES = [
+  'account_suspended',
+  'data_export_ack',
+] as const satisfies readonly OutboxTemplate[];
+
+export const isAnyStatusTemplate = (template: string): boolean =>
+  (ANY_STATUS_TEMPLATES as readonly string[]).includes(template);
 
 export const isOutboxTemplate = (v: string): v is OutboxTemplate =>
   (OUTBOX_TEMPLATES as readonly string[]).includes(v);

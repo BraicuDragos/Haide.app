@@ -1,5 +1,6 @@
 import {
   assertPayloadSafe,
+  type AccountSuspendedPayload,
   type DataExportAckPayload,
   type DataExportRequestedPayload,
   type OutboxRow,
@@ -199,4 +200,33 @@ export function dataExportAckOutbox(
 ): OutboxRow<'data_export_ack'> {
   assertPayloadSafe(payload);
   return { userId: requesterId, template: 'data_export_ack', payload };
+}
+
+// ---- E7: suspension notices ---------------------------------------------------------------------------------
+
+/** True when an admin-written statement holds something that looks like a phone, email, plate or coordinate. */
+export function statementHasContactDetails(statement: string): boolean {
+  // People write numbers with separators ("0721 234 567", "+40 721-234-567"): check the text as typed and with the
+  // separators between digits removed, or the phone pattern of the payload guard would miss them.
+  const compact = statement.replace(/(?<=\d)[\s.\-()]+(?=\d)/g, '');
+  for (const text of new Set([statement, compact])) {
+    try {
+      assertPayloadSafe({ statement: text });
+    } catch {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function accountSuspendedOutbox(
+  userId: string,
+  payload: AccountSuspendedPayload,
+): OutboxRow<'account_suspended'> {
+  assertPayloadSafe(payload);
+  return { userId, template: 'account_suspended', payload };
+}
+
+export function accountReinstatedOutbox(userId: string): OutboxRow<'account_reinstated'> {
+  return { userId, template: 'account_reinstated', payload: {} };
 }

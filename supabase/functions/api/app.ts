@@ -4,6 +4,7 @@ import { requestBodyLimit } from './middleware/bodyLimit.ts';
 import { corsMiddleware } from './middleware/cors.ts';
 import { onError, onNotFound } from './middleware/errors.ts';
 import { requestLogging } from './middleware/logging.ts';
+import { adminRoutes } from './routes/admin.ts';
 import { accountRoutes } from './routes/account.ts';
 import { bookingRoutes } from './routes/bookings.ts';
 import { placesRoutes } from './routes/places.ts';
@@ -40,6 +41,7 @@ export function createApp(deps: Deps) {
   app.route('/', safetyRoutes);
   app.route('/', shareRoutes);
   app.route('/', privacyRoutes);
+  app.route('/', adminRoutes);
 
   app.onError(onError);
   app.notFound(onNotFound);

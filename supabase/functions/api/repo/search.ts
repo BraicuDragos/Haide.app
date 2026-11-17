@@ -1,5 +1,6 @@
 import type { Db } from '../../_shared/db.ts';
 import type { LatLng } from '../../_shared/contracts/geo.ts';
+import type { EventProps } from '../../_shared/domain/events.ts';
 import { MAX_WALK_M, MIN_SEGMENT_M } from '../../_shared/domain/rules.ts';
 import { selectPublicProfiles, type PublicProfileRow } from './ratingSummary.ts';
 
@@ -83,13 +84,7 @@ export async function getPublicProfiles(
   return await selectPublicProfiles(sql, ids, since, now);
 }
 
-export type SearchEventProps = {
-  resultsCount: number;
-  fromArea: string | null;
-  toArea: string | null;
-  windowMin: number;
-  corridor: string;
-};
+export type SearchEventProps = EventProps['search_performed'];
 
 /** Analytics `search_performed`: a count, area labels and the corridor. Never coordinates. */
 export async function insertSearchPerformedEvent(

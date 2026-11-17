@@ -32,13 +32,25 @@ export const en = {
   'email.noShow.body':
     'It shows on your profile for 90 days. If this is wrong, open Haide and report a problem.',
   'email.report.subject': 'New safety report: {reason}',
-  'email.report.body': 'Review it in the database until the reports queue ships.',
+  'email.report.body': 'Review it in the admin reports queue.',
   'email.dataRequest.subject': 'Data request {requestId}',
   'email.dataRequest.body':
     "User {userId} asked for a copy of their data at {requestedAt}. In the SQL editor run: select app.export_user_data('{userId}'); then send the JSON from privacy@ to the account email and set fulfilled_at on data request {requestId}. Due by {dueBy}.",
   'email.dataAck.subject': 'We got your request for a copy of your data',
   'email.dataAck.body':
     'We’ll email it to this address within 30 days. If you didn’t ask for this, reply to this email.',
+  'email.suspended.subject': 'Your Haide account is suspended',
+  'email.suspended.body':
+    'Ground: {ground}.\n\n{statement}\n\nA person reviewed this, it was not automatic. Your upcoming rides and bookings are cancelled. To appeal, reply to this email.',
+  'email.reinstated.subject': 'Your Haide account is active again',
+  'email.reinstated.body':
+    'A person reviewed your account and lifted the suspension. You can use Haide as before. Rides and bookings that were cancelled stay cancelled.',
+  'email.ground.no_show': 'Terms: no-shows',
+  'email.ground.unsafe_driving': 'Terms: unsafe driving',
+  'email.ground.harassment': 'Terms: harassment',
+  'email.ground.extra_money': 'Terms: asking for more than the shared cost',
+  'email.ground.fake_profile': 'Terms: a false profile',
+  'email.ground.other': 'Terms: other conduct that breaks the rules',
   'email.priceDropped.body': 'Price changed to {price} because a second passenger joined.',
   'email.openLabel': 'Open Haide',
   'email.open': 'Open Haide: {link}',

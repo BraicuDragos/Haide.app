@@ -15,6 +15,7 @@ import {
   roundCoord,
   roundPoint,
   roundWalkM,
+  statementHasContactDetails,
   toApproxPoint,
   toUtm35,
 } from './privacy.ts';
@@ -151,5 +152,27 @@ describe('account deletion and data requests (E6)', () => {
       dataExportRequestedOutbox('u1', { requestId: 'r1', userId: 'a@b.ro', requestedAt: 'x' }),
     ).toThrow();
     expect(() => dataExportAckOutbox('u1', { requestId: '+40721234567', dueBy: 'x' })).toThrow();
+  });
+});
+
+describe('statementHasContactDetails (E7 suspension statement)', () => {
+  it.each([
+    'Call him on +40731111222.',
+    'Call him on 0721 234 567 to settle it.',
+    'Call him on 0721.234.567 to settle it.',
+    'Reach him at +40 721-234-567 please.',
+    'Write to radu@example.com about the rules.',
+    'The car SB 12 ABC was parked there.',
+    'He shared 45.79712 and 24.15211 with a passenger.',
+  ])('rejects %s', (text) => {
+    expect(statementHasContactDetails(text)).toBe(true);
+  });
+
+  it.each([
+    'You sent repeated unwanted messages after a passenger asked you to stop.',
+    'Three no-shows between 3 and 17 November 2026 in a row, and a reply of 1 to 2 words.',
+    'Rides on 2026-11-17 and 2026-11-18 were reported.',
+  ])('accepts %s', (text) => {
+    expect(statementHasContactDetails(text)).toBe(false);
   });
 });
