@@ -31,9 +31,9 @@ Haide processes **location and trip data** that reveal home, workplace and daily
 | Search inputs | origin, destination, time | visitor/user | Contract (pre-contract steps) / legitimate interest for visitors | **not stored**. Only area labels and result counts in analytics |
 | Device location | one-shot GPS fix on "Use my location" | device, on tap | **Consent** (browser permission) | not stored. Converted to a place immediately |
 | Trust data | ratings, tags, no-show and late-cancel events, blocks | users / system | Legitimate interest 6(1)(f) (safety of users) | account lifetime. Ratings kept as "Deleted user" after deletion |
-| Safety reports | reason, details, snapshot of reported first name + phone | users | Legitimate interest (safety, legal claims) | 12 months |
+| Safety reports | reason, details, snapshot of reported first name + phone | users | Legitimate interest (safety, legal claims) | 12 months. **Admin handling (E7):** a suspension is decided by a person, audited in `admin_actions` (24 months) and notified to the user by email with the ground, the statement of reasons and how to appeal by reply (DSA Art. 17); the reporter is never named to the reported user; admin screens show first names, photo and counts, never phone, plate, email or coordinates |
 | Notifications | outbox rows (first names, labels, times) | system | Contract | 30 days |
-| Analytics | event name, user id, area labels, counts | system | Legitimate interest (service improvement), no profiling | 13 months. User id nulled on deletion |
+| Analytics | event name, user id, area labels, counts | system | Legitimate interest (service improvement), no profiling. Server-side only, no SDK and no device storage, so no consent prompt (ePrivacy Art. 5(3) not triggered). Props are flat and checked by a database constraint (E7, ADR 0032). **Objection (Art. 21):** by email to support; the owner nulls the user's `user_id` in past events (deploy.md §6) | 13 months. User id nulled on deletion |
 | Security | hashed IP (daily-rotating salt) in rate-limit counters, error reports (scrubbed) | system | Legitimate interest (security) | rate limits: hours. Errors: 14 days. Platform logs: 1 day (Supabase) |
 | Backups | encrypted dump of the above | system | Legitimate interest (availability, Art. 32) | 14 days |
 
