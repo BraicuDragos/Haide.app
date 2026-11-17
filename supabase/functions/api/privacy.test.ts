@@ -158,6 +158,26 @@ const has = (calls: Query[], fragment: string) => idx(calls, fragment) >= 0;
 const clock = { clock: fixedClock(NOW) };
 
 describe('DELETE /me', () => {
+  it.each([
+    ['an empty string body', ''],
+    ['whitespace', '  '],
+    ['malformed JSON', '{"confirm":'],
+    ['JSON null', 'null'],
+    ['a JSON string', '"DELETE"'],
+  ])('fails closed with %s (400 CONFIRMATION_REQUIRED) and changes nothing', async (_n, raw) => {
+    const { app, calls, removedStrict, authDeleted } = makeApp([privacyDb()], {}, clock);
+    const res = await app.request(`${BASE}/me`, {
+      method: 'DELETE',
+      headers: { 'content-type': 'application/json', ...(await auth()) },
+      body: raw,
+    });
+    expect(res.status).toBe(400);
+    expect((await errorOf(res)).code).toBe('CONFIRMATION_REQUIRED');
+    expect(has(calls, 'app.scrub_account')).toBe(false);
+    expect(removedStrict).toHaveLength(0);
+    expect(authDeleted).toHaveLength(0);
+  });
+
   it('answers 401 anonymously', async () => {
     const { app } = makeApp([privacyDb()]);
     const res = await app.request(`${BASE}/me`, { method: 'DELETE', body: '{"confirm":"DELETE"}' });

@@ -25,7 +25,9 @@ privacyRoutes.delete(
   requireAccount,
   rateLimit('account', RATE_LIMITS.account),
   async (c) => {
-    const parsed = deleteAccountBodySchema.safeParse(await readOptionalJson(c));
+    // Fail closed: a missing, empty, malformed or wrong body is never a confirmation.
+    const body = await readOptionalJson(c).catch(() => undefined);
+    const parsed = deleteAccountBodySchema.safeParse(body);
     if (!parsed.success) {
       throw new AppError('CONFIRMATION_REQUIRED', 'Confirm to delete your account.');
     }
