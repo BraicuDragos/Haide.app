@@ -175,15 +175,15 @@ select ok(not exists (
   where p.oid = to_regprocedure(f) and a.grantee = 0 and a.privilege_type = 'EXECUTE'),
   f || ' is not executable by PUBLIC')
   from unnest(array['app.complete_rides(timestamptz, timestamptz, integer)',
-                    'app.admin_suspend_user(uuid, text, uuid, uuid)',
+                    'app.admin_suspend_user(uuid, text, uuid, uuid, text)',
                     'app.admin_unsuspend_user(uuid, text, uuid)']) f;
 select ok(not has_function_privilege('anon', f, 'EXECUTE') and not has_function_privilege('authenticated', f, 'EXECUTE'),
   f || ' is not executable by anon or authenticated')
   from unnest(array['app.complete_rides(timestamptz, timestamptz, integer)',
-                    'app.admin_suspend_user(uuid, text, uuid, uuid)',
+                    'app.admin_suspend_user(uuid, text, uuid, uuid, text)',
                     'app.admin_unsuspend_user(uuid, text, uuid)']) f;
 select ok(has_function_privilege('haide_api', 'app.complete_rides(timestamptz, timestamptz, integer)', 'EXECUTE')
-  and has_function_privilege('haide_api', 'app.admin_suspend_user(uuid, text, uuid, uuid)', 'EXECUTE')
+  and has_function_privilege('haide_api', 'app.admin_suspend_user(uuid, text, uuid, uuid, text)', 'EXECUTE')
   and has_function_privilege('haide_api', 'app.admin_unsuspend_user(uuid, text, uuid)', 'EXECUTE'),
   'haide_api can run all three functions');
 
