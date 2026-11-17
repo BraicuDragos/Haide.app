@@ -429,7 +429,7 @@ describe.skipIf(!BASE || !SECRET || DB_SKIP)('trust and safety against the local
       const driver = await user('Radu', DRIVER_PHONE);
       const rides: { p: TestUser; bookingId: string; rideId: string }[] = [];
       for (let i = 0; i < 3; i += 1) {
-        const p = await user(`Pas${i}`, PASSENGER_PHONE);
+        const p = await user(`Pas${String.fromCharCode(97 + i)}`, PASSENGER_PHONE);
         const l = lane();
         const ride = await publish(driver, l, departure());
         const b = bookingViewSchema.parse(await (await requestSeat(p, ride.id, middle(l))).json());
@@ -711,7 +711,7 @@ describe.skipIf(!BASE || !SECRET || DB_SKIP)('trust and safety against the local
     expect((await fetch(`${BASE}/share/${token2}`)).status).toBe(200);
 
     // expiry at departure + 24 h
-    await sql`update app.share_links set expires_at = now() - interval '1 second' where booking_id = ${c.bookingId}::uuid`;
+    await sql`update app.share_links set created_at = now() - interval '1 hour', expires_at = now() - interval '1 second' where booking_id = ${c.bookingId}::uuid`;
     expect((await fetch(`${BASE}/share/${token2}`)).status).toBe(404);
     await sql`update app.share_links set expires_at = now() + interval '1 hour' where booking_id = ${c.bookingId}::uuid`;
     expect((await fetch(`${BASE}/share/${token2}`)).status).toBe(200);
