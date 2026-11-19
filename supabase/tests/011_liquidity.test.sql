@@ -33,7 +33,7 @@ create function pg_temp.ride(p_id uuid, p_driver uuid, p_departure timestamptz, 
 returns void language sql as $$
   insert into app.rides (id, driver_id, origin, destination, origin_label, destination_label,
                          route, distance_m, duration_s, departure_at, seats_offered, seats_booked,
-                         energy_price_id, rate_micro_per_km, vehicle_snapshot, status, cancelled_at, created_at, updated_at)
+                         energy_price_id, rate_micro_per_km, vehicle_snapshot, status, cancelled_at, completed_at, created_at, updated_at)
   values (p_id, p_driver,
           ST_SetSRID(ST_MakePoint(24.1861, 45.7413), 4326), ST_SetSRID(ST_MakePoint(24.09, 45.785), 4326),
           'Shopping City', 'Zona Industriala Vest',
@@ -41,7 +41,8 @@ returns void language sql as $$
           9588, 1020, p_departure, p_offered, p_booked,
           (select id from app.energy_prices where fuel_type = 'diesel'), 651000,
           '{"fuelType":"diesel"}'::jsonb, p_status::app.ride_status,
-          case when p_status = 'cancelled' then now() end, now(), now())
+          case when p_status = 'cancelled' then now() end,
+          case when p_status = 'completed' then p_departure + interval '1 hour' end, now(), now())
 $$;
 
 -- An alert near the ride ends (about 100 m from each) unless told otherwise.
