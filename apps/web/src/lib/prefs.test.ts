@@ -120,3 +120,15 @@ describe('public/theme-init.js (runs before first paint)', () => {
     expect(document.documentElement.dataset.theme).toBe('light');
   });
 });
+
+describe('push pre-prompt snooze', () => {
+  it('stays away for 30 days after "Not now", then asks again', async () => {
+    const { pushPromptSnoozed, snoozePushPrompt, PUSH_PROMPT_SNOOZE_MS } = await import('./prefs');
+    const at = 1_800_000_000_000;
+    snoozePushPrompt(at);
+    expect(window.localStorage.getItem('haide.pushPrompt')).toBe(String(at));
+    expect(pushPromptSnoozed(at + PUSH_PROMPT_SNOOZE_MS - 1)).toBe(true);
+    expect(pushPromptSnoozed(at + PUSH_PROMPT_SNOOZE_MS)).toBe(false);
+    window.localStorage.removeItem('haide.pushPrompt');
+  });
+});

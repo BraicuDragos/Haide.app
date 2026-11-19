@@ -408,3 +408,73 @@ export async function seedMetricsWeek(sql: postgres.Sql): Promise<{ clean: boole
   await search({ corridor: 'south', resultsCount: 1 }, L('2026-11-08', '23:30')); // previous week
   return { clean };
 }
+
+// ---- E8: alerts and push ----------------------------------------------------------------------------------------
+
+/** The ISO weekday (Monday = 1) and the `HH:MM` of an instant in Europe/Bucharest. */
+export function localSlot(at: Date): { weekday: number; time: string; day: string } {
+  const day = bucharestDayKey(at);
+  const d = new Date(`${day}T00:00:00Z`).getUTCDay(); // 0 = Sunday
+  const p = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Bucharest',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).format(at);
+  return { weekday: ((d + 6) % 7) + 1, time: p, day };
+}
+
+type Point = { lat: number; lng: number };
+
+/**
+ * POST /alerts for a route and a departure: a weekly alert for that local weekday and time (window 30
+ * minutes) unless `over` says otherwise. Returns the raw response so tests can assert on errors.
+ */
+export function makeAlert(
+  user: TestUser,
+  route: { from: Point; to: Point },
+  departure: Date,
+  over: Record<string, unknown> = {},
+): Promise<Response> {
+  const slot = localSlot(departure);
+  return user.send('POST', '/alerts', {
+    from: route.from,
+    to: route.to,
+    fromLabel: 'Home',
+    toLabel: 'Work',
+    schedule: { kind: 'weekly', weekdays: [slot.weekday] },
+    time: slot.time,
+    windowMin: 30,
+    ...over,
+  });
+}
+
+const b64url = (bytes: Uint8Array): string => Buffer.from(bytes).toString('base64url');
+
+/** Whether the stack has web push switched on (VAPID keys set): `GET /push/config`. */
+export async function pushEnabled(): Promise<boolean> {
+  const res = await fetch(`${BASE}/push/config`);
+  if (!res.ok) return false;
+  return ((await res.json()) as { vapidPublicKey: string | null }).vapidPublicKey !== null;
+}
+
+/**
+ * PUT /me/push-subscription with a real P-256 key (what `PushSubscription.toJSON()` would send) on a
+ * known push host. Returns the endpoint and the response.
+ */
+export async function makeSubscription(
+  user: TestUser,
+): Promise<{ endpoint: string; res: Response }> {
+  const pair = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, [
+    'deriveBits',
+  ]);
+  const p256dh = b64url(new Uint8Array(await crypto.subtle.exportKey('raw', pair.publicKey)));
+  const auth = b64url(crypto.getRandomValues(new Uint8Array(16)));
+  const endpoint = `https://fcm.googleapis.com/fcm/send/it-${crypto.randomUUID()}`;
+  const res = await user.send('PUT', '/me/push-subscription', {
+    endpoint,
+    keys: { p256dh, auth },
+    expirationTime: null,
+  });
+  return { endpoint, res };
+}

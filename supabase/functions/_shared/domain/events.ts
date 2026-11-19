@@ -1,6 +1,6 @@
 /**
- * Analytics events (E7-1, ADR 0032, e7-metrics-admin-spec §2). One typed registry for the 11 product
- * events: names (same order as the CHECK on app.analytics_events), the props of each, the builders
+ * Analytics events (E7-1, ADR 0032, e7-metrics-admin-spec §2). One typed registry for the product
+ * events (E8 adds alert_created and alert_matched, 13 in all): names (same order as the CHECK on app.analytics_events), the props of each, the builders
  * and `eventPropsOk`, which mirrors the database guard `app.event_props_ok` case for case.
  * Pure: no I/O. Props are flat (string, number, boolean, null), short, and never hold a coordinate,
  * phone, plate, email or free text (conventions §6).
@@ -18,6 +18,8 @@ export const EVENT_NAMES = [
   'no_show_reported',
   'rating_submitted',
   'report_submitted',
+  'alert_created',
+  'alert_matched',
 ] as const;
 
 export type EventName = (typeof EVENT_NAMES)[number];
@@ -43,9 +45,16 @@ export type EventProps = {
     isFree: boolean;
     originArea: string | null;
     destinationArea: string | null;
+    inSeries: boolean;
+    autoAccept: boolean;
   };
   booking_requested: { bookingId: string; rideId: string; segmentM: number };
-  booking_confirmed: { bookingId: string; rideId: string; responseSeconds: number };
+  booking_confirmed: {
+    bookingId: string;
+    rideId: string;
+    responseSeconds: number;
+    auto: boolean;
+  };
   booking_rejected: { bookingId: string; rideId: string; responseSeconds: number };
   booking_expired: { bookingId: string; rideId: string };
   booking_cancelled: {
@@ -58,6 +67,14 @@ export type EventProps = {
   no_show_reported: { bookingId: string; rideId: string; by: Role };
   rating_submitted: { bookingId: string; stars: number; tagCount: number; raterRole: Role };
   report_submitted: { reason: string; alsoBlock: boolean };
+  alert_created: {
+    alertId: string;
+    kind: 'date' | 'weekly';
+    windowMin: number;
+    fromArea: string | null;
+    toArea: string | null;
+  };
+  alert_matched: { alertId: string; rideId: string };
 };
 
 /** One row for app.analytics_events. `userId` is the actor (NULL for a signed-out search). */
@@ -68,9 +85,18 @@ export type AnalyticsEvent = {
 /** The allow-listed prop keys per event, derived from a sample so the test can assert them. */
 export const EVENT_PROP_KEYS: { [K in EventName]: readonly (keyof EventProps[K] & string)[] } = {
   search_performed: ['resultsCount', 'fromArea', 'toArea', 'windowMin', 'corridor'],
-  ride_published: ['rideId', 'distanceM', 'seats', 'isFree', 'originArea', 'destinationArea'],
+  ride_published: [
+    'rideId',
+    'distanceM',
+    'seats',
+    'isFree',
+    'originArea',
+    'destinationArea',
+    'inSeries',
+    'autoAccept',
+  ],
   booking_requested: ['bookingId', 'rideId', 'segmentM'],
-  booking_confirmed: ['bookingId', 'rideId', 'responseSeconds'],
+  booking_confirmed: ['bookingId', 'rideId', 'responseSeconds', 'auto'],
   booking_rejected: ['bookingId', 'rideId', 'responseSeconds'],
   booking_expired: ['bookingId', 'rideId'],
   booking_cancelled: ['bookingId', 'rideId', 'by', 'late'],
@@ -78,6 +104,8 @@ export const EVENT_PROP_KEYS: { [K in EventName]: readonly (keyof EventProps[K] 
   no_show_reported: ['bookingId', 'rideId', 'by'],
   rating_submitted: ['bookingId', 'stars', 'tagCount', 'raterRole'],
   report_submitted: ['reason', 'alsoBlock'],
+  alert_created: ['alertId', 'kind', 'windowMin', 'fromArea', 'toArea'],
+  alert_matched: ['alertId', 'rideId'],
 };
 
 // ---- the guard (mirror of app.event_props_ok) -------------------------------------------------------
@@ -198,3 +226,15 @@ export const reportSubmittedEvent = (
   p: EventProps['report_submitted'],
   at: Date,
 ): AnalyticsEvent => ({ name: 'report_submitted', userId: reporterId, props: p, at });
+
+export const alertCreatedEvent = (
+  userId: string,
+  p: EventProps['alert_created'],
+  at: Date,
+): AnalyticsEvent => ({ name: 'alert_created', userId, props: p, at });
+
+export const alertMatchedEvent = (
+  ownerId: string,
+  p: EventProps['alert_matched'],
+  at: Date,
+): AnalyticsEvent => ({ name: 'alert_matched', userId: ownerId, props: p, at });

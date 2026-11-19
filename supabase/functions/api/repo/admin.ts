@@ -237,9 +237,9 @@ export async function selectOps(
       (pg_database_size(current_database()) / 1048576.0)::float8 as db_size_mb,
       (select count(*)::int from app.outbox
         where channel = 'email' and status = 'sent' and sent_at >= ${dayStart}) as emails_today,
-      (select count(*)::int from app.outbox where status = 'pending') as outbox_pending,
+      (select count(*)::int from app.outbox where channel = 'email' and status = 'pending') as outbox_pending,
       (select count(*)::int from app.outbox
-        where status = 'failed' and created_at >= ${since24h}) as outbox_failed_24h,
+        where channel = 'email' and status = 'failed' and created_at >= ${since24h}) as outbox_failed_24h,
       (select coalesce(sum(count), 0)::int from app.rate_limits
         where key like 'ride-preview:%' and window_start >= ${dayStart}) as route_previews_today,
       (select count(*)::int from app.app_errors where created_at >= ${since24h}) as errors_24h,

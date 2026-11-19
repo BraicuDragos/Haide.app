@@ -128,8 +128,8 @@ function banner(b: BookingView): {
       };
     case 'confirmed':
       return {
-        title: 'booking.confirmed.title',
-        body: 'booking.confirmed.body',
+        title: b.autoConfirmed ? 'booking.auto.title' : 'booking.confirmed.title',
+        body: b.autoConfirmed ? 'booking.auto.body' : 'booking.confirmed.body',
         icon: 'check',
         tone: 'bg-success-bg text-success',
       };

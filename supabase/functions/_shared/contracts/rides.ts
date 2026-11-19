@@ -110,11 +110,43 @@ export const createRideBodySchema = z.object({
   seats: z.number().int().min(1).max(RIDE_LIMITS.maxSeats),
   note: z.string().trim().max(RIDE_LIMITS.noteMax).nullish(),
   isFree: z.boolean().default(false),
+  /** E8-3: confirm eligible requests automatically (ADR 0037). */
+  autoAccept: z.boolean().default(false),
 });
 /** What the client sends (isFree optional). */
 export type CreateRideBody = z.input<typeof createRideBodySchema>;
 /** What the server sees after parsing (isFree defaulted). */
 export type CreateRideRequest = z.output<typeof createRideBodySchema>;
+
+// ---- Ride series (E8-1): the part of a series an owner view and the series routes share ---------------
+
+/** ISO weekday, Monday = 1. */
+export const weekdaySchema = z.union([
+  z.literal(1),
+  z.literal(2),
+  z.literal(3),
+  z.literal(4),
+  z.literal(5),
+  z.literal(6),
+  z.literal(7),
+]);
+export type Weekday = z.infer<typeof weekdaySchema>;
+
+export const rideSeriesStatusSchema = z.enum(['active', 'cancelled']);
+
+export const rideSeriesSchema = z.object({
+  id: z.uuid(),
+  weekdays: z.array(weekdaySchema),
+  /** `HH:MM`, local time (Europe/Bucharest). */
+  departureTime: z.string(),
+  /** `YYYY-MM-DD`, local dates. */
+  startsOn: z.string(),
+  endsOn: z.string(),
+  status: rideSeriesStatusSchema,
+  /** Published instances that have not departed. */
+  upcomingCount: z.number().int().min(0),
+});
+export type RideSeries = z.infer<typeof rideSeriesSchema>;
 
 // ---- Owner view: POST /rides (201), GET /me/rides/{id}, POST /rides/{id}/cancel (200) -----------
 // E4: `requests` (open requests, never any point) and `passengers` are filled. E5: `passengers` holds
@@ -179,6 +211,10 @@ export const rideOwnerViewSchema = z.object({
   seatsBooked: z.number().int(),
   note: z.string().nullable(),
   isFree: z.boolean(),
+  /** E8-3: eligible requests are confirmed at once. */
+  autoAccept: z.boolean(),
+  /** E8-1: the series this ride belongs to, or null. */
+  series: rideSeriesSchema.nullable(),
   /** One row per offered seat. All zero for a free ride. */
   priceTable: z.array(priceRowSchema),
   tripCostBani: z.number().int(),
@@ -224,6 +260,8 @@ export const rideListItemSchema = z.object({
   pendingRequests: z.number().int(),
   /** Completed passengers the driver can still rate (E5). */
   toRate: z.number().int().min(0),
+  /** E8-1: the series the ride belongs to, or null. */
+  seriesId: z.uuid().nullable(),
 });
 export type RideListItem = z.infer<typeof rideListItemSchema>;
 
@@ -258,6 +296,8 @@ export const ridePublicViewSchema = z.object({
   seatsLeft: z.number().int(),
   note: z.string().nullable(),
   isFree: z.boolean(),
+  /** E8-3: shown as "Instant confirmation". */
+  autoAccept: z.boolean(),
   /** Full route, one row per offered seat. All zero for a free ride. */
   priceTable: z.array(priceRowSchema),
   car: carPublicSchema,

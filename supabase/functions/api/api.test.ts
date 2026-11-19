@@ -375,6 +375,9 @@ describe('POST /internal/tick', () => {
       purged: 0,
       coarsened: 0,
       accountsPurged: 0,
+      alertsMatched: 0,
+      pushSent: 0,
+      pushFailed: 0,
     });
   });
 });

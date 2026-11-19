@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
-import type { ReactNode } from 'react';
+import { lazy, Suspense, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { getVehicle } from '@/api/account';
+import { getMonthStats } from '@/api/liquidity';
 import { ApiError } from '@/api/client';
 import { keys } from '@/api/keys';
 import { useAuth } from '@/auth/AuthProvider';
@@ -11,6 +12,7 @@ import { nextStep, STEP_PATH } from '@/auth/onboarding';
 import { ScreenSkeleton } from '@/auth/RequireAuth';
 import { PrivacyRows } from '@/features/privacy/PrivacyRows';
 import { t } from '@/i18n';
+import { formatRon } from '@/lib/format';
 import { Avatar } from '@/ui/Avatar';
 import { Button } from '@/ui/Button';
 import { EmptyState } from '@/ui/EmptyState';
@@ -45,6 +47,56 @@ function Row({
       </Link>
     </li>
   );
+}
+
+// The push switch brings its own code: it loads with the Settings screen, never with the entry chunk.
+const PushSettings = lazy(() => import('@/features/push/PushSettings'));
+
+/** Notifications group (E8): ride alerts, and the push switch when this browser and the server support it. */
+function NotificationRows() {
+  return (
+    <section aria-labelledby="notif-heading" className="flex flex-col gap-1">
+      <h2 id="notif-heading" className="type-h3 px-4">
+        {t('settings.notifications')}
+      </h2>
+      <ul className="group mx-4">
+        <Row
+          to="/settings/alerts"
+          icon="clock"
+          label={t('settings.alerts')}
+          value={t('settings.alerts.value')}
+        />
+        <Suspense fallback={null}>
+          <PushSettings />
+        </Suspense>
+      </ul>
+    </section>
+  );
+}
+
+/** One line for the month (E8-5): what the driver shared of fuel costs, else what the passenger paid. Nothing at zero. */
+function MonthLine() {
+  const q = useQuery({
+    queryKey: keys.monthStats,
+    queryFn: ({ signal }) => getMonthStats(signal),
+    staleTime: 60_000,
+    retry: false,
+  });
+  const d = q.data?.driver.sharedFuelCostBani ?? 0;
+  const p = q.data?.passenger.paidBani ?? 0;
+  if (d > 0)
+    return (
+      <p className="px-4 font-semibold text-savings">
+        {t('profile.month.driver', { amount: formatRon(d) })}
+      </p>
+    );
+  if (p > 0)
+    return (
+      <p className="px-4 font-semibold text-savings">
+        {t('profile.month.passenger', { amount: formatRon(p) })}
+      </p>
+    );
+  return null;
 }
 
 function PolicyRows({ children }: { children?: ReactNode }) {
@@ -186,6 +238,8 @@ function SignedIn() {
           </div>
         </div>
 
+        <MonthLine />
+
         {setupPath && (
           <div className="card mx-4 flex flex-col gap-3 p-4">
             <h2 className="type-h3">{t('me.setup.title')}</h2>
@@ -212,6 +266,8 @@ function SignedIn() {
         </ul>
 
         <DisplaySettings />
+
+        <NotificationRows />
 
         <SafetyRows />
 

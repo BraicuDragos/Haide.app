@@ -1087,3 +1087,106 @@ Admin screens are English only and live in the `admin.*` namespace (screens 7.0 
 | `errors.FORBIDDEN` | You don’t have access to this page. |
 | `admin.metrics.rate` | Match rate |
 | `admin.metrics.searchesCol` | Searches |
+
+## 40. E8 additions (liquidity boosters)
+
+Repeat on weekdays, auto-accept, ride alerts, push notifications and the monthly line. Weekday names (`weekday.N.short|long`, Monday = 1) are used in chips, summaries and alert rows. Removed: `offer.repeat.soon`, `results.empty.notify`, `results.notify.soon` (the "Coming soon" slots are now live).
+
+| Key | English |
+|---|---|
+| `weekday.1.short` | Mon |
+| `weekday.2.short` | Tue |
+| `weekday.3.short` | Wed |
+| `weekday.4.short` | Thu |
+| `weekday.5.short` | Fri |
+| `weekday.6.short` | Sat |
+| `weekday.7.short` | Sun |
+| `weekday.1.long` | Monday |
+| `weekday.2.long` | Tuesday |
+| `weekday.3.long` | Wednesday |
+| `weekday.4.long` | Thursday |
+| `weekday.5.long` | Friday |
+| `weekday.6.long` | Saturday |
+| `weekday.7.long` | Sunday |
+| `offer.repeat.days` | Repeat on |
+| `offer.repeat.until` | Until |
+| `offer.repeat.until.hint` | Up to 28 days from today. |
+| `offer.repeat.count.one` | Creates {n} ride |
+| `offer.repeat.count.other` | Creates {n} rides |
+| `offer.repeat.err.days` | Choose at least one day. |
+| `offer.repeat.err.none` | No rides fall between these dates. Choose other days or a later end date. |
+| `offer.repeat.err.end` | Choose an end date up to 28 days from today. |
+| `offer.repeat.err.endBefore` | The end date can’t be before the first ride. |
+| `offer.err.limitSeries` | Every one of those days already has 4 rides. Choose other days. |
+| `offer.cta.series` | Publish rides |
+| `offer.publishing.series` | Publishing rides |
+| `offer.done.series.title` | Rides published |
+| `offer.done.series.body.one` | {n} ride is live. Passengers can find it now. |
+| `offer.done.series.body.other` | {n} rides are live. Passengers can find them now. |
+| `offer.done.series.when` | Every {days} at {time}, until {date}. |
+| `offer.done.series.view` | View my rides |
+| `offer.done.skipped.title` | Some days were skipped |
+| `offer.done.skipped` | Not published on {date}: {reason} |
+| `series.skip.DAILY_RIDE_LIMIT` | 4 rides that day already |
+| `series.skip.DEPARTURE_TOO_SOON` | too soon |
+| `series.skip.INVALID_TIME` | clock change |
+| `offer.autoAccept` | Confirm requests automatically |
+| `offer.autoAccept.hint` | Passengers rated 4.0 or more, and people new to Haide, are confirmed at once. |
+| `errors.ALERT_LIMIT` | You have 5 alerts. Delete one to add another. |
+| `ride.instant` | Instant confirmation |
+| `ride.instant.hint` | The driver confirms requests automatically, so you’re booked as soon as you ask. |
+| `request.line.instant` | {driver} confirms requests automatically. You’re booked as soon as you send this. |
+| `booking.auto.title` | You’re booked |
+| `booking.auto.body` | {driver} confirms requests automatically. Be at the pickup point 5 minutes early. |
+| `driverRide.auto.err` | We couldn’t change this. Try again. |
+| `driverRide.series` | Weekly · {days} · until {date} |
+| `driverRide.cancel.scope` | Which rides? |
+| `driverRide.cancel.only` | Only this ride |
+| `ride.cancel.series` | All upcoming rides in the series |
+| `driverRide.cancel.series.toast.one` | {n} ride cancelled. Passengers are told. |
+| `driverRide.cancel.series.toast.other` | {n} rides cancelled. Passengers are told. |
+| `alerts.notify` | Notify me about this route |
+| `alerts.sheet.title` | Notify me about this route |
+| `alerts.sheet.body` | We’ll tell you when a matching ride is published in the next 14 days. No marketing. |
+| `alerts.sheet.when` | When do you travel? |
+| `alerts.sheet.once` | Only on {date} |
+| `alerts.sheet.weekly` | Every {weekday} |
+| `alerts.sheet.save` | Save alert |
+| `alerts.saved` | Saved. We’ll tell you for 14 days. |
+| `alerts.sheet.past` | That time has already passed. Choose every week, or search for a later time. |
+| `alerts.limit.link` | See my alerts |
+| `alerts.title` | Ride alerts |
+| `alerts.loading` | Loading your alerts |
+| `alerts.err` | We couldn’t load your alerts. Check your connection and try again. |
+| `alerts.empty.title` | No alerts yet |
+| `alerts.empty` | No alerts. Search for a route and tap Notify me. |
+| `alerts.empty.cta` | Search for a ride |
+| `alerts.list` | Your ride alerts |
+| `alerts.route` | {from} to {to} |
+| `alerts.on` | On {date} |
+| `alerts.every` | Every {days} |
+| `alerts.at` | {time}, {win} |
+| `alerts.ends` | Ends {date} |
+| `alerts.delete` | Delete |
+| `alerts.delete.aria` | Delete the alert for {from} to {to} |
+| `alerts.deleted` | Alert deleted. |
+| `alerts.delete.err` | We couldn’t delete this alert. Try again. |
+| `alerts.hint` | We tell you once for each new ride that fits. Alerts end after 14 days. |
+| `settings.notifications` | Notifications |
+| `settings.alerts` | Ride alerts |
+| `settings.alerts.value` | Get told when a ride appears on a route |
+| `settings.push` | Notifications on this device |
+| `settings.push.hint` | Answers to your requests and ride changes. No marketing. |
+| `settings.push.value.on` | On |
+| `settings.push.value.off` | Off |
+| `settings.push.denied` | Notifications are blocked in your browser settings. Allow them there to turn this on. |
+| `settings.push.err` | We couldn’t change this. Try again. |
+| `push.prompt.title` | Get updates on your phone? |
+| `push.prompt.body` | We’ll tell you when a request is answered or a ride changes. No marketing. |
+| `push.turnOn` | Turn on |
+| `push.notNow` | Not now |
+| `push.ios` | Add Haide to your Home Screen to get notifications. |
+| `push.on.toast` | Notifications turned on. |
+| `push.off.toast` | Notifications turned off. |
+| `profile.month.driver` | This month you shared {amount} of fuel costs |
+| `profile.month.passenger` | This month you paid {amount} toward fuel costs |

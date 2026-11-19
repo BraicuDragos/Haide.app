@@ -262,7 +262,7 @@ Full risk analysis: [privacy-impact-assessment.md](privacy-impact-assessment.md)
 
 - **Outbox pattern:** every state change inserts `outbox` rows in the **same transaction** (template, recipient user id, payload with labels and times only). `tick` sends them through `EmailProvider` (Brevo HTTP API) and marks them `sent` or `failed` (exponential backoff, 5 attempts). Delivery is under 2 min (E4-6). Templates are TS functions using i18n strings from `_shared/i18n/en.json`.
 - **Badges:** `GET /me/summary` (pending requests as driver, unseen booking changes as passenger), polled every 60 s while the app is visible and on focus. No Realtime in the MVP.
-- **Web push (E8-4):** VAPID keys in function secrets, `push_subscriptions` table, sent from `tick` with the same outbox rows (`channel='push'`). Email stays the fallback.
+- **Web push (E8-4):** VAPID keys in function secrets, `push_subscriptions` table, sent from `tick` with the same outbox rows (`channel='push'`). Email stays the fallback. **Refined in E8 (ADR 0038):** one outbox row per channel; lifecycle events send email plus push, alert matches are push-first with email fallback; own RFC 8291/8292 sender on WebCrypto and `jose` (no `web-push` npm); payloads hold area labels and times only; endpoints limited to known push-service hosts. Alerts are matched in the tick (ADR 0036). Spec: [e8-liquidity-spec.md](e8-liquidity-spec.md).
 - **Volume estimate:** about 85 emails/day average at pilot targets, vs a 300/day free cap. `tick` stops sending at 280/day and keeps the rest pending for after midnight UTC; magic links (SMTP) are never blocked.
 
 ## 11. Frontend architecture

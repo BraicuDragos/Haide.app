@@ -131,3 +131,22 @@ export const useReducedMotion = () =>
     () => document.documentElement.dataset.motion === 'reduced',
     () => false,
   );
+
+/**
+ * Push pre-prompt "Not now" (E8-4): the moment it was dismissed, kept on this device. The sheet stays away for 30 days
+ * (it is a polite ask, not a nag). Storage can fail: then the memory copy holds for this visit.
+ */
+const PUSH_PROMPT_KEY = 'haide.pushPrompt';
+export const PUSH_PROMPT_SNOOZE_MS = 30 * 24 * 3_600_000;
+
+export function readPushPromptDismissedAt(): number | null {
+  const n = Number(read(PUSH_PROMPT_KEY));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+export function snoozePushPrompt(now: number = Date.now()): void {
+  write(PUSH_PROMPT_KEY, String(now));
+}
+export function pushPromptSnoozed(now: number = Date.now()): boolean {
+  const at = readPushPromptDismissedAt();
+  return at !== null && now - at < PUSH_PROMPT_SNOOZE_MS;
+}

@@ -14,6 +14,7 @@ import { Icon } from '@/ui/Icon';
 import { Loader } from '@/ui/Loader';
 import { Notice } from '@/ui/Notice';
 import { PageHeader } from '@/ui/PageHeader';
+import { NotifyMeButton } from '@/features/alerts/NotifyMeButton';
 import { readSearch, toRequest, type SearchCriteria } from '@/features/find/searchState';
 import { ResultCard } from '../components/ResultCard';
 
@@ -64,6 +65,7 @@ function Results({ criteria }: { criteria: SearchCriteria }) {
                 </li>
               ))}
             </ul>
+            <NotifyMeButton criteria={criteria} variant="link" />
           </>
         )}
         {q.data && count === 0 && (
@@ -125,12 +127,7 @@ function Empty({ criteria, nearest }: { criteria: SearchCriteria; nearest: Searc
     <>
       <EmptyState title={t('results.empty.title')} body={t('results.empty.body')}>
         <div className="flex w-full max-w-xs flex-col gap-2">
-          <Button disabled aria-describedby="notify-soon">
-            {t('results.empty.notify')}
-          </Button>
-          <p id="notify-soon" className="text-sm leading-5 text-text-muted">
-            {t('results.notify.soon')}
-          </p>
+          <NotifyMeButton criteria={criteria} variant="primary" />
           <Link to="/find" className="btn btn-secondary">
             {t('results.empty.edit')}
           </Link>

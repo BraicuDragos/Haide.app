@@ -1,7 +1,9 @@
 import type { Db } from '../../_shared/db.ts';
 import type { AnalyticsEvent } from '../../_shared/domain/events.ts';
 import type { OutboxRow } from '../../_shared/domain/outbox.ts';
+import { isPushFirstTemplate, isPushTemplate } from '../../_shared/domain/push.ts';
 import type { OutboxRecord, OutboxStore } from '../../_shared/notify/dispatch.ts';
+import type { PushStore } from '../../_shared/notify/dispatchPush.ts';
 import { runRetention } from './privacy.ts';
 
 /**
@@ -9,13 +11,42 @@ import { runRetention } from './privacy.ts';
  * jsonb parameters go in as `JSON.stringify(x)::text::jsonb` (see repo/rides.ts).
  */
 
-/** Inserts outbox rows in the caller's transaction (same commit as the state change). */
+/**
+ * Inserts outbox rows in the caller's transaction (same commit as the state change). One email row
+ * per row; a lifecycle template (E4-6 set) also gets a `push` row when the recipient has a
+ * subscription (ADR 0038: one row per channel). Push-first templates never come through here.
+ */
 export async function insertOutboxRows(sql: Db, rows: readonly OutboxRow[]): Promise<void> {
   for (const row of rows) {
-    await sql`
-      insert into app.outbox (user_id, template, payload)
-      values (${row.userId}, ${row.template}, ${JSON.stringify(row.payload)}::text::jsonb)`;
+    const payload = JSON.stringify(row.payload);
+    if (isPushTemplate(row.template) && !isPushFirstTemplate(row.template)) {
+      // One statement, two channels: the email row, and the push row when a subscription exists.
+      await sql`
+        insert into app.outbox (user_id, channel, template, payload)
+        select ${row.userId}::uuid, 'email'::app.notify_channel, ${row.template}::text, ${payload}::text::jsonb
+        union all
+        select ${row.userId}::uuid, 'push'::app.notify_channel, ${row.template}::text, ${payload}::text::jsonb
+        where exists (select 1 from app.push_subscriptions s where s.user_id = ${row.userId}::uuid)`;
+    } else {
+      await sql`
+        insert into app.outbox (user_id, template, payload)
+        values (${row.userId}, ${row.template}, ${payload}::text::jsonb)`;
+    }
   }
+}
+
+/**
+ * Push-first (the alert match, ADR 0036 and 0038): ONE row, `push` when the user has a subscription,
+ * else `email`. The dispatcher inserts the email fallback if the push finally fails.
+ */
+export async function insertPushFirstOutbox(sql: Db, row: OutboxRow): Promise<void> {
+  const payload = JSON.stringify(row.payload);
+  await sql`
+    insert into app.outbox (user_id, channel, template, payload)
+    select ${row.userId}::uuid,
+           case when exists (select 1 from app.push_subscriptions s where s.user_id = ${row.userId}::uuid)
+                then 'push'::app.notify_channel else 'email'::app.notify_channel end,
+           ${row.template}, ${payload}::text::jsonb`;
 }
 
 /** Analytics rows: ids, counts and booleans only (conventions §6). */
@@ -90,6 +121,88 @@ export function createOutboxStore(sql: Db): OutboxStore {
 
     async reschedule(id, sendAfter, error) {
       await sql`update app.outbox set send_after = ${sendAfter}, last_error = ${error} where id = ${id}`;
+    },
+  };
+}
+
+/** The dispatcher's push port over postgres (E8-4). */
+export function createPushStore(sql: Db): PushStore {
+  return {
+    async claim(now, leaseUntil, limit): Promise<OutboxRecord[]> {
+      const rows = await sql<ClaimedRow[]>`
+        update app.outbox set attempts = attempts + 1, send_after = ${leaseUntil}
+        where id in (
+          select id from app.outbox
+          where channel = 'push' and status = 'pending' and send_after <= ${now}
+          order by send_after
+          limit ${limit}
+          for update skip locked)
+        returning id, user_id, template, payload, attempts`;
+      return rows.map((r) => ({
+        id: r.id,
+        userId: r.user_id,
+        template: r.template,
+        payload: r.payload,
+        attempts: r.attempts,
+      }));
+    },
+
+    async subscriptions(userIds) {
+      const out = new Map<
+        string,
+        { id: string; endpoint: string; p256dh: string; auth: string; failures: number }[]
+      >();
+      if (userIds.length === 0) return out;
+      const rows = await sql<
+        {
+          id: string;
+          user_id: string;
+          endpoint: string;
+          p256dh: string;
+          auth: string;
+          failures: number;
+        }[]
+      >`
+        select s.id, s.user_id, s.endpoint, s.p256dh, s.auth, s.failures
+        from app.push_subscriptions s
+        join app.profiles p on p.id = s.user_id and p.status = 'active'
+        where s.user_id = any (string_to_array(${userIds.join(',')}::text, ',')::uuid[])
+        order by s.created_at, s.id`;
+      for (const r of rows) {
+        out.set(r.user_id, [...(out.get(r.user_id) ?? []), r]);
+      }
+      return out;
+    },
+
+    async markSent(id, at) {
+      await sql`update app.outbox set status = 'sent', sent_at = ${at}, last_error = null where id = ${id}`;
+    },
+    async markFailed(id, error) {
+      await sql`update app.outbox set status = 'failed', last_error = ${error} where id = ${id}`;
+    },
+    async reschedule(id, sendAfter, error) {
+      await sql`update app.outbox set send_after = ${sendAfter}, last_error = ${error} where id = ${id}`;
+    },
+    async recordSuccess(subscriptionId, at) {
+      await sql`
+        update app.push_subscriptions set last_success_at = ${at}, failures = 0 where id = ${subscriptionId}`;
+    },
+    async deleteSubscription(subscriptionId) {
+      await sql`delete from app.push_subscriptions where id = ${subscriptionId}`;
+    },
+    async recordPermanentFailure(subscriptionId, max) {
+      const rows = await sql<{ failures: number }[]>`
+        update app.push_subscriptions set failures = failures + 1
+        where id = ${subscriptionId} returning failures`;
+      if ((rows[0]?.failures ?? 0) >= max) {
+        await sql`delete from app.push_subscriptions where id = ${subscriptionId}`;
+      }
+    },
+    async insertEmailFallback(row) {
+      // Email only: going through insertOutboxRows would add a push row again.
+      await sql`
+        insert into app.outbox (user_id, channel, template, payload)
+        values (${row.userId}::uuid, 'email', ${row.template}, ${JSON.stringify(row.payload)}::text::jsonb)`;
     },
   };
 }

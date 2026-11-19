@@ -7,6 +7,7 @@ import { requestLogging } from './middleware/logging.ts';
 import { adminRoutes } from './routes/admin.ts';
 import { accountRoutes } from './routes/account.ts';
 import { bookingRoutes } from './routes/bookings.ts';
+import { liquidityRoutes } from './routes/liquidity.ts';
 import { placesRoutes } from './routes/places.ts';
 import { privacyRoutes } from './routes/privacy.ts';
 import { rideRoutes } from './routes/rides.ts';
@@ -42,6 +43,7 @@ export function createApp(deps: Deps) {
   app.route('/', shareRoutes);
   app.route('/', privacyRoutes);
   app.route('/', adminRoutes);
+  app.route('/', liquidityRoutes);
 
   app.onError(onError);
   app.notFound(onNotFound);

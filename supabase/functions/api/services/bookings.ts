@@ -22,7 +22,12 @@ import {
   relockConfirmed,
   responseSeconds,
 } from '../../_shared/domain/bookings.ts';
+import {
+  bookingAutoConfirmedOutbox,
+  isAutoAcceptEligible,
+} from '../../_shared/domain/autoAccept.ts';
 import { quoteUpTo } from '../../_shared/domain/pricing.ts';
+import { RELIABILITY_WINDOW_DAYS } from '../../_shared/domain/rules.ts';
 import { roundPoint } from '../../_shared/domain/privacy.ts';
 import { assertInCoverage } from '../../_shared/domain/search.ts';
 import { bookingExpiresAt } from '../../_shared/domain/time.ts';
@@ -30,7 +35,6 @@ import { AppError } from '../../_shared/errors.ts';
 import {
   adjustSeatsBooked,
   cancelBookingByPassenger,
-  confirmBooking,
   findBookingByKey,
   hasActiveOrRejected,
   hasBlockBetween,
@@ -54,8 +58,10 @@ import {
   type LockedRide,
 } from '../repo/bookings.ts';
 import { insertAnalyticsEvents, insertOutboxRows } from '../repo/outbox.ts';
+import { selectPublicProfiles } from '../repo/ratingSummary.ts';
 import { pickupEta, toBookingListItem, toBookingView } from '../serializers/bookings.ts';
 import type { Account, Deps } from '../types.ts';
+import { confirmLocked } from './bookingConfirm.ts';
 import { loadOwnerView } from './ownerView.ts';
 import { publicUsersById } from './profiles.ts';
 import { decodeCursor, encodeCursor, notFound as rideNotFound } from './rides.ts';
@@ -198,16 +204,39 @@ export async function createBooking(
       expiresAt,
     });
 
+    // E8-3 (ADR 0037): after every guard and the insert, under the same ride lock, an eligible
+    // requester of an auto-accept ride is confirmed by the routine approve uses.
+    let auto = false;
+    if (ride.auto_accept === true) {
+      const since = new Date(now.getTime() - RELIABILITY_WINDOW_DAYS * 86_400_000);
+      const [profile] = await selectPublicProfiles(db, [account.id], since, now);
+      auto = isAutoAcceptEligible({
+        ratingCount: profile?.rating_count ?? 0,
+        ratingAvg: profile?.rating_avg ?? null,
+      });
+    }
+    if (auto && !(await confirmLocked(db, ride, created.id, now, { auto: true }))) {
+      throw new Error('auto-confirm of a fresh request matched no row');
+    }
+
     await insertOutboxRows(db, [
-      bookingRequestedOutbox(ride.driver_id, {
-        bookingId: created.id,
-        rideId,
-        passengerFirstName: account.firstName,
-        departureAt: departureAt.toISOString(),
-        pickupArea: created.pickup_label,
-        dropoffArea: created.dropoff_label,
-        expiresAt: expiresAt.toISOString(),
-      }),
+      auto
+        ? bookingAutoConfirmedOutbox(ride.driver_id, {
+            bookingId: created.id,
+            rideId,
+            departureAt: departureAt.toISOString(),
+            pickupArea: created.pickup_label,
+            dropoffArea: created.dropoff_label,
+          })
+        : bookingRequestedOutbox(ride.driver_id, {
+            bookingId: created.id,
+            rideId,
+            passengerFirstName: account.firstName,
+            departureAt: departureAt.toISOString(),
+            pickupArea: created.pickup_label,
+            dropoffArea: created.dropoff_label,
+            expiresAt: expiresAt.toISOString(),
+          }),
     ]);
     await insertAnalyticsEvents(db, [
       bookingRequestedEvent(
@@ -215,6 +244,15 @@ export async function createBooking(
         { bookingId: created.id, rideId, segmentM: match.segment_m },
         now,
       ),
+      ...(auto
+        ? [
+            bookingConfirmedEvent(
+              ride.driver_id,
+              { bookingId: created.id, rideId, responseSeconds: 0, auto: true },
+              now,
+            ),
+          ]
+        : []),
     ]);
     return await loadBookingView(deps, db, created.id, account.id);
   });
@@ -306,27 +344,9 @@ export async function approveBooking(
       clock,
     );
 
-    if (!(await confirmBooking(db, bookingId, now))) await lostRace(db, bookingId);
-    await adjustSeatsBooked(db, ride.id, 1, now); // 23514 -> RIDE_FULL (the CHECK is the backstop)
-
-    // Everyone confirmed shares the cost: relock all of them. A lock only ever goes down.
-    const confirmed = await selectConfirmed(db, ride.id);
-    const relocked = relockConfirmed(
-      confirmed.map((c) => ({
-        id: c.id,
-        segmentM: c.segment_m,
-        quotedBani: c.price_quoted_bani,
-        lockedBani: c.price_locked_bani,
-      })),
-      ride.rate_micro_per_km,
-      ride.is_free,
-    );
-    for (const r of relocked) {
-      const current = confirmed.find((c) => c.id === r.id);
-      if (current && current.price_locked_bani !== r.lockedBani) {
-        // The approved booking is already flagged; every other passenger whose price dropped gets a badge.
-        await updateLock(db, r.id, r.lockedBani, r.dropped && r.id !== bookingId, now);
-      }
+    // Confirm, seat +1 (23514 -> RIDE_FULL, the CHECK is the backstop) and relock everyone.
+    if (!(await confirmLocked(db, ride, bookingId, now, { auto: false }))) {
+      await lostRace(db, bookingId);
     }
 
     const departureAt = new Date(ride.departure_at);
@@ -346,6 +366,7 @@ export async function approveBooking(
           bookingId,
           rideId: ride.id,
           responseSeconds: responseSeconds(new Date(state.requested_at), now),
+          auto: false,
         },
         now,
       ),

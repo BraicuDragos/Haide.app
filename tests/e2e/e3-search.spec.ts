@@ -175,7 +175,7 @@ test.describe('results states', () => {
     await expect(heading(page, '1 ride found')).toBeVisible();
   });
 
-  test('empty: nearest rides, disabled Notify me, edit search, axe clean', async ({ page }) => {
+  test('empty: nearest rides, Notify me, edit search, axe clean', async ({ page }) => {
     test.slow();
     const fake = await setup(page);
     fake.items = [];
@@ -183,7 +183,7 @@ test.describe('results states', () => {
     await searchTripB(page);
     await expect(heading(page, 'No rides found')).toBeVisible();
     await expect(heading(page, 'No rides yet on this route', 2)).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Notify me about this route' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Notify me about this route' })).toBeEnabled();
     await expect(heading(page, 'Closest rides outside your time window', 2)).toBeVisible();
     await expect(page.getByRole('link', { name: /Up to 3\.10 RON/ })).toContainText(
       'min from your time',

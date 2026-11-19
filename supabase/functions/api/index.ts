@@ -3,6 +3,7 @@ import { parseEnv } from '../_shared/env.ts';
 import { jsonLogger } from '../_shared/log.ts';
 import { systemClock } from '../_shared/providers/clock.ts';
 import { createEmailProvider } from '../_shared/providers/email/index.ts';
+import { createPushProvider } from '../_shared/providers/push/index.ts';
 import { createRoutingProvider } from '../_shared/providers/routing/index.ts';
 import { createApp } from './app.ts';
 import { encodeAvatar } from './services/avatar.ts';
@@ -24,6 +25,7 @@ const app = createApp({
   encodeAvatar,
   routing: createRoutingProvider(env),
   email: createEmailProvider(env, jsonLogger),
+  push: createPushProvider(env, jsonLogger),
 });
 
 Deno.serve(app.fetch);

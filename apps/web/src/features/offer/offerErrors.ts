@@ -28,7 +28,7 @@ export function classifyPreviewError(code: string): PreviewFailure {
 
 export interface PublishFailure {
   /** Field the message belongs to; no field means a banner above the button. */
-  field?: 'time' | 'seats' | 'note';
+  field?: 'time' | 'seats' | 'note' | 'repeat';
   message: string;
   /** The preview timed out: ask for a fresh one. */
   refreshPreview?: boolean;
@@ -39,7 +39,7 @@ export interface PublishFailure {
 /** Every 400/409 (and gate) code of POST /rides, plus the offline case, mapped to a place and a message. */
 export function classifyPublishError(
   err: unknown,
-  ctx: { seats: number; day: string },
+  ctx: { seats: number; day: string; series?: boolean },
 ): PublishFailure {
   const code = err instanceof ApiError ? err.code : 'NETWORK';
   const fields = err instanceof ApiError ? err.fields : undefined;
@@ -53,10 +53,23 @@ export function classifyPublishError(
     case 'SEATS_EXCEED_VEHICLE':
       return { field: 'seats', message: t('offer.err.seats', { n: ctx.seats }) };
     case 'DAILY_RIDE_LIMIT':
-      return { message: t('offer.err.limit', { day: ctx.day }) };
+      return {
+        message: ctx.series ? t('offer.err.limitSeries') : t('offer.err.limit', { day: ctx.day }),
+      };
     case 'PREVIEW_EXPIRED':
       return { message: t('offer.err.expired'), refreshPreview: true };
     case 'VALIDATION_FAILED':
+      if (fields?.weekdays) return { field: 'repeat', message: t('offer.repeat.err.days') };
+      if (fields?.endsOn === 'before_start')
+        return { field: 'repeat', message: t('offer.repeat.err.endBefore') };
+      if (fields?.endsOn === 'too_far')
+        return { field: 'repeat', message: t('offer.repeat.err.end') };
+      if (fields?.endsOn) return { field: 'repeat', message: t('offer.repeat.err.none') };
+      if (fields?.departureTime || fields?.startsOn)
+        return {
+          field: 'time',
+          message: fields.startsOn === 'too_far' ? t('offer.err.timeFar') : t('offer.err.time'),
+        };
       if (fields?.note) return { field: 'note', message: t('offer.note.hint', { n: 200 }) };
       if (fields?.departureAt) return { field: 'time', message: t('offer.err.time') };
       if (fields?.seats) return { field: 'seats', message: t('offer.err.seats', { n: ctx.seats }) };

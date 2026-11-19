@@ -1,10 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, Navigate, useLocation } from 'react-router';
+import type { SeriesCreated } from '@/api/liquidity';
 import { getMyRide } from '@/api/rides';
 import { keys } from '@/api/keys';
 import { RequireAuth } from '@/auth/RequireAuth';
-import { t } from '@/i18n';
-import { dayLabel } from '@/lib/dates';
+import { t, tp, type MessageKey } from '@/i18n';
+import { dateLabel, dayLabel } from '@/lib/dates';
 import { formatTime } from '@/lib/format';
 import { OwnerMap } from '@/features/rides/components/OwnerMap';
 import { RideStops } from '@/features/rides/components/RideStops';
@@ -16,16 +17,17 @@ import { ApiError } from '@/api/client';
 
 /** Ride published (2.4): confirmation, the exact route, and the two next steps. Reached only from the publish form. */
 export default function OfferDoneScreen() {
-  const rideId = (useLocation().state as { rideId?: string } | null)?.rideId;
+  const state = useLocation().state as { rideId?: string; series?: SeriesCreated | null } | null;
+  const rideId = state?.rideId;
   if (!rideId) return <Navigate to="/offer" replace />;
   return (
     <RequireAuth title={t('offer.done.title')}>
-      <Done rideId={rideId} />
+      <Done rideId={rideId} series={state?.series ?? null} />
     </RequireAuth>
   );
 }
 
-function Done({ rideId }: { rideId: string }) {
+function Done({ rideId, series }: { rideId: string; series: SeriesCreated | null }) {
   const q = useQuery({
     queryKey: keys.rides.mine(rideId),
     queryFn: ({ signal }) => getMyRide(rideId, signal),
@@ -33,11 +35,12 @@ function Done({ rideId }: { rideId: string }) {
   const ride = q.data;
   return (
     <>
-      <PageHeader title={t('offer.done.title')} />
+      <PageHeader title={series ? t('offer.done.series.title') : t('offer.done.title')} />
       <div className="flex flex-col gap-5 px-4 pt-4 pb-6">
         <p role="status" className="text-text-muted">
-          {t('offer.done.body')}
+          {series ? tp('offer.done.series.body', series.created.length) : t('offer.done.body')}
         </p>
+        {series && <SeriesSummary series={series} />}
         {q.isPending && (
           <div aria-busy="true">
             <Loader />
@@ -60,13 +63,52 @@ function Done({ rideId }: { rideId: string }) {
             </section>
           </>
         )}
-        <Link to={`/driving/${rideId}`} className="btn btn-primary btn-block">
-          {t('offer.done.view')}
+        <Link
+          to={series ? '/rides?role=driving' : `/driving/${rideId}`}
+          className="btn btn-primary btn-block"
+        >
+          {series ? t('offer.done.series.view') : t('offer.done.view')}
         </Link>
         <Link to="/offer" replace className="btn btn-secondary btn-block">
           {t('offer.done.another')}
         </Link>
       </div>
     </>
+  );
+}
+
+/** What a series created, and every date it left out with the reason in words (E8-1). */
+function SeriesSummary({ series }: { series: SeriesCreated }) {
+  const s = series.series;
+  const days = s.weekdays.map((d) => t(`weekday.${d}.short`)).join(', ');
+  return (
+    <section className="flex flex-col gap-3" aria-label={t('offer.done.series.title')}>
+      <p className="font-semibold">
+        {t('offer.done.series.when', {
+          days,
+          time:
+            s.departureTime ||
+            formatTime(series.created[0]?.departureAt ?? new Date().toISOString()),
+          date: dateLabel(s.endsOn),
+        })}
+      </p>
+      {series.skipped.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <h2 className="type-h3">{t('offer.done.skipped.title')}</h2>
+          <ul className="m-0 flex list-none flex-col gap-2 p-0">
+            {series.skipped.map((k) => (
+              <li key={k.date}>
+                <Notice tone="warning">
+                  {t('offer.done.skipped', {
+                    date: dateLabel(k.date),
+                    reason: t(`series.skip.${k.code}` as MessageKey),
+                  })}
+                </Notice>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
   );
 }

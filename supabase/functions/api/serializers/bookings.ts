@@ -82,6 +82,7 @@ export function toBookingView(
   return {
     id: row.id,
     status: row.status,
+    autoConfirmed: row.auto_confirmed === true,
     rideId: row.ride_id,
     rideStatus: row.ride_status,
     viewerRole: viewerIsPassenger ? 'passenger' : 'driver',

@@ -108,10 +108,10 @@ for (const theme of ['dark', 'light'] as const) {
         page.getByText('With 3 passengers you recover about 4.50 RON of the 6.24 RON fuel cost.'),
       ).toBeVisible();
       await expect(page.getByText('The price is set by Haide. You can’t raise it.')).toBeVisible();
-      // Seats are limited to the car (3) and the Repeat switch is a disabled slot.
+      // Seats are limited to the car (3); Repeat on weekdays is live since E8.
       await expect(page.getByRole('radio')).toHaveCount(3);
-      await expect(page.getByRole('switch', { name: /Repeat on weekdays/ })).toBeDisabled();
-      await expect(page.getByText('Coming soon')).toBeVisible();
+      await expect(page.getByRole('switch', { name: /Repeat on weekdays/ })).toBeEnabled();
+      await expect(page.getByText('Coming soon')).toHaveCount(0);
 
       // Seats change the recover line (1 passenger pays the most).
       await page.getByRole('radio', { name: '1 seat', exact: true }).check();

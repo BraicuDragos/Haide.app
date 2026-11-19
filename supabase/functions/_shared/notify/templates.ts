@@ -76,7 +76,12 @@ function groundLabel(code: unknown): string {
   return t(GROUND_KEYS[key as keyof typeof GROUND_KEYS]);
 }
 
-type Parts = { subject: string; body: string; path: string };
+export type Parts = { subject: string; body: string; path: string };
+
+/** Subject, body and in-app path of a template. The push renderer reuses the path. */
+export function templateParts(input: TemplateInput, ctx: RenderContext): Parts {
+  return parts(input, ctx);
+}
 
 function parts(input: TemplateInput, ctx: RenderContext): Parts {
   switch (input.template) {
@@ -237,6 +242,37 @@ function parts(input: TemplateInput, ctx: RenderContext): Parts {
         body: t('email.reinstated.body'),
         path: '',
       };
+    case 'booking_auto_confirmed': {
+      const p = input.payload;
+      return {
+        subject: t('email.autoConfirmed.subject', {
+          time: whenLabel(date(p.departureAt), ctx.now),
+        }),
+        body: t('email.autoConfirmed.body', {
+          pickup: str(p.pickupArea, SIBIU),
+          dropoff: str(p.dropoffArea, SIBIU),
+        }),
+        path: `/driving/${encodeURIComponent(str(p.rideId, ''))}`,
+      };
+    }
+    case 'ride_alert_match': {
+      const p = input.payload;
+      const more = typeof p.moreCount === 'number' && p.moreCount > 0 ? p.moreCount : 0;
+      return {
+        subject: t('email.alertMatch.subject', {
+          fromArea: str(p.pickupArea, SIBIU),
+          toArea: str(p.dropoffArea, SIBIU),
+        }),
+        body:
+          t('email.alertMatch.body', {
+            time: whenLabel(date(p.departureAt), ctx.now),
+            pickup: str(p.pickupArea, SIBIU),
+            dropoff: str(p.dropoffArea, SIBIU),
+          }) + (more > 0 ? ` ${t('email.alertMatch.more', { count: String(more) })}` : ''),
+        // The deep link re-runs the match with the alert's own points (web, E8-2).
+        path: `/ride/${encodeURIComponent(str(p.rideId, ''))}?alert=${encodeURIComponent(str(p.alertId, ''))}`,
+      };
+    }
     case 'data_export_ack':
       return {
         subject: t('email.dataAck.subject'),

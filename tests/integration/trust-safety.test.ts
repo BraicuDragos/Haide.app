@@ -196,7 +196,13 @@ describe.skipIf(!BASE || !SECRET || DB_SKIP)('trust and safety against the local
     const c = await confirmed();
     await Promise.all([withAuthRow(c.driver), withAuthRow(c.p)]);
     await departRide(c.ride.id, 125);
+    // The tick is global and other suites tick too (E8 liquidity): a concurrent tick's alert matcher can hold
+    // a fresh ride's row lock, and complete_rides skips locked rows (SKIP LOCKED), so one tick is not proof.
     await tick();
+    for (let i = 0; i < 8 && (await rideStatus(c.ride.id)) !== 'completed'; i++) {
+      await new Promise((r) => setTimeout(r, 500));
+      await tick();
+    }
     expect(await rideStatus(c.ride.id)).toBe('completed');
     return c;
   }

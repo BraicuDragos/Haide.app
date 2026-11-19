@@ -107,6 +107,25 @@ export type AccountSuspendedPayload = {
 /** E7: to a user an admin reinstated. Nothing to say beyond the fact. */
 export type AccountReinstatedPayload = Record<string, never>;
 
+/** E8-3: to the driver when a request was confirmed automatically. Areas and a time only. */
+export type BookingAutoConfirmedPayload = {
+  bookingId: string;
+  rideId: string;
+  departureAt: string;
+  pickupArea: string;
+  dropoffArea: string;
+};
+
+/** E8-2: to the owner of an alert. `moreCount` = further matching rides of the same alert in this run. */
+export type RideAlertMatchPayload = {
+  alertId: string;
+  rideId: string;
+  departureAt: string;
+  pickupArea: string;
+  dropoffArea: string;
+  moreCount: number;
+};
+
 export type OutboxPayloadMap = {
   booking_requested: BookingRequestedPayload;
   booking_confirmed: BookingConfirmedPayload;
@@ -122,6 +141,8 @@ export type OutboxPayloadMap = {
   data_export_ack: DataExportAckPayload;
   account_suspended: AccountSuspendedPayload;
   account_reinstated: AccountReinstatedPayload;
+  booking_auto_confirmed: BookingAutoConfirmedPayload;
+  ride_alert_match: RideAlertMatchPayload;
 };
 
 export type OutboxTemplate = keyof OutboxPayloadMap;
@@ -141,6 +162,8 @@ export const OUTBOX_TEMPLATES = [
   'data_export_ack',
   'account_suspended',
   'account_reinstated',
+  'booking_auto_confirmed',
+  'ride_alert_match',
 ] as const satisfies readonly OutboxTemplate[];
 
 /** One row to insert into app.outbox. Distributes over the template so payload and name stay paired. */

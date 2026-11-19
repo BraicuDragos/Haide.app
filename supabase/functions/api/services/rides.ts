@@ -40,6 +40,7 @@ import {
   lockDriverPublishing,
   selectOwnerRide,
   selectPublicRide,
+  setAutoAccept,
 } from '../repo/rides.ts';
 import { publicRideVisible, toListItem, toPublicView } from '../serializers/rides.ts';
 import { toPublicUser } from '../serializers/users.ts';
@@ -158,6 +159,7 @@ export async function publishRide(
       seats: body.seats,
       note,
       isFree: body.isFree,
+      autoAccept: body.autoAccept,
       energyPriceId: price.id,
       rateMicroPerKm: ratePerKmMicro(price.consumption_centi, price.price_milli),
       vehicleSnapshot: {
@@ -265,6 +267,37 @@ export async function cancelRide(deps: Deps, account: Account, id: string): Prom
       'driver',
       late,
     );
+    return await loadOwnerView(deps, tx, rideId, account.id);
+  });
+}
+
+// ---- PATCH /me/rides/{id} (E8-3, ADR 0037) -----------------------------------------------------------------
+
+/**
+ * Switches auto-accept on or off for one ride. Locks the ride (the same lock POST /bookings takes, so
+ * a switch racing a request is serialised). Driver only (else 404); the ride must be published and
+ * not departed. Switching on never confirms requests that are already pending.
+ */
+export async function setRideAutoAccept(
+  deps: Deps,
+  account: Account,
+  id: string,
+  autoAccept: boolean,
+): Promise<RideOwnerView> {
+  const { sql, clock } = deps;
+  const rideId = asRideId(id);
+  const now = clock.now();
+  return await sql.begin(async (txn) => {
+    const tx = asDb(txn);
+    const ride = await selectOwnerRide(tx, rideId, account.id, true);
+    if (!ride) throw notFound();
+    if (!canCancelRide({ status: ride.status, departureAt: new Date(ride.departure_at) }, clock)) {
+      throw new AppError(
+        'INVALID_STATE',
+        'Only a published ride that has not departed can change.',
+      );
+    }
+    await setAutoAccept(tx, rideId, autoAccept, now);
     return await loadOwnerView(deps, tx, rideId, account.id);
   });
 }
