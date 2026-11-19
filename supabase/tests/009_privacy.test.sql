@@ -3,7 +3,7 @@
 -- export_user_data, and the grants of all of them.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(146);
+select plan(147);
 
 -- Fixtures ---------------------------------------------------------------------------------------------------------
 -- Users u(1) D driver, u(2) P passenger, u(5) S scrubbed, u(6) T scrubbed without a photo,
@@ -256,7 +256,10 @@ select set_eq(
   $$values ('areas.geom'), ('areas.centroid'), ('places.geom'),
            ('route_previews.origin'), ('route_previews.destination'), ('route_previews.route'),
            ('rides.origin'), ('rides.destination'), ('rides.route'), ('rides.route_utm'),
-           ('bookings.pickup'), ('bookings.dropoff')$$,
+           ('bookings.pickup'), ('bookings.dropoff'),
+           -- E8 (ADR 0036): alerts are deleted at expires_at, at most 14 days, and on account deletion
+           ('ride_alerts.origin'), ('ride_alerts.destination'),
+           ('ride_alerts.origin_utm'), ('ride_alerts.destination_utm')$$,
   'every geometry column in app is in the retention inventory (e6-privacy-spec section 3): classify new ones');
 select is((select count(*) from extensions.geography_columns where f_table_schema = 'app'), 0::bigint,
   'no geography column in app (it would also need a retention rule)');
@@ -462,15 +465,17 @@ select is((select string_agg(user_id::text, ',' order by user_id) from app.accou
   'account deletions: completed more than 3 years ago go');
 select is((select string_agg(note, ',' order by note) from app.data_requests where note like 'e6r-%'), 'e6r-new,e6r-open',
   'data requests: fulfilled more than 3 years ago go, an unfulfilled one stays');
-select is((select count(*) from jsonb_object_keys(app.run_retention())), 9::bigint,
-  'run_retention reports the rows deleted for each of its nine tables');
+select is((select count(*) from jsonb_object_keys(app.run_retention())), 11::bigint,
+  'run_retention reports the rows deleted for each of its eleven tables (E8: ride_alerts, ride_series)');
 
 -- export_user_data (15) ----------------------------------------------------------------------------------------------------------------
 select is((select count(*) from unnest(array['schemaVersion', 'exportedAt', 'account', 'profile', 'vehicle', 'consents',
     'rides', 'bookings', 'ratingsGiven', 'ratingsReceived', 'reliabilityEvents', 'blocksOutgoing', 'reportsFiled',
-    'dataRequests', 'analyticsEvents']) k where jsonb_exists(app.export_user_data(pg_temp.u(9)), k)), 15::bigint,
+    'dataRequests', 'analyticsEvents', 'rideAlerts', 'rideSeries', 'pushSubscriptions']) k
+    where jsonb_exists(app.export_user_data(pg_temp.u(9)), k)), 18::bigint,
   'the export has every documented key');
-select is((select count(*) from jsonb_object_keys(app.export_user_data(pg_temp.u(9)))), 15::bigint, 'and no other key');
+select is((select count(*) from jsonb_object_keys(app.export_user_data(pg_temp.u(9)))), 18::bigint, 'and no other key');
+select is((app.export_user_data(pg_temp.u(9))->>'schemaVersion')::int, 2, 'the export schema version is 2 (E8)');
 select is((app.export_user_data(pg_temp.u(9))->'account'->>'email'), 'export@example.com', 'the account email comes from auth.users');
 select ok((select jsonb_array_length(x->'ratingsReceived') = 1 and (x->'ratingsReceived'->0->>'stars')::int = 5
     from (select app.export_user_data(pg_temp.u(9)) as x) q),
