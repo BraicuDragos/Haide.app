@@ -206,7 +206,7 @@ Body `{}`. Ride → `cancelled`. All `requested` and `confirmed` bookings → `c
 Implemented in E4: the cascade runs in the same transaction as the ride cancel (ride row locked first, ADR 0021). `rides.seats_booked` returns to 0 (the invariant `seats_booked = count(confirmed)` also holds for a cancelled ride). One `ride_cancelled` outbox row per booking, each with that passenger's own pickup and dropoff **area names**, plus one `booking_cancelled` analytics event per booking (`by: driver`).
 
 ### `PATCH /me/rides/{id}` (E8-3)
-Body `{ "autoAccept": true }` → `200`.
+Body `{ "autoAccept": true }` → `200` owner view. Driver only (else `404`); the ride is locked and must be `published` and not departed (else `409 INVALID_STATE`). Switching on never confirms requests that are already pending (ADR 0037).
 
 ## 5. Bookings (E4, E5)
 
@@ -214,7 +214,7 @@ Body `{ "autoAccept": true }` → `200`.
 Headers: `Idempotency-Key`. Requires consent + complete profile. Rate limit 10/hour.
 Body `{ "rideId": "…", "from": LatLng, "to": LatLng }`
 Server re-runs the match for this ride and stores the snapped points, `segment_m`, labels, `price_quoted_bani = quoteUpTo`, and `expires_at = min(now + 30 min, departure − 10 min)`.
-`201` returns the booking view (below). Errors: `RIDE_FULL`, `RIDE_NOT_BOOKABLE`, `OWN_RIDE`, `BLOCKED`, `ALREADY_REQUESTED`, `NO_LONGER_MATCHES`. Logs `booking_requested`. Outbox: `booking_requested` → driver. With `autoAccept` (E8-3) and an eligible requester, the booking is confirmed in the same transaction.
+`201` returns the booking view (below). Errors: `RIDE_FULL`, `RIDE_NOT_BOOKABLE`, `OWN_RIDE`, `BLOCKED`, `ALREADY_REQUESTED`, `NO_LONGER_MATCHES`. Logs `booking_requested`. Outbox: `booking_requested` → driver. With `autoAccept` (E8-3) and an eligible requester, the booking is confirmed in the same transaction (ADR 0037: after every E4 guard and the insert, under the ride lock; eligible = fewer than 3 visible ratings or a visible average ≥ 4.0; the response is then `201` with `status: 'confirmed'` and `autoConfirmed: true`; the driver gets `booking_auto_confirmed` instead of `booking_requested`).
 Implemented in E4: header `Idempotency-Key` (uuid) is required: missing or not a uuid → `400 VALIDATION_FAILED` (`fields.idempotencyKey = required | invalid`). A replay with the same key and ride returns `201` with the current view and writes nothing; the same key for another ride → `400` (`fields.idempotencyKey = reused`). Body points must be inside the Sibiu box (`fields.from|to = outside_coverage`); there is no price field. Under the ride row lock (ADR 0021) the guards run in this order: replay, `OWN_RIDE`, `BLOCKED` (either direction), driver not active (`404`), `ALREADY_REQUESTED` (a `requested`, `confirmed` or **`rejected`** booking exists: a declined passenger cannot ask again, after `cancelled` or `expired` they can), `RIDE_NOT_BOOKABLE` (not published, or departing in 10 minutes or less), `RIDE_FULL`, `NO_LONGER_MATCHES`. An unknown ride is `404`. `pickup.label` and `dropoff.label` are **area names**; the stored points are the exact snapped points on the route (`ST_LineInterpolatePoint` at the matched fractions) and are never returned before the reveal. `price_quoted_bani` = `quoteUpTo(segment)` (n = 1). Rate limit 10/hour. Analytics `booking_requested`.
 
 ### `GET /me/bookings?scope=upcoming|past&limit&cursor`
@@ -303,16 +303,31 @@ Metric definitions and thresholds: e7-metrics-admin-spec §3 (counts come from S
 ### `POST /telemetry/error`: Public. Rate limit 20/min
 Body `{ "message": "…", "stack": "…", "route": "/ride/:id", "appVersion": "…" }` (truncated server-side, scrubbed of anything that looks like an email, a phone or coordinates). `204`.
 
-## 9. E8 (Should)
+## 9. E8 (Should): liquidity boosters
 
-| Method & path | Body | Notes |
+Specified in [e8-liquidity-spec.md §7](e8-liquidity-spec.md) (ADRs 0036 to 0039); schemas in `_shared/contracts/liquidity.ts`. Every route needs an active account; writes need consent; series also need a complete profile and a vehicle. Non-UUID ids are `404`. Ride-wanted posts (E8-6) are out of scope.
+
+```ts
+type Weekday = 1|2|3|4|5|6|7;                                    // ISO, Monday = 1
+type AlertSchedule = { kind: 'date'; date: string } | { kind: 'weekly'; weekdays: Weekday[] };
+type RideAlert = { id; from: LatLng; to: LatLng; fromLabel; toLabel; schedule: AlertSchedule; time: string /* HH:MM local */;
+  windowMin: 15|30|60; createdAt; expiresAt; lastNotifiedAt: string|null; matchesSent: number };
+type RideSeries = { id; weekdays: Weekday[]; departureTime: string; startsOn: string; endsOn: string;
+  status: 'active'|'cancelled'; upcomingCount: number };
+```
+
+| Method & path | Body | Response · errors |
 |---|---|---|
-| `POST /ride-series` | `{ previewId, weekdays: [1..7], departureTime: "07:30", endsOn: "2026-12-13", seats, note, isFree }` | Creates individual rides (each checked against the daily limit). Returns `{ seriesId, createdRideIds, skipped: [{date, code}] }` |
-| `POST /ride-series/{id}/cancel` | `{}` | Cancels all future rides in the series |
-| `POST /alerts` | `{ from, to, fromLabel, toLabel, date? , weekday?, time, windowMin }` | Max 5 active (`ALERT_LIMIT`), expires in 14 days |
-| `GET /me/alerts` · `DELETE /alerts/{id}` | | |
-| `PUT /me/push-subscription` · `DELETE /me/push-subscription` | Web Push subscription JSON | |
-| `GET /me/stats/month` | | `{ sharedFuelCostBani }` (E8-5) |
+| `POST /ride-series` | `{ previewId, weekdays, departureTime: "07:30", startsOn?, endsOn: "2026-12-13", seats, note?, isFree?, autoAccept? }` | `201 { series, created: [{rideId, departureAt}], skipped: [{date, code: 'DAILY_RIDE_LIMIT'\|'DEPARTURE_TOO_SOON'\|'INVALID_TIME'}] }`. All instances are created up front in one transaction (≤ 28 days ahead; ADR 0039). `PREVIEW_EXPIRED`, `SEATS_EXCEED_VEHICLE`, `400 fields.weekdays \| departureTime \| startsOn \| endsOn` (`endsOn = no_dates` when no date matches), `409 DAILY_RIDE_LIMIT` when nothing could be created. Rate limit `ridePublish` |
+| `POST /ride-series/{id}/cancel` | `{}` | `200 { series, cancelledRideIds }`: every future published instance, each through the ride-cancel cascade. `404`, `409 INVALID_STATE` |
+| `POST /alerts` | `{ from, to, fromLabel, toLabel, schedule, time, windowMin }` | `201 { item: RideAlert }` (`200` for an identical active alert). `400` fields, **`409 ALERT_LIMIT`** (5 active). Expires after 14 days (a date alert at its window end if sooner). Rate limit `alerts` 20/h |
+| `GET /me/alerts` · `DELETE /alerts/{id}` | | `{ items: RideAlert[] }` (active, newest first) · `204` / `404` |
+| `GET /push/config` (Public) | | `{ vapidPublicKey: string \| null }` (`null` = push disabled) |
+| `PUT /me/push-subscription` | `PushSubscription.toJSON()`: `{ endpoint, keys: {p256dh, auth}, expirationTime? }` | `204`. `400 fields.endpoint = invalid \| unsupported_service` (only FCM, Mozilla, Apple, Windows push hosts), `fields.keys = invalid`, `503 TEMPORARILY_UNAVAILABLE` when push is disabled. Rate limit `pushSubscription` 20/h |
+| `DELETE /me/push-subscription` | `{ endpoint? }` | `204`, idempotent; no endpoint = all of the caller's subscriptions |
+| `GET /me/stats/month?month=YYYY-MM` | | `{ month, from, to, driver: { sharedFuelCostBani, passengersCarried, ridesCompleted }, passenger: { paidBani, ridesCompleted } }` (E8-5). `400 fields.month = invalid \| before_launch \| future` |
+
+Additive fields: `POST /rides` body `autoAccept?`; `RideOwnerView.autoAccept`, `.series: RideSeries | null`; `RideListItem.seriesId`; `RidePublicView.autoAccept`; `BookingView.autoConfirmed`. Outbox templates `booking_auto_confirmed` (driver) and `ride_alert_match`. Analytics: `ride_published` + `inSeries`, `autoAccept`; `booking_confirmed` + `auto`; new `alert_created {alertId, kind, windowMin, fromArea, toArea}`, `alert_matched {alertId, rideId}`.
 
 ## 10. Internal
 
@@ -323,6 +338,8 @@ Implemented in E4 (every minute, each step in its own try/catch; a failure is lo
 Implemented in E5 (ADR 0024, 0027): the order is now (1) expire, (2) **complete** rides, (3) **safety sweep**, (4) dispatch, (5) purge previews and `share_links` past `expires_at`, (6) hourly housekeeping. Step 2 runs `app.complete_rides(now, now − 2 h, 200)` in one transaction: confirmed bookings become `completed` with `final_price_bani = price_locked_bani`, the ride becomes `completed` (or `expired` when no booking was completed), a `rating_prompt` email is queued per completed booking and one `rating_prompt_driver` per ride, and `ride_completed` is logged. Rides locked by a concurrent writer are skipped (`SKIP LOCKED`) until the next tick. Step 3 (at most 50 per query, one transaction per item, re-checked under the ride lock) cancels future rides of suspended drivers (`ride_cancelled`, `by: system`), active bookings of suspended passengers and active bookings between blocked pairs. The response is `{ expired, completed, swept, sent, failed, purged }`: `completed` counts rides moved to `completed` or `expired`, `swept` bookings cancelled by the sweep, `purged` also counts expired share links.
 
 Implemented in E6 (ADR 0029, 0030): the order is (1) expire, (2) complete, (3) safety sweep (its two status queries now match `p.status IN ('suspended', 'deleted')`, so a write that raced an account deletion is cancelled at the next tick), (4) dispatch (`data_export_requested` goes to `EMAIL_SUPPORT_TO`), (5) purge previews and share links, (6) **coarsen** `app.coarsen_locations(now, 500)`, (7) **account purge** (at most 10 due `account_deletions` rows: storage object and auth user, with backoff), (8) hourly housekeeping at minute 0 UTC: `select app.run_retention()` (replaces the E4 inline deletes) plus one `app_errors` row `account_purge_overdue` per deletion open for more than 7 days (user id hashed). The response adds `coarsened` (rides plus bookings coarsened) and `accountsPurged` (deletions completed in this run); `purged` now also sums the rows `run_retention` deleted. Each step keeps its own try/catch.
+
+Planned in E8 (e8-liquidity-spec §8, ADRs 0036, 0038): the order becomes (1) expire, (2) complete, (3) safety sweep, (4) **match alerts** (`app.match_ride_alerts(now, 50)`, one notification per alert per run, push-first), (5) email dispatch (the daily cap counts `email` rows only), (6) **push dispatch** (`channel = 'push'` rows, batch 50, no daily cap, skipped when push is disabled; 404/410 deletes the subscription), (7) purge previews and share links, (8) coarsen, (9) account purge, (10) hourly housekeeping (`run_retention` also deletes expired alerts and series 90 days after their end). The response adds `alertsMatched`, `pushSent`, `pushFailed`.
 
 ## 11. Analytics events written by the API (E7-1)
 

@@ -38,6 +38,8 @@ erDiagram
   ride_series ||--o{ rides : "E8-1"
   profiles ||--o{ ride_alerts : "E8-2"
   profiles ||--o{ push_subscriptions : "E8-4"
+  ride_alerts ||--o{ ride_alert_hits : "fires once per ride"
+  rides ||--o{ ride_alert_hits : matched
 
   profiles {
     uuid id PK "= auth.users.id"
@@ -198,7 +200,7 @@ Seed v1 (effective 2026-11-15, from pricing.md §3): petrol 9810/700 l · diesel
 | route_utm | geometry(LineString,32635) | `GENERATED ALWAYS AS (ST_Transform(route, 32635)) STORED` |
 | distance_m | integer | `CHECK (distance_m BETWEEN 1000 AND 40000)` |
 | duration_s | integer | `CHECK (> 0)` |
-| departure_at | timestamptz | 15 min to 14 days ahead (API check, not a CHECK, because `now()` is not immutable) |
+| departure_at | timestamptz | 15 min to 14 days ahead (API check, not a CHECK, because `now()` is not immutable). Series instances (E8-1): up to 28 days ahead (ADR 0039) |
 | seats_offered | smallint | `CHECK (seats_offered BETWEEN 1 AND 4)` |
 | seats_booked | smallint | default 0, `CHECK (seats_booked BETWEEN 0 AND seats_offered)`, the overbooking backstop |
 | note | text | `≤ 200` chars |
@@ -348,11 +350,16 @@ Autocomplete query: `WHERE search_text % unaccent(lower($q)) OR search_text LIKE
 
 **`app_errors`**: `id`, `source text ('client'|'server')`, `message text (≤ 500)`, `stack text (≤ 4000)`, `route text`, `app_version text`, `user_id_hash text`, `created_at`. Purged after 14 days.
 
-### 4.8 E8 tables (created in E8, listed for completeness)
+### 4.8 Liquidity boosters (E8)
 
-- **`ride_series`**: `id`, `driver_id`, `weekdays smallint[]` (ISO 1–7), `departure_time time`, `ends_on date` (≤ 4 weeks), `template jsonb` (preview id copy: points, route, seats, note, is_free), `status`, `created_at`.
-- **`ride_alerts`**: `id`, `user_id`, `origin`, `destination` (Point), `origin_label`, `destination_label`, `date date NULL`, `weekday smallint NULL`, `time time`, `window_min smallint`, `expires_at` (+14 days), `last_notified_at`. Max 5 active per user (service check). Coarsened/deleted on expiry.
-- **`push_subscriptions`**: `id`, `user_id`, `endpoint text UNIQUE`, `p256dh text`, `auth text`, `created_at`.
+**Planned in E8** (`20261123090000_liquidity.sql`, ADRs 0036 to 0039, spec `e8-liquidity-spec.md` §1). RLS on every new table with no policies; PUBLIC EXECUTE revoked on every new or replaced function. The earlier sketch (`ride_series.template jsonb`, `ride_alerts.weekday`) is replaced: a series stores **no geometry** (ADR 0039).
+
+- **`ride_series`**: `id`, `driver_id` (FK, RESTRICT), `weekdays smallint[]` (ISO 1–7, 1 to 7 items), `departure_time time` (local Europe/Bucharest), `starts_on date`, `ends_on date` (`CHECK ends_on BETWEEN starts_on AND starts_on + 28`), `status text` (`active`, `cancelled`), `cancelled_at`, `created_at`. Deleted 90 days after `ends_on` (`run_retention`).
+- **`ride_alerts`**: `id`, `user_id` (FK, CASCADE), `origin`, `destination geometry(Point,4326)`, generated `origin_utm`, `destination_utm geometry(Point,32635)`, `origin_label`, `destination_label` (1–80), `alert_date date NULL` **or** `weekdays smallint[] NULL` (exactly one), `local_time time`, `window_min smallint` (15, 30, 60), `created_at`, `expires_at` (≤ created + 14 days), `last_notified_at`, `matches_sent`. Indexes `(user_id, expires_at)`, `(expires_at)`, GiST `(origin_utm)`. Max 5 active per user (service check under the profile lock, `409 ALERT_LIMIT`). **Deleted** at expiry and on account deletion.
+- **`ride_alert_hits`**: `alert_id` (FK, CASCADE), `ride_id` (FK, CASCADE), `notified_at`. **PK `(alert_id, ride_id)`**: an alert fires at most once per ride.
+- **`push_subscriptions`**: `id`, `user_id` (FK, CASCADE), `endpoint text UNIQUE` (https, ≤ 1000, known push-service hosts checked by the API), `p256dh`, `auth` (base64url), `created_at`, `last_success_at`, `failures smallint`. Deleted on 404/410, after 5 permanent failures and on account deletion. At most 5 per user.
+- **Changes:** `rides.series_id` FK → `ride_series` `ON DELETE SET NULL` + index `(series_id, departure_at) WHERE series_id IS NOT NULL`; `rides.alerts_checked_at timestamptz NULL` (backfilled to `created_at`; partial index `WHERE alerts_checked_at IS NULL`); `bookings.auto_confirmed boolean NOT NULL DEFAULT false`; `analytics_events_name_check` adds `alert_created`, `alert_matched`. Outbox rows now use `channel = 'push'` too (one row per channel).
+- **Functions:** `app.match_ride_alerts(p_now, p_limit)` (VOLATILE: marks new rides checked, prefilters alerts with GiST, confirms with `app.match_rides(…, p_ride_id)`, inserts hits `ON CONFLICT DO NOTHING`, returns only new hits); `app.user_month_stats(p_user, p_month)` (STABLE, local month); `app.scrub_account` (also deletes alerts and push subscriptions, cancels series); `app.run_retention` (also expired alerts, old series); `app.export_user_data` (schema 2: alerts, series, push services). The pgTAP 009 catalog inventory adds the four `ride_alerts` geometry columns.
 
 ## 5. Authorization
 
@@ -403,6 +410,9 @@ Legend: ✔ allowed · ✘ denied (404 for resources, 403 for actions) · **own*
 | Rate limits | 2 days | `app.run_retention()` |
 | Account deletions, data requests | 3 years after completion or fulfilment | `app.run_retention()` |
 | Route previews | 30 min | `tick` |
+| Ride alerts (exact points) and their hits | Deleted at `expires_at` (≤ 14 days) or on account deletion | `app.run_retention()` (hourly), `app.scrub_account` (E8, ADR 0036) |
+| Push subscriptions | Until unsubscribed, 404/410 from the push service, 5 permanent failures, or account deletion | Push dispatcher, `DELETE /me/push-subscription`, `app.scrub_account` (E8, ADR 0038) |
+| Ride series (schedule only) | 90 days after `ends_on` | `app.run_retention()` (E8, ADR 0039) |
 | Backups | 14 days | Actions artifact retention |
 
 ## 7. Key SQL functions
