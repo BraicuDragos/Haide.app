@@ -6,6 +6,7 @@ import { useMe } from '@/auth/hooks';
 import { t } from '@/i18n';
 import { Icon } from '@/ui/Icon';
 import { useToast } from '@/ui/Toast';
+import { PushHost } from '@/features/push/PushHost';
 import { ErrorBoundary } from './ErrorBoundary';
 import { TabBar, TABS } from './TabBar';
 import { useNavigationCounter } from './useScreenHeading';
@@ -108,6 +109,7 @@ export function Shell() {
           )}
         </ErrorBoundary>
       </main>
+      <PushHost />
       {isRoot && !suspended && <TabBar />}
     </div>
   );

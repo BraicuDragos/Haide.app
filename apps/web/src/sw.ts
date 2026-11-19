@@ -8,6 +8,7 @@ import {
 import { NavigationRoute, registerRoute } from 'workbox-routing';
 import { CacheFirst, StaleWhileRevalidate } from 'workbox-strategies';
 import { RangeRequestsPlugin } from 'workbox-range-requests';
+import { safeNotificationPath } from './features/push/notificationPath';
 
 declare const self: ServiceWorkerGlobalScope & {
   __WB_MANIFEST: Array<string | { url: string; revision: string | null }>;
@@ -54,4 +55,57 @@ registerRoute(
 
 self.addEventListener('message', (event) => {
   if ((event.data as { type?: string } | null)?.type === 'SKIP_WAITING') void self.skipWaiting();
+});
+
+/**
+ * Web push (E8-4, ADR 0038). The payload is {title, body, path, tag}: area labels and times only, never a name. There
+ * is no auth in the service worker and nothing is fetched here: the notification is built from the payload alone.
+ * Malformed payloads are ignored. `pushsubscriptionchange` is handled by the app (it re-registers once per session).
+ */
+const str = (v: unknown, max: number): string | undefined =>
+  typeof v === 'string' && v.length > 0 ? v.slice(0, max) : undefined;
+
+self.addEventListener('push', (event) => {
+  let payload: Record<string, unknown> | null = null;
+  try {
+    const raw = event.data?.json() as unknown;
+    payload = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null;
+  } catch {
+    payload = null;
+  }
+  const title = str(payload?.title, 80);
+  if (!payload || !title) return;
+  const body = str(payload.body, 200);
+  const tag = str(payload.tag, 80);
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      ...(body ? { body } : {}),
+      ...(tag ? { tag } : {}),
+      data: { path: safeNotificationPath(payload.path) },
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
+    }),
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const path = safeNotificationPath((event.notification.data as { path?: unknown } | null)?.path);
+  const target = new URL(path, self.location.origin).href;
+  event.waitUntil(
+    (async () => {
+      const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      const open = windows.find((c) => new URL(c.url).origin === self.location.origin);
+      if (open) {
+        try {
+          await open.focus();
+          await open.navigate(target);
+          return;
+        } catch {
+          /* navigate can be refused: fall back to a new window */
+        }
+      }
+      await self.clients.openWindow(target);
+    })(),
+  );
 });

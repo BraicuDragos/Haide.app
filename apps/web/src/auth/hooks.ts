@@ -88,6 +88,9 @@ export function useSignOut() {
     // signed-out redirect would win the race and land on sign-in.
     void navigate('/find', { replace: true });
     clearIntent();
+    // Push: drop this device's subscription while the session is still valid (E8-4). Loaded only when needed.
+    if (typeof Notification !== 'undefined' && Notification.permission === 'granted')
+      await import('@/features/push/forgetDevice').then((m) => m.forgetThisDevice());
     await signOut();
     toast.show(t('me.signOut.toast'));
   }, [signOut, navigate, toast]);

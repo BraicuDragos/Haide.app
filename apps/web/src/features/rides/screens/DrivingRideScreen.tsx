@@ -3,17 +3,20 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { ApiError } from '@/api/client';
 import { keys } from '@/api/keys';
+import { patchRideAutoAccept, postSeriesCancel } from '@/api/liquidity';
 import { getMyRide, postRideCancel } from '@/api/rides';
 import type { OwnerRide, RidePassengerItem } from '@/api/types';
 import { useBack } from '@/app/useBack';
 import { RequireAuth } from '@/auth/RequireAuth';
+import { AutoAcceptSwitch } from '@/features/offer/components/AutoAcceptSwitch';
 import { Call112Button } from '@/features/safety/Call112Button';
 import { LazyBlockSheet, LazyNoShowSheet, LazyReportSheet } from '@/features/safety/sheets';
 import { t, tError, tp } from '@/i18n';
-import { dayLabel } from '@/lib/dates';
+import { dateLabel, dayLabel } from '@/lib/dates';
 import { formatRon, formatTime } from '@/lib/format';
 import { Button } from '@/ui/Button';
 import { EmptyState } from '@/ui/EmptyState';
+import { Icon } from '@/ui/Icon';
 import { Loader } from '@/ui/Loader';
 import { Notice } from '@/ui/Notice';
 import { PageHeader } from '@/ui/PageHeader';
@@ -29,6 +32,12 @@ import { RideStops } from '../components/RideStops';
 import { StatusPill } from '../components/StatusPill';
 
 const BACK = '/rides?role=driving';
+
+const weeklyLabel = (s: NonNullable<OwnerRide['series']>) =>
+  t('driverRide.series', {
+    days: s.weekdays.map((d) => t(`weekday.${d}.short`)).join(', '),
+    date: dateLabel(s.endsOn),
+  });
 const bani = (n: number) => (n / 100).toFixed(2);
 
 /** Driver ride (2.6): exact map, route, seats, what passengers pay, requests and passengers (E4), cancel (2.7). */
@@ -141,6 +150,13 @@ function RideDetail({ ride, back }: { ride: OwnerRide; back: () => void }) {
           <StatusPill status={ride.status} />
         </div>
 
+        {ride.series && (
+          <p className="flex w-fit items-center gap-2 rounded-full bg-surface-subtle px-3 py-1 text-sm leading-6 font-semibold">
+            <Icon name="clock" small />
+            {weeklyLabel(ride.series)}
+          </p>
+        )}
+
         <OwnerMap ride={ride} />
 
         <section className="card flex flex-col gap-3 p-4" aria-label={t('driverRide.title')}>
@@ -155,6 +171,8 @@ function RideDetail({ ride, back }: { ride: OwnerRide; back: () => void }) {
           </div>
           {ride.note && <p className="text-sm leading-5">{ride.note}</p>}
         </section>
+
+        {open && <AutoAccept ride={ride} />}
 
         {open && (
           <section aria-labelledby="dr-req" className="flex flex-col gap-2">
@@ -297,12 +315,23 @@ function CancelSheet({
   const qc = useQueryClient();
   const toast = useToast();
   const [error, setError] = useState<string | null>(null);
+  const inSeries = ride.series?.status === 'active' && ride.status === 'published';
+  const [scope, setScope] = useState<'one' | 'series'>('one');
   const cancel = useMutation({
-    mutationFn: () => postRideCancel(ride.id),
-    onSuccess: (updated) => {
-      qc.setQueryData(keys.rides.mine(ride.id), updated);
+    mutationFn: async () => {
+      if (inSeries && scope === 'series' && ride.series) {
+        const r = await postSeriesCancel(ride.series.id);
+        return { many: r.cancelledRideIds.length };
+      }
+      return { many: 1, ride: await postRideCancel(ride.id) };
+    },
+    onSuccess: (res) => {
+      if (res.ride) qc.setQueryData(keys.rides.mine(ride.id), res.ride);
+      else void qc.invalidateQueries({ queryKey: keys.rides.mine(ride.id) });
       void qc.invalidateQueries({ queryKey: keys.rides.all });
-      toast.show(t('driverRide.cancel.toast'));
+      toast.show(
+        res.ride ? t('driverRide.cancel.toast') : tp('driverRide.cancel.series.toast', res.many),
+      );
       onClose();
     },
     onError: (err) => {
@@ -327,6 +356,31 @@ function CancelSheet({
       }}
     >
       <p>{n === 0 ? t('driverRide.cancel.body.none') : tp('driverRide.cancel.body', n)}</p>
+      {inSeries && (
+        <fieldset className="m-0 flex min-w-0 flex-col gap-2 border-0 p-0">
+          <legend className="type-label mb-1 p-0">{t('driverRide.cancel.scope')}</legend>
+          <div className="flex flex-col gap-2">
+            {(['one', 'series'] as const).map((v) => (
+              <label
+                key={v}
+                className="card flex min-h-12 cursor-pointer items-center gap-3 px-4 py-2 has-[:focus-visible]:outline-3 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-(color:--theme-focus-ring)"
+              >
+                <input
+                  type="radio"
+                  name="cancel-scope"
+                  value={v}
+                  checked={scope === v}
+                  onChange={() => setScope(v)}
+                  className="size-5 accent-(color:--theme-outline)"
+                />
+                <span className="font-semibold">
+                  {v === 'one' ? t('driverRide.cancel.only') : t('ride.cancel.series')}
+                </span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      )}
       {ride.lateCancelIfNow && <Notice tone="warning">{t('driverRide.cancel.late')}</Notice>}
       {error && <Notice tone="error">{error}</Notice>}
       <div className="mt-auto flex flex-col gap-3">
@@ -346,5 +400,44 @@ function CancelSheet({
         </Button>
       </div>
     </Sheet>
+  );
+}
+
+/** Auto-accept on the driver ride (E8-3): optimistic switch, rolled back with a message when the server says no. */
+function AutoAccept({ ride }: { ride: OwnerRide }) {
+  const qc = useQueryClient();
+  const [error, setError] = useState<string | null>(null);
+  // The switch flips in the same frame as the tap; the server answer then confirms or rolls it back.
+  const [shown, setShown] = useState<boolean | null>(null);
+  const set = useMutation({
+    mutationFn: (next: boolean) => patchRideAutoAccept(ride.id, next),
+    onSettled: () => setShown(null),
+    onMutate: (next) => {
+      setError(null);
+      const prev = qc.getQueryData<OwnerRide>(keys.rides.mine(ride.id));
+      qc.setQueryData<OwnerRide>(keys.rides.mine(ride.id), { ...ride, autoAccept: next });
+      return { prev };
+    },
+    onSuccess: (updated) => qc.setQueryData(keys.rides.mine(ride.id), updated),
+    onError: (err, _next, ctx) => {
+      if (ctx?.prev) qc.setQueryData(keys.rides.mine(ride.id), ctx.prev);
+      const code = err instanceof ApiError ? err.code : 'NETWORK';
+      setError(code === 'NETWORK' || code === 'UNKNOWN' ? t('driverRide.auto.err') : tError(code));
+      if (code === 'INVALID_STATE' || code === 'NOT_FOUND')
+        void qc.invalidateQueries({ queryKey: keys.rides.mine(ride.id) });
+    },
+  });
+  return (
+    <section className="card p-4" aria-label={t('offer.autoAccept')}>
+      <AutoAcceptSwitch
+        id="dr-auto"
+        checked={shown ?? ride.autoAccept}
+        onChange={(v) => {
+          setShown(v);
+          set.mutate(v);
+        }}
+        error={error}
+      />
+    </section>
   );
 }

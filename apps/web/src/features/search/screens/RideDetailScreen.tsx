@@ -3,6 +3,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { ApiError } from '@/api/client';
 import { keys } from '@/api/keys';
+import { getAlerts } from '@/api/liquidity';
 import { getPublicRide, postMatch } from '@/api/search';
 import type { LatLng, MatchResponse, NotBookableReason, PublicRide } from '@/api/types';
 import { useBack } from '@/app/useBack';
@@ -45,7 +46,22 @@ const REASON: Record<NotBookableReason, MessageKey> = {
 /** Ride detail (3.3): public view with approximate areas, what the passenger pays, and the sticky Request seat. */
 export default function RideDetailScreen() {
   const { id = '' } = useParams();
+  const [params] = useSearchParams();
+  const { status } = useAuth();
   const criteria = useMemo(readSearch, []);
+  // Deep link from an alert notification (/ride/:id?alert=<id>): match with the alert's own points. An alert that is
+  // gone (expired, deleted) just leaves the plain ride.
+  const alertId = params.get('alert');
+  const alerts = useQuery({
+    queryKey: keys.alerts,
+    queryFn: ({ signal }) => getAlerts(signal),
+    enabled: alertId !== null && criteria === null && status === 'signedIn',
+  });
+  const alert = alerts.data?.items.find((a) => a.id === alertId);
+  const alertPoints = useMemo(
+    () => (alert ? { from: toPoint(alert.from), to: toPoint(alert.to) } : null),
+    [alert],
+  );
   const back = useBack(criteria ? '/results' : '/find');
   const q = useQuery({
     queryKey: keys.ride(id),
@@ -56,7 +72,10 @@ export default function RideDetailScreen() {
 
   const header = <PageHeader title={t('detail.title')} onBack={back} />;
 
-  if (q.isPending)
+  if (
+    q.isPending ||
+    (alertId !== null && criteria === null && status === 'signedIn' && alerts.isPending)
+  )
     return (
       <>
         {header}
@@ -94,16 +113,26 @@ export default function RideDetailScreen() {
   return (
     <>
       {header}
-      <Detail ride={q.data} criteria={criteria} />
+      <Detail ride={q.data} criteria={criteria} alertPoints={alertPoints} />
     </>
   );
 }
 
-function Detail({ ride, criteria }: { ride: PublicRide; criteria: SearchCriteria | null }) {
+function Detail({
+  ride,
+  criteria,
+  alertPoints,
+}: {
+  ride: PublicRide;
+  criteria: SearchCriteria | null;
+  alertPoints: { from: LatLng; to: LatLng } | null;
+}) {
   const body = useMemo(
     () =>
-      criteria ? { from: toPoint(criteria.from.point), to: toPoint(criteria.to.point) } : null,
-    [criteria],
+      criteria
+        ? { from: toPoint(criteria.from.point), to: toPoint(criteria.to.point) }
+        : alertPoints,
+    [criteria, alertPoints],
   );
   const matchQ = useQuery({
     queryKey: keys.match(ride.id, body),
@@ -128,8 +157,11 @@ function Detail({ ride, criteria }: { ride: PublicRide; criteria: SearchCriteria
 
   const route = useMemo(() => ride.routePublic?.coordinates, [ride.routePublic]);
   const you = useMemo(
-    () => (criteria && fits ? { from: criteria.from.point, to: criteria.to.point } : undefined),
-    [criteria, fits],
+    () =>
+      body && fits
+        ? { from: criteria?.from.point ?? body.from, to: criteria?.to.point ?? body.to }
+        : undefined,
+    [criteria, body, fits],
   );
   const km = (ride.distanceM / 1000).toFixed(1);
 
@@ -158,6 +190,16 @@ function Detail({ ride, criteria }: { ride: PublicRide; criteria: SearchCriteria
             )}
           </div>
         </div>
+
+        {ride.autoAccept && (
+          <div className="flex flex-col items-start gap-1">
+            <p className="flex items-center gap-2 rounded-full bg-success-bg px-3 py-1 text-sm leading-6 font-semibold text-success">
+              <Icon name="check" small />
+              {t('ride.instant')}
+            </p>
+            <p className="text-sm leading-5 text-text-muted">{t('ride.instant.hint')}</p>
+          </div>
+        )}
 
         <Suspense fallback={<MiniLoader label={t('map.loading')} />}>
           <RouteMap
@@ -267,7 +309,6 @@ function Detail({ ride, criteria }: { ride: PublicRide; criteria: SearchCriteria
 
       <RequestBar
         ride={ride}
-        criteria={criteria}
         body={body}
         match={match}
         matchLoading={matchQ.isPending && body !== null}
@@ -300,14 +341,12 @@ function Stop({ term, approx, walk }: { term: string; approx: string; walk: stri
  */
 function RequestBar({
   ride,
-  criteria,
   body,
   match,
   matchLoading,
   matchError,
 }: {
   ride: PublicRide;
-  criteria: SearchCriteria | null;
   body: { from: LatLng; to: LatLng } | null;
   match: MatchResponse | undefined;
   matchLoading: boolean;
@@ -337,7 +376,7 @@ function RequestBar({
     ? t('booking.queued')
     : reasonCode
       ? t(REASON[reasonCode])
-      : !criteria
+      : !body
         ? t('detail.needSearch')
         : matchError
           ? matchError instanceof ApiError && matchError.code !== 'NETWORK'
@@ -384,7 +423,7 @@ function RequestBar({
       >
         {t('detail.cta')}
       </Button>
-      {!criteria && (
+      {!body && (
         <Link to="/find" className="btn btn-secondary">
           {t('detail.needSearch.cta')}
         </Link>

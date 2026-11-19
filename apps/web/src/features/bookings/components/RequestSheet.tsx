@@ -12,6 +12,7 @@ import { Button } from '@/ui/Button';
 import { LaunchButton, type LaunchResult } from '@/ui/LaunchButton';
 import { Notice } from '@/ui/Notice';
 import { Sheet } from '@/ui/Sheet';
+import { triggerPushPrompt } from '@/features/push/trigger';
 import { clearPending, isOffline, keyFor, savePending } from '../pendingRequest';
 
 interface Props {
@@ -109,7 +110,10 @@ export function RequestSheet({ open, onClose, ride, from, to, match, onQueued }:
       onClose();
       return;
     }
-    if (created.current) void navigate(`/booking/${created.current}`);
+    if (created.current) {
+      void navigate(`/booking/${created.current}`);
+      triggerPushPrompt();
+    }
   }
 
   return (
@@ -128,8 +132,14 @@ export function RequestSheet({ open, onClose, ride, from, to, match, onQueued }:
         ) : null}
       </p>
       <ul className="m-0 flex list-none flex-col gap-3 p-0">
-        <li>{t('request.line.decides', { driver })}</li>
-        <li>{t('request.line.expires', { driver, deadline })}</li>
+        {ride.autoAccept ? (
+          <li>{t('request.line.instant', { driver })}</li>
+        ) : (
+          <>
+            <li>{t('request.line.decides', { driver })}</li>
+            <li>{t('request.line.expires', { driver, deadline })}</li>
+          </>
+        )}
         <li>{t('request.line.approx', { driver })}</li>
       </ul>
       {code && (
