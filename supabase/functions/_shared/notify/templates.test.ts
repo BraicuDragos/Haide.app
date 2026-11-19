@@ -110,6 +110,27 @@ const ALL: TemplateInput[] = [
     },
   },
   { template: 'account_reinstated', payload: {} },
+  {
+    template: 'booking_auto_confirmed',
+    payload: {
+      bookingId: 'b1',
+      rideId: 'r1',
+      departureAt: LATER,
+      pickupArea: 'Turnișor',
+      dropoffArea: 'Piața Mare',
+    },
+  },
+  {
+    template: 'ride_alert_match',
+    payload: {
+      alertId: 'a1',
+      rideId: 'r1',
+      departureAt: LATER,
+      pickupArea: 'Turnișor',
+      dropoffArea: 'Piața Mare',
+      moreCount: 2,
+    },
+  },
 ];
 
 const at = (i: number): TemplateInput => ALL[i] as TemplateInput;

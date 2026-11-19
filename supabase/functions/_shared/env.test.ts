@@ -59,3 +59,42 @@ describe('parseEnv', () => {
     expect(() => parseEnv({ ...base, API_DB_URL: 'https://example.com' })).toThrow(/API_DB_URL/);
   });
 });
+
+describe('parseEnv, web push (E8)', () => {
+  const keys = {
+    VAPID_PUBLIC_KEY: `B${'c'.repeat(86)}`,
+    VAPID_PRIVATE_KEY: 'd'.repeat(43),
+    VAPID_SUBJECT: 'mailto:support@haide.ro',
+  };
+
+  it('push is off by default: no keys, console provider', () => {
+    const env = parseEnv(base);
+    expect(env.VAPID_PUBLIC_KEY).toBeUndefined();
+    expect(env.PUSH_PROVIDER).toBe('console');
+  });
+
+  it('all three keys set: webpush by default, console on request', () => {
+    expect(parseEnv({ ...base, ...keys }).PUSH_PROVIDER).toBe('webpush');
+    expect(parseEnv({ ...base, ...keys, PUSH_PROVIDER: 'console' }).PUSH_PROVIDER).toBe('console');
+    expect(
+      parseEnv({ ...base, ...keys, VAPID_SUBJECT: 'https://haide.ro/contact' }).VAPID_SUBJECT,
+    ).toBe('https://haide.ro/contact');
+  });
+
+  it('all or none: a partial set is a boot error naming the missing values, never their values', () => {
+    expect(() => parseEnv({ ...base, VAPID_PUBLIC_KEY: keys.VAPID_PUBLIC_KEY })).toThrow(
+      /VAPID_PRIVATE_KEY.*VAPID_SUBJECT/,
+    );
+    try {
+      parseEnv({ ...base, VAPID_PUBLIC_KEY: keys.VAPID_PUBLIC_KEY });
+    } catch (e) {
+      expect(String(e)).not.toContain(keys.VAPID_PUBLIC_KEY);
+    }
+  });
+
+  it('refuses malformed keys and subjects, and webpush without keys', () => {
+    expect(() => parseEnv({ ...base, ...keys, VAPID_PUBLIC_KEY: 'short' })).toThrow();
+    expect(() => parseEnv({ ...base, ...keys, VAPID_SUBJECT: 'support@haide.ro' })).toThrow();
+    expect(() => parseEnv({ ...base, PUSH_PROVIDER: 'webpush' })).toThrow(/VAPID_PUBLIC_KEY/);
+  });
+});

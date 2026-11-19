@@ -17,6 +17,8 @@ import { coarsenLocations, selectOverdueDeletions } from '../repo/privacy.ts';
 import { purgeShareLinks } from '../repo/shareLinks.ts';
 import { recordAppError } from '../repo/system.ts';
 import { runAccountPurges } from './accountPurge.ts';
+import { matchAlerts } from './alerts.ts';
+import { runPushDispatch } from './push.ts';
 import { completeFinishedRides, runSafetySweep } from './safety.ts';
 import type { Deps } from '../types.ts';
 
@@ -37,6 +39,9 @@ export async function runTick(deps: Deps): Promise<TickResponse> {
     purged: 0,
     coarsened: 0,
     accountsPurged: 0,
+    alertsMatched: 0,
+    pushSent: 0,
+    pushFailed: 0,
   };
   const now = clock.now();
 
@@ -99,7 +104,14 @@ export async function runTick(deps: Deps): Promise<TickResponse> {
     await failStep('sweep', e);
   }
 
-  // 4. Dispatch the outbox (at most 50 rows, 4 at a time, daily cap).
+  // 4. Match new rides against ride alerts and queue one push-first notification per alert (ADR 0036).
+  try {
+    result.alertsMatched = await matchAlerts(deps);
+  } catch (e) {
+    await failStep('match_alerts', e);
+  }
+
+  // 5. Dispatch the email outbox (at most 50 rows, 4 at a time, daily cap).
   try {
     const sent = await dispatchOutbox({
       store: createOutboxStore(sql),
@@ -116,7 +128,16 @@ export async function runTick(deps: Deps): Promise<TickResponse> {
     await failStep('dispatch', e);
   }
 
-  // 5. Route previews and share links past their expiry.
+  // 6. Dispatch the push rows (batch 50, no daily cap). Skipped when push is disabled (ADR 0038).
+  try {
+    const pushed = await runPushDispatch(deps);
+    result.pushSent = pushed.sent;
+    result.pushFailed = pushed.failed;
+  } catch (e) {
+    await failStep('dispatch_push', e);
+  }
+
+  // 7. Route previews and share links past their expiry.
   try {
     result.purged += await purgeRoutePreviews(sql, now);
   } catch (e) {
@@ -128,7 +149,7 @@ export async function runTick(deps: Deps): Promise<TickResponse> {
     await failStep('purge_share_links', e);
   }
 
-  // 6. Coarsen exact locations of rides and bookings that departed more than 90 days ago (ADR 0030).
+  // 8. Coarsen exact locations of rides and bookings that departed more than 90 days ago (ADR 0030).
   try {
     const c = await coarsenLocations(sql, now, COARSEN_BATCH);
     result.coarsened = c.rides + c.bookings;
@@ -136,14 +157,14 @@ export async function runTick(deps: Deps): Promise<TickResponse> {
     await failStep('coarsen', e);
   }
 
-  // 7. Finish account deletions: remove the avatar object and the auth user (ADR 0029).
+  // 9. Finish account deletions: remove the avatar object and the auth user (ADR 0029).
   try {
     result.accountsPurged = await runAccountPurges(deps);
   } catch (e) {
     await failStep('account_purge', e);
   }
 
-  // 8. Hourly housekeeping (minute 0 UTC): the retention purge, then the overdue-deletion alarm.
+  // 10. Hourly housekeeping (minute 0 UTC): the retention purge (E8: also expired alerts and old series), then the overdue-deletion alarm.
   if (now.getUTCMinutes() === 0) {
     try {
       result.purged += await purgeHousekeeping(sql);

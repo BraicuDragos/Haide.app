@@ -51,6 +51,33 @@ export const en = {
   'email.ground.extra_money': 'Terms: asking for more than the shared cost',
   'email.ground.fake_profile': 'Terms: a false profile',
   'email.ground.other': 'Terms: other conduct that breaks the rules',
+  'email.autoConfirmed.subject': 'Seat booked on your {time} ride',
+  'email.autoConfirmed.body':
+    'A passenger was confirmed automatically for {pickup} to {dropoff}. Open Haide for the details.',
+  'email.alertMatch.subject': 'A ride matches your alert: {fromArea} → {toArea}',
+  'email.alertMatch.body':
+    'A ride leaves {pickup} for {dropoff} at {time}. Open Haide to request a seat.',
+  'email.alertMatch.more': '{count} more rides match too.',
+  // Push (E8-4): lock-screen text, area names and times only, never a name.
+  'push.booking_requested.title': 'New seat request',
+  'push.booking_requested.body':
+    'Someone asked for a seat on your {time} ride, {pickup} to {dropoff}.',
+  'push.booking_auto_confirmed.title': 'Seat booked',
+  'push.booking_auto_confirmed.body':
+    'A passenger is booked on your {time} ride, {pickup} to {dropoff}.',
+  'push.booking_confirmed.title': 'Request accepted',
+  'push.booking_confirmed.body': 'Pickup near {pickup} at {time}.',
+  'push.booking_rejected.title': 'Request declined',
+  'push.booking_rejected.body': 'Other rides on your route might fit.',
+  'push.booking_expired.title': 'Request expired',
+  'push.booking_expired.body': 'Your request for the {time} ride was not answered in time.',
+  'push.ride_cancelled.title': 'Ride cancelled',
+  'push.ride_cancelled.body': 'The {time} ride, {pickup} to {dropoff}, was cancelled.',
+  'push.booking_cancelled.title': 'Seat cancelled',
+  'push.booking_cancelled.body': 'A passenger cancelled their seat on your {time} ride.',
+  'push.ride_alert_match.title': 'A ride matches your alert',
+  'push.ride_alert_match.body': '{pickup} to {dropoff}, {time}.',
+  'push.ride_alert_match.more': ' {count} more.',
   'email.priceDropped.body': 'Price changed to {price} because a second passenger joined.',
   'email.openLabel': 'Open Haide',
   'email.open': 'Open Haide: {link}',

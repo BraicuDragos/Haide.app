@@ -30,5 +30,10 @@ export const tickResponseSchema = z.object({
   coarsened: z.number().int(),
   /** Account deletions finished (storage object and auth user removed) (E6). */
   accountsPurged: z.number().int(),
+  /** Alert notifications queued by the alert matcher (E8). */
+  alertsMatched: z.number().int(),
+  /** Push messages delivered, and push rows that ended in failure (E8). */
+  pushSent: z.number().int(),
+  pushFailed: z.number().int(),
 });
 export type TickResponse = z.infer<typeof tickResponseSchema>;

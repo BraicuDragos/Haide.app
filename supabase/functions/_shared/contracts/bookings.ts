@@ -138,6 +138,8 @@ export type CreateBookingBody = z.infer<typeof createBookingBodySchema>;
 export const bookingViewSchema = z.object({
   id: z.uuid(),
   status: bookingStatusSchema,
+  /** E8-3: confirmed at once by the ride's auto-accept (ADR 0037). */
+  autoConfirmed: z.boolean(),
   rideId: z.uuid(),
   rideStatus: rideStatusSchema,
   viewerRole: bookingViewerRoleSchema,

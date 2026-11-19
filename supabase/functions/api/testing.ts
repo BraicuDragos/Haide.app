@@ -4,6 +4,7 @@ import { fixedClock } from '../_shared/domain/clock.ts';
 import { parseEnv, type Env } from '../_shared/env.ts';
 import { silentLogger } from '../_shared/log.ts';
 import { createConsoleProvider } from '../_shared/providers/email/console.ts';
+import { createConsolePushProvider } from '../_shared/providers/push/console.ts';
 import { createFixtureProvider } from '../_shared/providers/routing/fixture.ts';
 import { createApp } from './app.ts';
 import { LOCAL_JWT_ISSUER, createTokenVerifier } from './middleware/auth.ts';
@@ -112,6 +113,7 @@ export function makeApp(
     encodeAvatar: passThroughEncoder,
     routing: createFixtureProvider(),
     email: createConsoleProvider(silentLogger),
+    push: createConsolePushProvider(silentLogger),
     ...overrides,
   };
   return {

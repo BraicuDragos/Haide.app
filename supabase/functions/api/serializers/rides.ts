@@ -8,6 +8,7 @@ import {
   type RidePassengerItem,
   type RideRequestItem,
   type RidePublicView,
+  type RideSeries,
 } from '../../_shared/contracts/rides.ts';
 import type { Clock } from '../../_shared/domain/clock.ts';
 import { priceTable, tripCostBani } from '../../_shared/domain/pricing.ts';
@@ -41,6 +42,7 @@ const SIBIU = 'Sibiu';
 export type OwnerExtras = {
   requests: RideRequestItem[];
   passengers: RidePassengerItem[];
+  series?: RideSeries | null;
 };
 
 export function toOwnerView(
@@ -82,6 +84,8 @@ export function toOwnerView(
     seatsBooked: row.seats_booked,
     note: row.note,
     isFree: row.is_free,
+    autoAccept: row.auto_accept === true,
+    series: extras.series ?? null,
     priceTable: priceTable(row.distance_m, row.rate_micro_per_km, row.seats_offered, row.is_free),
     tripCostBani: tripCostBani(row.distance_m, row.rate_micro_per_km),
     fuelType: row.vehicle_snapshot.fuelType,
@@ -115,6 +119,7 @@ export function toListItem(row: RideListRow): RideListItem {
     seatsBooked: row.seats_booked,
     pendingRequests: Number(row.pending_requests ?? 0),
     toRate: Number(row.to_rate ?? 0),
+    seriesId: row.series_id ?? null,
   };
 }
 
@@ -163,6 +168,7 @@ export function toPublicView(
     seatsLeft: Math.max(0, row.seats_offered - row.seats_booked),
     note: row.note,
     isFree: row.is_free,
+    autoAccept: row.auto_accept === true,
     priceTable: priceTable(row.distance_m, row.rate_micro_per_km, row.seats_offered, row.is_free),
     // Picked field by field: the plate can never slip through.
     // After account deletion the snapshot keeps only the fuel type: SQL NULLs arrive here, the contract wants strings.

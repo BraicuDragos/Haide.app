@@ -114,6 +114,8 @@ jobs:
           LOCAL_JWT_SECRET=${JWT_SECRET}
           SUPABASE_SERVICE_ROLE_KEY=${SERVICE_ROLE_KEY}
           AVATAR_PUBLIC_BASE_URL=http://127.0.0.1:54321/storage/v1/object/public
+          PUSH_PROVIDER=console
+          $(node scripts/vapid-keys.mjs --env)
           EOF
           echo "CRON_SECRET=$(grep ^CRON_SECRET "$RUNNER_TEMP/api.env" | cut -d= -f2)" >> "$GITHUB_ENV"
           # Fully detached: own session, no stdin, all output in a log file, so nothing can hold the step open.

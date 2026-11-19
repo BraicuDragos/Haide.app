@@ -244,3 +244,130 @@ describe('POST /internal/tick', () => {
     expect(find(quiet.calls, 'requested_at <')).toBeUndefined();
   });
 });
+
+describe('POST /internal/tick, E8 steps', () => {
+  const ALERT = 'd1d1d1d1-6a1d-4c11-8d2e-9f3a4b5c6d7e';
+  const hitRow = (rideId: string, departure: string) => ({
+    alert_id: ALERT,
+    user_id: PASSENGER,
+    ride_id: rideId,
+    departure_at: new Date(departure),
+    pickup_area: 'Turnișor',
+    dropoff_area: 'Piața Mare',
+  });
+  const VAPID = {
+    VAPID_PUBLIC_KEY: `B${'c'.repeat(86)}`,
+    VAPID_PRIVATE_KEY: 'd'.repeat(43),
+    VAPID_SUBJECT: 'mailto:support@haide.ro',
+    PUSH_PROVIDER: 'console',
+  };
+
+  it('queues one push-first notification per alert, the soonest ride as subject, one event per hit', async () => {
+    const { app, calls } = makeApp(
+      dbWith([
+        (q) =>
+          q.text.includes('from app.match_ride_alerts')
+            ? [hitRow('r-late', '2026-11-18T05:30:00Z'), hitRow('r-soon', '2026-11-17T05:30:00Z')]
+            : undefined,
+      ]),
+      {},
+      { clock: fixedClock('2026-11-16T05:31:00Z') },
+    );
+    const out = tickResponseSchema.parse(await (await tick(app)).json());
+    expect(out.alertsMatched).toBe(1);
+
+    expect(find(calls, 'from app.match_ride_alerts')?.values).toEqual([
+      new Date('2026-11-16T05:31:00Z'),
+      50,
+    ]);
+    const outbox = all(calls, 'insert into app.outbox').filter((c) =>
+      c.text.includes('push_subscriptions'),
+    );
+    expect(outbox).toHaveLength(1);
+    expect(outbox[0]?.text).toContain("then 'push'::app.notify_channel else 'email'");
+    expect(outbox[0]?.values).toContain('ride_alert_match');
+    const payload = JSON.parse(String(outbox[0]?.values.find((v) => String(v).startsWith('{'))));
+    expect(payload).toMatchObject({ alertId: ALERT, rideId: 'r-soon', moreCount: 1 });
+    expect(JSON.stringify(payload)).not.toMatch(/\d+\.\d{4,}|\+40/);
+
+    expect(find(calls, 'update app.ride_alerts')?.values).toContain(ALERT);
+    const events = all(calls, 'insert into app.analytics_events');
+    expect(events.map((e) => e.values[0])).toEqual(['alert_matched', 'alert_matched']);
+  });
+
+  it('a failing matcher is recorded and the dispatch still runs', async () => {
+    const { app, calls } = makeApp(
+      dbWith([
+        (q) => {
+          if (q.text.includes('from app.match_ride_alerts')) throw new Error('db down');
+          return undefined;
+        },
+      ]),
+      {},
+      { clock: fixedClock('2026-11-16T05:31:00Z') },
+    );
+    expect((await tick(app)).status).toBe(200);
+    const errs = all(calls, 'insert into app.app_errors').map((c) => String(c.values[1]));
+    expect(errs.some((m) => m.includes('tick match_alerts'))).toBe(true);
+    expect(find(calls, 'update app.outbox set attempts')).toBeDefined();
+  });
+
+  it('push dispatch is skipped without VAPID keys and runs (console provider) with them', async () => {
+    const off = makeApp(dbWith([]), {}, { clock: fixedClock('2026-11-16T05:31:00Z') });
+    await tick(off.app);
+    expect(all(off.calls, "channel = 'push' and status = 'pending'")).toHaveLength(0);
+
+    const pushRow = {
+      id: 'p1',
+      user_id: PASSENGER,
+      template: 'booking_rejected',
+      payload: {
+        bookingId: BOOKING,
+        driverFirstName: 'Radu',
+        departureAt: '2026-11-16T07:00:00.000Z',
+      },
+      attempts: 1,
+    };
+    const on = makeApp(
+      dbWith([
+        (q) => (q.text.includes("channel = 'push' and status = 'pending'") ? [pushRow] : undefined),
+        (q) =>
+          q.text.includes('from app.push_subscriptions s')
+            ? [
+                {
+                  id: 's1',
+                  user_id: PASSENGER,
+                  endpoint: 'https://fcm.googleapis.com/fcm/send/abc',
+                  p256dh: 'p',
+                  auth: 'a',
+                  failures: 0,
+                },
+              ]
+            : undefined,
+      ]),
+      VAPID,
+      { clock: fixedClock('2026-11-16T05:31:00Z') },
+    );
+    const out = tickResponseSchema.parse(await (await tick(on.app)).json());
+    expect(out.pushSent).toBe(1);
+    expect(out.pushFailed).toBe(0);
+    expect(find(on.calls, "set status = 'sent'")).toBeDefined();
+    expect(find(on.calls, 'update app.push_subscriptions set last_success_at')).toBeDefined();
+  });
+
+  it('runs alerts before the email dispatch and the push dispatch right after it', async () => {
+    const { app, calls } = makeApp(dbWith([]), VAPID, {
+      clock: fixedClock('2026-11-16T06:00:00Z'),
+    });
+    await tick(app);
+    const order = [
+      "p.status in ('suspended', 'deleted')",
+      'from app.match_ride_alerts',
+      "channel = 'email' and status = 'pending'",
+      "channel = 'push' and status = 'pending'",
+      'delete from app.route_previews',
+    ].map((f) => calls.findIndex((c) => c.text.includes(f)));
+    expect(order.every((i) => i >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+  });
+});

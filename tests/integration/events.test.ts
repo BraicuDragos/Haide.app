@@ -269,11 +269,13 @@ describe.skipIf(!BASE || !SECRET || DB_SKIP)('analytics events against the local
     },
   );
 
-  it('the registry names exactly the 11 events the audit drives', () => {
-    expect(EVENT_NAMES).toHaveLength(11);
+  it('the registry names the 11 events the audit drives, plus the two alert events (liquidity.test.ts)', () => {
+    const audited = EVENT_NAMES.filter((n) => n !== 'alert_created' && n !== 'alert_matched');
+    expect(EVENT_NAMES).toHaveLength(13);
+    expect(audited).toHaveLength(11);
     // The first test covers 7 flows, the tick test 4: together all 11 (the second needs CRON_SECRET).
     const expected = CRON ? 11 : 7;
     expect(seen.size).toBe(expected);
-    if (CRON) expect([...seen].sort()).toEqual([...EVENT_NAMES].sort());
+    if (CRON) expect([...seen].sort()).toEqual([...audited].sort());
   });
 });

@@ -48,6 +48,20 @@ export const METRICS_SERIES_WEEKS = 12;
 export const HIGH_VOLUME_COMPLETED_7D = 40; // pricing section 7: more than this in 7 days is flagged
 export const METRICS_FIRST_WEEK = '2026-W46';
 
+// Liquidity boosters (E8, e8-liquidity-spec section 7)
+export const SERIES_MAX_DAYS = 28; // a series ends at most 28 days after it starts
+export const SERIES_START_MAX_DAYS = 14; // and starts at most 14 days from today
+export const SERIES_RETENTION_DAYS = 90; // a series is deleted this long after its end
+export const ALERTS_MAX_ACTIVE = 5;
+export const ALERT_TTL_DAYS = 14;
+export const ALERT_DATE_AHEAD_DAYS = 14;
+export const ALERT_MATCH_BATCH = 50; // new rides checked per tick
+export const AUTO_ACCEPT_MIN_RATING = 4.0; // visible average at or above: confirmed at once
+export const PUSH_SUBS_MAX_PER_USER = 5;
+export const PUSH_BATCH = 50; // push rows claimed per tick
+export const PUSH_MAX_FAILURES = 5; // permanent failures before a subscription is deleted
+export const STATS_FIRST_MONTH = '2026-11';
+
 // Search (E3)
 export const MIN_SEARCH_SEPARATION_M = 1000; // from and to at least 1 km apart
 export const SEARCH_MAX_RESULTS = 50;
@@ -90,6 +104,9 @@ export const RATE_LIMITS = {
   dataRequest: { max: 3, windowS: 86400 },
   // Admin (E7): every /admin route, per admin.
   admin: { max: 120, windowS: 60 },
+  // Liquidity (E8): alert creation and push subscription changes, 20 an hour each.
+  alerts: { max: 20, windowS: 3600 },
+  pushSubscription: { max: 20, windowS: 3600 },
 } as const;
 
 // Accounts (E1)

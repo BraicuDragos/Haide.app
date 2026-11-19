@@ -26,6 +26,7 @@ export type LockedRide = {
   seats_offered: number;
   seats_booked: number;
   is_free: boolean;
+  auto_accept: boolean;
   rate_micro_per_km: number;
   driver_status: 'active' | 'suspended' | 'deleted';
 };
@@ -34,7 +35,7 @@ export type LockedRide = {
 export async function lockRide(sql: Db, rideId: string): Promise<LockedRide | undefined> {
   const rows = await sql<LockedRide[]>`
     select r.id, r.driver_id, r.status, r.departure_at, r.duration_s, r.seats_offered,
-           r.seats_booked, r.is_free, r.rate_micro_per_km, p.status as driver_status
+           r.seats_booked, r.is_free, r.auto_accept, r.rate_micro_per_km, p.status as driver_status
     from app.rides r
     join app.profiles p on p.id = r.driver_id
     where r.id = ${rideId}
@@ -53,7 +54,7 @@ export async function lockRideOfBookingForDriver(
 ): Promise<LockedRide | undefined> {
   const rows = await sql<LockedRide[]>`
     select r.id, r.driver_id, r.status, r.departure_at, r.duration_s, r.seats_offered,
-           r.seats_booked, r.is_free, r.rate_micro_per_km, p.status as driver_status
+           r.seats_booked, r.is_free, r.auto_accept, r.rate_micro_per_km, p.status as driver_status
     from app.rides r
     join app.bookings b on b.ride_id = r.id
     join app.profiles p on p.id = r.driver_id
@@ -70,7 +71,7 @@ export async function lockRideOfBookingForPassenger(
 ): Promise<LockedRide | undefined> {
   const rows = await sql<LockedRide[]>`
     select r.id, r.driver_id, r.status, r.departure_at, r.duration_s, r.seats_offered,
-           r.seats_booked, r.is_free, r.rate_micro_per_km, p.status as driver_status
+           r.seats_booked, r.is_free, r.auto_accept, r.rate_micro_per_km, p.status as driver_status
     from app.rides r
     join app.bookings b on b.ride_id = r.id
     join app.profiles p on p.id = r.driver_id
@@ -90,7 +91,7 @@ export async function lockRideOfBookingForParty(
 ): Promise<LockedRide | undefined> {
   const rows = await sql<LockedRide[]>`
     select r.id, r.driver_id, r.status, r.departure_at, r.duration_s, r.seats_offered,
-           r.seats_booked, r.is_free, r.rate_micro_per_km, p.status as driver_status
+           r.seats_booked, r.is_free, r.auto_accept, r.rate_micro_per_km, p.status as driver_status
     from app.rides r
     join app.bookings b on b.ride_id = r.id
     join app.profiles p on p.id = r.driver_id
@@ -106,7 +107,7 @@ export async function lockRideOfBooking(
 ): Promise<LockedRide | undefined> {
   const rows = await sql<LockedRide[]>`
     select r.id, r.driver_id, r.status, r.departure_at, r.duration_s, r.seats_offered,
-           r.seats_booked, r.is_free, r.rate_micro_per_km, p.status as driver_status
+           r.seats_booked, r.is_free, r.auto_accept, r.rate_micro_per_km, p.status as driver_status
     from app.rides r
     join app.bookings b on b.ride_id = r.id
     join app.profiles p on p.id = r.driver_id
@@ -261,11 +262,16 @@ export async function selectBookingState(
 }
 
 /** requested -> confirmed. The lock starts at the quote and is relocked right after. 0 rows: lost a race. */
-export async function confirmBooking(sql: Db, bookingId: string, now: Date): Promise<boolean> {
+export async function confirmBooking(
+  sql: Db,
+  bookingId: string,
+  now: Date,
+  auto = false,
+): Promise<boolean> {
   const rows = await sql<{ id: string }[]>`
     update app.bookings
     set status = 'confirmed', decided_at = ${now}, price_locked_bani = price_quoted_bani,
-        passenger_event_at = ${now}, updated_at = ${now}
+        auto_confirmed = ${auto}::boolean, passenger_event_at = ${now}, updated_at = ${now}
     where id = ${bookingId} and status = 'requested' and expires_at > ${now}
     returning id`;
   return rows.length === 1;
@@ -435,6 +441,7 @@ export type BookingViewRow = {
   passenger_id: string;
   driver_id: string;
   status: BookingStatus;
+  auto_confirmed: boolean;
   ride_status: RideStatus;
   departure_at: Ts;
   duration_s: number;
@@ -491,7 +498,7 @@ export async function selectBookingView(
   bookingId: string,
 ): Promise<BookingViewRow | undefined> {
   const rows = await sql<BookingViewRow[]>`
-    select b.id, b.ride_id, b.passenger_id, r.driver_id, b.status, r.status as ride_status,
+    select b.id, b.ride_id, b.passenger_id, r.driver_id, b.status, b.auto_confirmed, r.status as ride_status,
       r.departure_at, r.duration_s, b.pickup_label, b.dropoff_label,
       round(ST_Y(b.pickup)::numeric, 5)::float8 as pickup_lat,
       round(ST_X(b.pickup)::numeric, 5)::float8 as pickup_lng,

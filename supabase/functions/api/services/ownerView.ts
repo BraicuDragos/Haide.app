@@ -3,6 +3,7 @@ import type { Db } from '../../_shared/db.ts';
 import { AppError } from '../../_shared/errors.ts';
 import { selectOpenRequests, selectRidePassengers } from '../repo/bookings.ts';
 import { selectOwnerRide } from '../repo/rides.ts';
+import { selectSeriesView } from '../repo/series.ts';
 import { toPassengerItem, toRequestItem } from '../serializers/bookings.ts';
 import { toOwnerView } from '../serializers/rides.ts';
 import type { Deps } from '../types.ts';
@@ -28,6 +29,7 @@ export async function loadOwnerView(
     ...requests.map((r) => r.passenger_id),
     ...passengers.map((p) => p.passenger_id),
   ]);
+  const series = row.series_id ? await selectSeriesView(db, row.series_id, now) : null;
   const departureAt = new Date(row.departure_at);
   const completedAt = row.completed_at ? new Date(row.completed_at) : null;
   const ride = {
@@ -36,6 +38,7 @@ export async function loadOwnerView(
     confirmedCount: row.seats_booked,
   };
   return toOwnerView(row, deps.clock, {
+    series,
     requests: requests.flatMap((r) => {
       const u = users.get(r.passenger_id);
       return u ? [toRequestItem(r, u, ride)] : [];

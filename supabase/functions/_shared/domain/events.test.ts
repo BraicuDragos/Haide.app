@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import * as bookings from './bookings.ts';
 import {
   EVENT_NAMES,
+  alertCreatedEvent,
+  alertMatchedEvent,
   EVENT_PROP_KEYS,
   FORBIDDEN_EVENT_KEYS,
   bookingCancelledEvent,
@@ -33,7 +35,7 @@ const BUILT: AnalyticsEvent[] = [
     AT,
   ),
   bookingRequestedEvent(U, { bookingId: B, rideId: R, segmentM: 4200 }, AT),
-  bookingConfirmedEvent(U, { bookingId: B, rideId: R, responseSeconds: 310 }, AT),
+  bookingConfirmedEvent(U, { bookingId: B, rideId: R, responseSeconds: 310, auto: false }, AT),
   bookingRejectedEvent(U, { bookingId: B, rideId: R, responseSeconds: 60 }, AT),
   bookingExpiredEvent(U, { bookingId: B, rideId: R }, AT),
   bookingCancelledEvent(U, { bookingId: B, rideId: R, by: 'system', late: false }, AT),
@@ -41,10 +43,16 @@ const BUILT: AnalyticsEvent[] = [
   noShowReportedEvent(U, { bookingId: B, rideId: R, by: 'driver' }, AT),
   ratingSubmittedEvent(U, { bookingId: B, stars: 5, tagCount: 2, raterRole: 'passenger' }, AT),
   reportSubmittedEvent(U, { reason: 'harassment', alsoBlock: true }, AT),
+  alertCreatedEvent(
+    U,
+    { alertId: R, kind: 'weekly', windowMin: 30, fromArea: 'Turnișor', toArea: null },
+    AT,
+  ),
+  alertMatchedEvent(U, { alertId: R, rideId: R }, AT),
 ];
 
 describe('EVENT_NAMES', () => {
-  it('lists the 11 events in the order of the database CHECK', () => {
+  it('lists the 13 events in the order of the database CHECK', () => {
     expect([...EVENT_NAMES]).toEqual([
       'search_performed',
       'ride_published',
@@ -57,6 +65,8 @@ describe('EVENT_NAMES', () => {
       'no_show_reported',
       'rating_submitted',
       'report_submitted',
+      'alert_created',
+      'alert_matched',
     ]);
     expect(isEventName('ride_published')).toBe(true);
     expect(isEventName('ride_deleted')).toBe(false);
@@ -101,6 +111,8 @@ describe('builders', () => {
       isFree: false,
       originArea: 'Turnișor',
       destinationArea: null,
+      inSeries: true,
+      autoAccept: false,
     };
     expect(eventPropsOk(props)).toBe(true);
     expect(Object.keys(props).sort()).toEqual([...EVENT_PROP_KEYS.ride_published].sort());

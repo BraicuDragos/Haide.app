@@ -1089,3 +1089,111 @@ describe('POST /rides/{id}/cancel cascade', () => {
     expect(JSON.stringify(payloads)).not.toMatch(/\d+\.\d{4,}|\+40|SB12/);
   });
 });
+
+// ---- E8-3 auto-accept (ADR 0037) ------------------------------------------------------------------------------
+
+describe('POST /bookings on an auto-accept ride', () => {
+  const ratedPassenger =
+    (count: number, avg: number | null): Handler =>
+    (q) =>
+      q.text.includes('rating_count')
+        ? [
+            { ...publicProfile(PASSENGER), rating_count: count, rating_avg: avg },
+            publicProfile(DRIVER),
+          ]
+        : undefined;
+  const post = (app: ReturnType<typeof makeApp>['app']) =>
+    send(app, 'POST', '/bookings', PASSENGER, REQUEST, withKey);
+  const auto = (extra: Handler[] = []) =>
+    makeBookingApp({ ride: lockedRide({ auto_accept: true }) }, extra);
+
+  it('confirms an eligible requester under the same lock: seat +1, driver told once, passenger not emailed', async () => {
+    const { app, calls } = auto([ratedPassenger(4, 4.2)]);
+    expect((await post(app)).status).toBe(201);
+
+    const insert = idx(calls, 'insert into app.bookings');
+    const confirm = calls.findIndex(
+      (c) => c.text.startsWith('update app.bookings') && c.text.includes("status = 'confirmed'"),
+    );
+    const seat = idx(calls, 'seats_booked = seats_booked +');
+    expect(confirm).toBeGreaterThan(insert);
+    expect(seat).toBeGreaterThan(confirm);
+    // marks the booking as auto-confirmed
+    expect(calls[confirm]?.values).toContain(true);
+
+    const outbox = calls.filter((c) => c.text.includes('insert into app.outbox'));
+    expect(outbox).toHaveLength(1);
+    expect(outbox[0]?.values[0]).toBe(DRIVER);
+    expect(outbox[0]?.values[1]).toBe('booking_auto_confirmed');
+    const events = calls
+      .filter((c) => c.text.startsWith('insert into app.analytics_events'))
+      .map((c) => c.values[0]);
+    expect(events).toEqual(['booking_requested', 'booking_confirmed']);
+    const confirmedEvent = calls.filter((c) =>
+      c.text.startsWith('insert into app.analytics_events'),
+    )[1];
+    expect(JSON.parse(String(confirmedEvent?.values[2]))).toMatchObject({
+      responseSeconds: 0,
+      auto: true,
+    });
+  });
+
+  it('a New passenger (fewer than 3 visible ratings) is confirmed whatever the average', async () => {
+    const { app, calls } = auto([ratedPassenger(2, 1.0)]);
+    await post(app);
+    expect(has(calls, "status = 'confirmed'")).toBe(true);
+  });
+
+  it('a visible average of 3.99 is not confirmed: the E4 request flow runs', async () => {
+    const { app, calls } = auto([ratedPassenger(5, 3.99)]);
+    expect((await post(app)).status).toBe(201);
+    expect(
+      calls.some(
+        (c) => c.text.startsWith('update app.bookings') && c.text.includes("status = 'confirmed'"),
+      ),
+    ).toBe(false);
+    expect(find(calls, 'insert into app.outbox')?.values[1]).toBe('booking_requested');
+  });
+
+  it('exactly 4.00 is confirmed', async () => {
+    const { app, calls } = auto([ratedPassenger(3, 4.0)]);
+    await post(app);
+    expect(has(calls, "status = 'confirmed'")).toBe(true);
+  });
+
+  it('a ride without auto-accept never auto-confirms', async () => {
+    const { app, calls } = makeBookingApp({}, [ratedPassenger(10, 5)]);
+    await post(app);
+    expect(
+      calls.some(
+        (c) => c.text.startsWith('update app.bookings') && c.text.includes("status = 'confirmed'"),
+      ),
+    ).toBe(false);
+  });
+
+  it('the guards still win: a blocked pair fails with BLOCKED and nothing is inserted', async () => {
+    const { app, calls } = makeBookingApp({
+      ride: lockedRide({ auto_accept: true }),
+      blocked: true,
+    });
+    const res = await post(app);
+    expect((await errorOf(res)).code).toBe('BLOCKED');
+    expect(has(calls, 'insert into app.bookings')).toBe(false);
+  });
+
+  it('the last seat taken (CHECK violation on the seat bump) answers RIDE_FULL', async () => {
+    const { app } = makeBookingApp(
+      {
+        ride: lockedRide({ auto_accept: true }),
+        failOn: {
+          fragment: 'seats_booked = seats_booked +',
+          error: { code: '23514', constraint_name: 'rides_seats_booked_range' },
+        },
+      },
+      [ratedPassenger(0, null)],
+    );
+    const res = await post(app);
+    expect(res.status).toBe(409);
+    expect((await errorOf(res)).code).toBe('RIDE_FULL');
+  });
+});

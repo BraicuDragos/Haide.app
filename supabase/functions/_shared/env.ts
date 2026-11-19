@@ -37,6 +37,22 @@ export const envSchema = z
     AVATAR_PUBLIC_BASE_URL: z.url().optional(),
     // Local development only: HS256 fallback when no JWKS is reachable. Ignored in production.
     LOCAL_JWT_SECRET: z.string().min(32).optional(),
+    // E8 web push. All three or none (superRefine below). Generate with scripts/vapid-keys.mjs.
+    // Public: base64url of the 65-byte uncompressed P-256 point. Private: base64url of the 32-byte scalar.
+    VAPID_PUBLIC_KEY: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]{87}$/)
+      .optional(),
+    VAPID_PRIVATE_KEY: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]{43}$/)
+      .optional(),
+    VAPID_SUBJECT: z
+      .string()
+      .regex(/^(mailto:[^\s@]+@[^\s@]+|https:\/\/\S+)$/)
+      .optional(),
+    // Default: webpush when the keys are set, else console (which logs the host only).
+    PUSH_PROVIDER: z.enum(['webpush', 'console']).optional(),
   })
   .superRefine((env, ctx) => {
     if (env.ROUTING_PROVIDER === 'ors' && !env.ORS_API_KEY) {
@@ -48,7 +64,35 @@ export const envSchema = z
     if (env.APP_ENV === 'production' && !env.SUPABASE_URL) {
       ctx.addIssue({ code: 'custom', path: ['SUPABASE_URL'], message: 'required in production' });
     }
-  });
+    const vapid = [env.VAPID_PUBLIC_KEY, env.VAPID_PRIVATE_KEY, env.VAPID_SUBJECT];
+    if (vapid.some((v) => v !== undefined) && vapid.some((v) => v === undefined)) {
+      for (const [name, v] of [
+        ['VAPID_PUBLIC_KEY', env.VAPID_PUBLIC_KEY],
+        ['VAPID_PRIVATE_KEY', env.VAPID_PRIVATE_KEY],
+        ['VAPID_SUBJECT', env.VAPID_SUBJECT],
+      ] as const) {
+        if (v === undefined) {
+          ctx.addIssue({
+            code: 'custom',
+            path: [name],
+            message: 'required when any VAPID value is set',
+          });
+        }
+      }
+    }
+    if (env.PUSH_PROVIDER === 'webpush' && env.VAPID_PUBLIC_KEY === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['VAPID_PUBLIC_KEY'],
+        message: 'required when webpush',
+      });
+    }
+  })
+  .transform((env) => ({
+    ...env,
+    PUSH_PROVIDER:
+      env.PUSH_PROVIDER ?? (env.VAPID_PUBLIC_KEY ? ('webpush' as const) : ('console' as const)),
+  }));
 
 export type Env = z.infer<typeof envSchema>;
 

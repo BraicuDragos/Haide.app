@@ -47,6 +47,7 @@ describe('ride request contracts', () => {
       departureAt: '2026-11-16T05:30:00Z',
       seats: 3,
       isFree: false,
+      autoAccept: false,
     });
   });
 

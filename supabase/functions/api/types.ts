@@ -4,6 +4,7 @@ import type { Db } from '../_shared/db.ts';
 import type { Env } from '../_shared/env.ts';
 import type { Logger } from '../_shared/log.ts';
 import type { EmailProvider } from '../_shared/providers/email/types.ts';
+import type { PushProvider } from '../_shared/providers/push/types.ts';
 import type { RoutingProvider } from '../_shared/providers/routing/types.ts';
 
 export type AuthInfo = { userId: string; email: string | null } | null;
@@ -43,6 +44,8 @@ export type Deps = {
   routing: RoutingProvider;
   /** Transactional email (Brevo, or the console provider in dev and CI). Used by the tick dispatcher. */
   email: EmailProvider;
+  /** Web Push (own RFC 8291 sender, or the console provider in dev and CI). Used by the tick dispatcher. */
+  push: PushProvider;
 };
 
 /** The caller's account, loaded once per request by the gates. */

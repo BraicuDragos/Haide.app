@@ -117,6 +117,10 @@ export type NewRide = {
   seats: number;
   note: string | null;
   isFree: boolean;
+  /** E8-3: confirm eligible requests at once. */
+  autoAccept?: boolean;
+  /** E8-1: the series this instance belongs to. */
+  seriesId?: string | null;
   energyPriceId: string;
   rateMicroPerKm: number;
   vehicleSnapshot: {
@@ -138,11 +142,13 @@ export async function insertRideFromPreview(sql: Db, v: NewRide): Promise<string
     insert into app.rides
       (driver_id, origin, destination, origin_label, destination_label, origin_area_id,
        destination_area_id, route, distance_m, duration_s, departure_at, seats_offered, note,
-       is_free, energy_price_id, rate_micro_per_km, vehicle_snapshot, created_at, updated_at)
+       is_free, auto_accept, series_id, energy_price_id, rate_micro_per_km, vehicle_snapshot,
+       created_at, updated_at)
     select p.driver_id, p.origin, p.destination, p.origin_label, p.destination_label,
            app.area_for(p.origin), app.area_for(p.destination), p.route, p.distance_m, p.duration_s,
            ${v.departureAt}::timestamptz, ${v.seats}::smallint, ${v.note}::text,
-           ${v.isFree}::boolean, ${v.energyPriceId}::uuid, ${v.rateMicroPerKm}::integer,
+           ${v.isFree}::boolean, ${v.autoAccept ?? false}::boolean, ${v.seriesId ?? null}::uuid,
+           ${v.energyPriceId}::uuid, ${v.rateMicroPerKm}::integer,
            ${JSON.stringify(v.vehicleSnapshot)}::text::jsonb, ${v.now}::timestamptz, ${v.now}::timestamptz
     from app.route_previews p
     where p.id = ${v.previewId} and p.driver_id = ${v.driverId} and p.expires_at > ${v.now}
@@ -162,7 +168,8 @@ export async function insertRidePublishedEvent(
     select 'ride_published', ${userId}::uuid,
            jsonb_build_object(
              'rideId', r.id, 'distanceM', r.distance_m, 'seats', r.seats_offered,
-             'isFree', r.is_free, 'originArea', oa.name, 'destinationArea', da.name),
+             'isFree', r.is_free, 'originArea', oa.name, 'destinationArea', da.name,
+             'inSeries', r.series_id is not null, 'autoAccept', r.auto_accept),
            ${at}::timestamptz
     from app.rides r
     left join app.areas oa on oa.id = r.origin_area_id
@@ -211,6 +218,8 @@ export type OwnerRideRow = {
   seats_booked: number;
   note: string | null;
   is_free: boolean;
+  auto_accept: boolean;
+  series_id: string | null;
   rate_micro_per_km: number;
   vehicle_snapshot: VehicleSnapshot;
   late_cancel: boolean;
@@ -235,6 +244,7 @@ export async function selectOwnerRide(
           round(ST_X(r.destination)::numeric, 5)::float8 as destination_lng,
           ST_AsGeoJSON(r.route, 5) as route_geojson,
           r.distance_m, r.duration_s, r.seats_offered, r.seats_booked, r.note, r.is_free,
+          r.auto_accept, r.series_id,
           r.rate_micro_per_km, r.vehicle_snapshot, r.late_cancel, r.cancelled_at, r.created_at,
           r.completed_at
         from app.rides r
@@ -248,6 +258,7 @@ export async function selectOwnerRide(
           round(ST_X(r.destination)::numeric, 5)::float8 as destination_lng,
           ST_AsGeoJSON(r.route, 5) as route_geojson,
           r.distance_m, r.duration_s, r.seats_offered, r.seats_booked, r.note, r.is_free,
+          r.auto_accept, r.series_id,
           r.rate_micro_per_km, r.vehicle_snapshot, r.late_cancel, r.cancelled_at, r.created_at,
           r.completed_at
         from app.rides r
@@ -270,6 +281,7 @@ export type RideListRow = {
   pending_requests: number;
   /** Completed passengers the driver can still rate (E5). */
   to_rate: number;
+  series_id: string | null;
 };
 
 /**
@@ -289,7 +301,7 @@ export async function listUpcomingRides(
   const rateCutoff = ratingCutoff(now);
   return await sql<RideListRow[]>`
     select r.id, r.departure_at, r.origin_label, r.destination_label, r.status,
-           r.seats_offered, r.seats_booked,
+           r.seats_offered, r.seats_booked, r.series_id,
            (select count(*)::int from app.bookings b
              where b.ride_id = r.id and b.status = 'requested' and b.expires_at > ${now}) as pending_requests,
            (select count(*)::int from app.bookings b
@@ -317,7 +329,7 @@ export async function listPastRides(
   const rateCutoff = ratingCutoff(now);
   return await sql<RideListRow[]>`
     select r.id, r.departure_at, r.origin_label, r.destination_label, r.status,
-           r.seats_offered, r.seats_booked,
+           r.seats_offered, r.seats_booked, r.series_id,
            (select count(*)::int from app.bookings b
              where b.ride_id = r.id and b.status = 'requested' and b.expires_at > ${now}) as pending_requests,
            (select count(*)::int from app.bookings b
@@ -368,6 +380,7 @@ export type PublicRideRow = {
   seats_booked: number;
   note: string | null;
   is_free: boolean;
+  auto_accept: boolean;
   rate_micro_per_km: number;
   driver_id: string;
   driver_status: 'active' | 'suspended' | 'deleted';
@@ -392,7 +405,7 @@ export async function selectPublicRide(
 ): Promise<PublicRideRow | undefined> {
   const rows = await sql<PublicRideRow[]>`
     select r.id, r.status, r.departure_at, r.duration_s, r.distance_m, r.seats_offered,
-      r.seats_booked, r.note, r.is_free, r.rate_micro_per_km, r.driver_id,
+      r.seats_booked, r.note, r.is_free, r.auto_accept, r.rate_micro_per_km, r.driver_id,
       p.status as driver_status,
       jsonb_build_object(
         'make', r.vehicle_snapshot -> 'make',
@@ -415,4 +428,15 @@ export async function selectPublicRide(
     left join app.areas da on da.id = r.destination_area_id
     where r.id = ${rideId}`;
   return rows[0];
+}
+
+// ---- auto-accept switch (E8-3) ----------------------------------------------------------------------
+
+export async function setAutoAccept(
+  sql: Db,
+  rideId: string,
+  value: boolean,
+  now: Date,
+): Promise<void> {
+  await sql`update app.rides set auto_accept = ${value}, updated_at = ${now} where id = ${rideId}`;
 }
