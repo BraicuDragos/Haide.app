@@ -23,7 +23,7 @@ export const envSchema = z
     EMAIL_PROVIDER: z.enum(['console', 'brevo']).default('console'),
     BREVO_API_KEY: z.string().optional(),
     EMAIL_FROM: z.string().default('Haide <no-reply@haide.ro>'),
-    EMAIL_SUPPORT_TO: z.string().default('support@haide.ro'),
+    EMAIL_SUPPORT_TO: z.string().default('dragosbraicu9@gmail.com'),
     EMAIL_DAILY_CAP: z.coerce.number().int().positive().default(280),
     APP_BASE_URL: z.url().default('http://localhost:5173'),
     CORS_ORIGINS: csv('http://localhost:5173'),

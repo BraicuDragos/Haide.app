@@ -44,3 +44,4 @@ Every significant decision (business, brand, UX, architecture) gets a file
 | [0037](0037-auto-accept-confirmed-in-request-transaction-under-ride-lock.md) | Auto-accept: eligibility checked and the seat confirmed inside the request transaction, under the ride lock | Architecture | Proposed | software-architect |
 | [0038](0038-web-push-own-rfc8291-on-webcrypto-separate-outbox-rows.md) | Web push: own RFC 8291/8292 sender on WebCrypto, one outbox row per channel, labels-only payloads | Architecture | Proposed | software-architect |
 | [0039](0039-ride-series-materialised-up-front-skip-dates-over-daily-limit.md) | Ride series: every instance created up front, dates over the daily limit skipped and reported | Architecture | Proposed | software-architect |
+| [0040](0040-zero-cost-personal-deploy-no-domain.md) | Zero-cost personal deploy: no custom domain, single-sender mail, OAuth in Testing mode | Architecture | Accepted | Orchestrator |

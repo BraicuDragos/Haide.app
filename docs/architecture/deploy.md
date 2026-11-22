@@ -1,6 +1,7 @@
 # Deploy guide (Phase 7, after GATE 3)
 
 > Owner: software-architect · Date: 2026-11-15 · **Nothing is deployed yet.** Every step below happens only after the owner approves GATE 3.
+> **Personal-project override (ADR [0040](../decisions/0040-zero-cost-personal-deploy-no-domain.md)):** there is no `haide.ro`. Wherever this guide says `haide.ro`, read the Cloudflare Pages URL `https://<PAGES_PROJECT>.pages.dev` (default project `haide`); support/privacy mail is the owner Gmail; Brevo uses a verified single sender; Google OAuth stays in Testing mode with test users; owner steps 1, 2(c) and 9 are dropped. `deploy.yml` is the source of truth. Generated secrets, VAPID keys included, are already stored as `production` environment secrets.
 > Related: [architecture.md](architecture.md) §12 and §16 · ADR [0013](../decisions/0013-hosting-environments-and-ci.md)
 
 ## 1. Target

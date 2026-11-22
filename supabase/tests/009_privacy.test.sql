@@ -3,7 +3,7 @@
 -- export_user_data, and the grants of all of them.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(147);
+select plan(148);
 
 -- Fixtures ---------------------------------------------------------------------------------------------------------
 -- Users u(1) D driver, u(2) P passenger, u(5) S scrubbed, u(6) T scrubbed without a photo,
@@ -194,6 +194,9 @@ select is((select confdeltype::text from pg_constraint where conname = 'admin_ac
 select is((select count(*) from app.legal_documents where version = '1.1' and published_at = '2026-11-21T00:00:00Z'
              and kind in ('terms', 'privacy') and url in ('/policy/terms', '/policy/privacy')), 2::bigint,
   'terms and privacy 1.1 are published on 2026-11-21');
+select is((select count(*) from app.legal_documents where version = '1.2' and published_at = '2026-11-22T00:00:00Z'
+             and kind in ('terms', 'privacy') and url in ('/policy/terms', '/policy/privacy')), 2::bigint,
+  'terms and privacy 1.2 are published on 2026-11-22 (legal_v1_2 migration)');
 
 -- Function grants (31) ------------------------------------------------------------------------------------------------------
 select ok(not exists (

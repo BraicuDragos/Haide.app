@@ -28,15 +28,15 @@ test.describe('signed out', () => {
 
   for (const [path, title, text] of [
     ['/policy/terms', 'Terms of use', 'You must be 18 or older, have one account only'],
-    ['/policy/privacy', 'Privacy policy', 'Data controller: [name, registration number'],
+    ['/policy/privacy', 'Privacy policy', 'Data controller: Dragoș Braicu, a private individual'],
   ] as const) {
     test(`${path} is reachable signed out`, async ({ page }) => {
       await page.route('**/legal/current', (r) => r.abort());
       await page.goto(path);
       await expect(heading(page, title)).toBeVisible();
       await expect(page.getByText(text)).toBeVisible();
-      await expect(page.getByText('Version 1.1, in force from 21 November 2026')).toBeVisible();
-      await expect(page.getByText(/to be added before launch/).first()).toBeVisible();
+      await expect(page.getByText('Version 1.2, in force from 22 November 2026')).toBeVisible();
+      await expect(page.getByText(/to be confirmed|to be added before launch/)).toHaveCount(0);
       await expectNoAxeViolations(page);
     });
   }
