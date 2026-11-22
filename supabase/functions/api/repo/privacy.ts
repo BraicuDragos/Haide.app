@@ -15,6 +15,7 @@ export type LockedProfile = {
   id: string;
   first_name: string | null;
   status: 'active' | 'suspended' | 'deleted';
+  role: 'user' | 'admin';
 };
 
 /**
@@ -25,7 +26,8 @@ export type LockedProfile = {
  */
 export async function lockProfile(sql: Db, userId: string): Promise<LockedProfile | undefined> {
   const rows = await sql<LockedProfile[]>`
-    select id, first_name, status from app.profiles where id = ${userId} for no key update`;
+    select id, first_name, status, role::text as role from app.profiles
+    where id = ${userId} for no key update`;
   return rows[0];
 }
 

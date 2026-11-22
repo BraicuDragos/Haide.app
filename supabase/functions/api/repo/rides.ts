@@ -94,6 +94,17 @@ export async function lockDriverPublishing(sql: Db, driverId: string): Promise<v
   await sql`select pg_advisory_xact_lock(hashtextextended(${`ride-publish:${driverId}`}::text, 0))`;
 }
 
+/**
+ * True while the driver's account is not deleted. `for share` blocks a concurrent DELETE /me
+ * (which updates the profile row) until this transaction ends, so a ride cannot be published onto
+ * a tombstone. Call inside the publishing transaction.
+ */
+export async function lockLiveDriver(sql: Db, driverId: string): Promise<boolean> {
+  const rows = await sql`
+    select 1 from app.profiles where id = ${driverId} and status <> 'deleted' for share`;
+  return rows.length > 0;
+}
+
 /** Rides that count toward the daily limit: not cancelled, departing in [start, end). */
 export async function countDriverRidesBetween(
   sql: Db,

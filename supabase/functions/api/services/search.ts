@@ -33,6 +33,8 @@ import type { Deps } from '../types.ts';
 import { asRideId, notFound } from './rides.ts';
 
 const DAY_MS = 86_400_000;
+/** Half-widths (minutes) of the time bands tried for the "nearest outside the window" query. */
+const NEAREST_BANDS_MIN = [60, 180, 720] as const;
 
 /**
  * Turns match rows into result cards: one profile query for all drivers, then the serializer
@@ -85,17 +87,40 @@ export async function searchRides(
   // Empty state: the nearest rides the same day, outside the requested window (E3-5).
   let nearestRows: MatchRow[] = [];
   if (shown.length === 0) {
-    const sameDay = await matchRides(sql, {
-      ...base,
-      fromAt: times.dayStartAt,
-      toAt: times.dayEndAt,
-      excludeFrom: times.fromAt,
-      excludeTo: times.toAt,
-      includeBlocked: false,
-      limit: SEARCH_MAX_RESULTS,
-    });
     const gap = (r: MatchRow) =>
       Math.abs(new Date(r.departure_at).getTime() - times.desiredAt.getTime());
+    // app.match_rides keeps the best rides by walk, so one whole-day query could hide a ride that is
+    // closer in time on a busy day. Widen the time band around the desired time instead: every ride
+    // inside a band is closer than any ride outside it, so the first band with enough rides holds
+    // the true nearest ones. The last band is the whole day.
+    let sameDay: MatchRow[] = [];
+    let covered = false;
+    for (const bandMin of [...NEAREST_BANDS_MIN, null]) {
+      const half = bandMin === null ? null : bandMin * 60_000;
+      const fromAt =
+        half === null
+          ? times.dayStartAt
+          : new Date(Math.max(times.dayStartAt.getTime(), times.desiredAt.getTime() - half));
+      const toAt =
+        half === null
+          ? times.dayEndAt
+          : new Date(Math.min(times.dayEndAt.getTime(), times.desiredAt.getTime() + half));
+      // A band that already covers the whole day makes the final whole-day query redundant.
+      if (bandMin === null && covered) break;
+      covered =
+        fromAt.getTime() <= times.dayStartAt.getTime() &&
+        toAt.getTime() >= times.dayEndAt.getTime();
+      sameDay = await matchRides(sql, {
+        ...base,
+        fromAt,
+        toAt,
+        excludeFrom: times.fromAt,
+        excludeTo: times.toAt,
+        includeBlocked: false,
+        limit: SEARCH_MAX_RESULTS,
+      });
+      if (sameDay.length >= NEAREST_OUTSIDE_MAX) break;
+    }
     nearestRows = [...sameDay]
       .sort(
         (a, b) =>

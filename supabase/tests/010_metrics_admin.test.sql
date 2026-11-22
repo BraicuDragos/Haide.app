@@ -46,7 +46,7 @@
 --   H4 40 in the window plus one exactly at p_until (included) = 41.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(114);
+select plan(116);
 
 -- Fixtures ---------------------------------------------------------------------------------------------------------
 create function pg_temp.u(n integer) returns uuid language sql as
@@ -261,7 +261,7 @@ select is((select count(*)::integer from app.admin_actions where action = 'dismi
 select is(app.admin_dismiss_report(gen_random_uuid(), pg_temp.u(3), 'x'), false, 'an unknown report returns false');
 select is(app.admin_dismiss_report(pg_temp.rp(11), pg_temp.u(3), null), true, 'the note is optional');
 
--- app.admin_suspend_user (8) --------------------------------------------------------------------------------------------------------
+-- app.admin_suspend_user (10) --------------------------------------------------------------------------------------------------------
 select is(app.admin_suspend_user(pg_temp.u(6), 'Repeated unwanted messages.', pg_temp.u(3), pg_temp.rp(12), 'harassment'), true,
   'suspends with a report and a ground');
 select is((select jsonb_build_object('reason', details ->> 'reason', 'code', details ->> 'reasonCode', 'admin', admin_id, 'report', report_id)
@@ -278,6 +278,9 @@ select throws_ok($$select app.admin_suspend_user('00000000-0000-4000-8000-000000
   '22023', null, 'an unknown reason code is rejected');
 select ok(to_regprocedure('app.admin_suspend_user(uuid, text, uuid, uuid)') is null,
   'the four-argument overload is gone (no ambiguity)');
+select throws_ok($$select app.admin_suspend_user('00000000-0000-4000-8000-000000001003'::uuid, 'x', '00000000-0000-4000-8000-000000001001'::uuid, null, 'harassment')$$,
+  '42501', null, 'an admin cannot be suspended, not even by another admin');
+select is((select status::text from app.profiles where id = pg_temp.u(3)), 'active', 'and the admin stays active');
 
 -- app.outbox_recipients (7) --------------------------------------------------------------------------------------------------------------
 select is((select count(*)::integer from app.outbox_recipients(array[pg_temp.u(7), pg_temp.u(8), pg_temp.u(9)], false)), 1,

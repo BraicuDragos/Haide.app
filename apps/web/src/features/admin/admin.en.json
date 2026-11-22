@@ -96,6 +96,7 @@
   "admin.suspend.statementHint": "The person will see this. Do not name who reported them.",
   "admin.suspend.statementError": "Write between {min} and {max} characters.",
   "admin.suspend.contactDetails": "The statement holds what looks like a phone number, an email, a plate or a location. Remove it: the person must not receive contact details.",
+  "admin.suspend.adminTarget": "This is an admin account. An admin cannot be suspended here.",
   "admin.suspend.counter": "{n} of {max} characters",
   "admin.userStatus.active": "Active",
   "admin.userStatus.suspended": "Suspended",

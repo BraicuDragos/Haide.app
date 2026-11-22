@@ -161,6 +161,17 @@ export async function createBooking(
     const existing = await findBookingByKey(db, account.id, idempotencyKey);
     if (existing) {
       if (existing.ride_id !== rideId) throw reusedKey();
+      // Same key and ride but other points is a different request, not a replay (api spec: 400).
+      // Identical points map to identical route fractions (same geometry, same function).
+      const again = await matchOneRide(db, { from, to, rideId, searcherId: account.id, now });
+      // No row (driver suspended or deleted since): a genuine replay, answer the original booking.
+      if (
+        again &&
+        (Math.abs(again.f_pickup - existing.pickup_fraction) > 1e-9 ||
+          Math.abs(again.f_dropoff - existing.dropoff_fraction) > 1e-9)
+      ) {
+        throw reusedKey();
+      }
       return await loadBookingView(deps, db, existing.id, account.id);
     }
 

@@ -274,13 +274,30 @@ describe('POST /search', () => {
     expect(out.nearestOutsideWindow.map((i) => i.rideId)).toEqual([RIDE_2, RIDE_3, RIDE_4]);
     out.nearestOutsideWindow.forEach((i) => searchItemSchema.parse(i));
 
-    // second query: the whole Bucharest day, excluding the requested window
+    // second query: a time band around the desired time (05:30Z +- 1 h), excluding the window
     const second = matchCalls(calls)[1];
-    expect(second?.values[P.fromAt]).toEqual(new Date('2026-11-15T22:00:00Z'));
-    expect(second?.values[P.toAt]).toEqual(new Date('2026-11-16T21:59:59.999Z'));
+    expect(second?.values[P.fromAt]).toEqual(new Date('2026-11-16T04:30:00Z'));
+    expect(second?.values[P.toAt]).toEqual(new Date('2026-11-16T06:30:00Z'));
     expect(second?.values[P.excludeFrom]).toEqual(new Date('2026-11-16T05:00:00Z'));
     expect(second?.values[P.excludeTo]).toEqual(new Date('2026-11-16T06:00:00Z'));
     expect(second?.values[P.includeBlocked]).toBe(false);
+  });
+
+  it('empty window: widens the time band until 3 rides are found, last band is the whole day', async () => {
+    const { app, calls } = makeApp([
+      searchDb({
+        rides: (q) => (q.values[P.excludeFrom] === null ? [] : [matchRow({ ride_id: RIDE_2 })]),
+      }),
+    ]);
+    const out = searchResponseSchema.parse(
+      await (await app.request(`${BASE}/search`, post(BODY))).json(),
+    );
+    expect(out.nearestOutsideWindow.map((i) => i.rideId)).toEqual([RIDE_2]);
+    const nearest = matchCalls(calls).slice(1);
+    expect(nearest).toHaveLength(4); // 1 h, 3 h, 12 h, whole day
+    const last = nearest[3];
+    expect(last?.values[P.fromAt]).toEqual(new Date('2026-11-15T22:00:00Z'));
+    expect(last?.values[P.toAt]).toEqual(new Date('2026-11-16T21:59:59.999Z'));
   });
 
   it('does not run the nearest query when the window has results', async () => {

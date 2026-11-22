@@ -370,9 +370,22 @@ describe.skipIf(!BASE || !SECRET)('search and matching against the local stack',
     const noon = { ...searchBody(l, s), time: '12:00', windowMin: 15 };
     const out = await searchOk(null, noon);
     expect(out.items).toEqual([]);
-    expect(ids(out.nearestOutsideWindow)).toContain(ride.id);
-    expect(ids(out.nearestOutsideWindow)).not.toContain(second.ride.id);
-    expect(out.nearestOutsideWindow.length).toBeLessThanOrEqual(3);
+    // The DB is shared: other suites' rides on this day and corridor may be closer to 12:00 than
+    // ours. The contract is "the 3 nearest in time", so our ride is listed unless 3 rides at least
+    // as close to 12:00 are (08:00 is 4 h away).
+    const near = out.nearestOutsideWindow;
+    const gapMs = (i: SearchItem) =>
+      Math.abs(
+        new Date(i.departureAt).getTime() - bucharestLocalToUtc(s.dayKey, '12:00').getTime(),
+      );
+    if (!ids(near).includes(ride.id)) {
+      expect(near).toHaveLength(3);
+      for (const i of near) expect(gapMs(i)).toBeLessThanOrEqual(4 * 3_600_000);
+    }
+    expect(ids(near)).not.toContain(second.ride.id);
+    expect(near.length).toBeLessThanOrEqual(3);
+    // nearest in time first
+    expect(near.map(gapMs)).toEqual([...near.map(gapMs)].sort((a, b) => a - b));
     // same card shape, same privacy
     for (const i of out.nearestOutsideWindow) {
       expect(i.pickup.point.approx).toBe(true);

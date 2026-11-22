@@ -1,4 +1,4 @@
-import type { Db } from '../../_shared/db.ts';
+import { asDb, type Db } from '../../_shared/db.ts';
 import type { VehicleResponse } from '../../_shared/contracts/account.ts';
 import {
   needsReaccept,
@@ -131,25 +131,43 @@ export type ProfilePatchValues = {
   bio?: string | null;
 };
 
-/** Partial update: omitted fields keep their value. `bio: null` clears it. */
-export async function updateProfile(sql: Db, userId: string, v: ProfilePatchValues): Promise<void> {
+/**
+ * Partial update: omitted fields keep their value. `bio: null` clears it. Never writes onto a
+ * deleted account's tombstone (a request that passed the gate just before DELETE /me committed):
+ * returns false then.
+ */
+export async function updateProfile(
+  sql: Db,
+  userId: string,
+  v: ProfilePatchValues,
+): Promise<boolean> {
   const bioProvided = v.bio !== undefined;
-  await sql`
+  const rows = await sql`
     update app.profiles set
       first_name = coalesce(${v.firstName ?? null}::text, first_name),
       phone_e164 = coalesce(${v.phone ?? null}::text, phone_e164),
       bio = case when ${bioProvided}::boolean then ${v.bio ?? null}::text else bio end,
       updated_at = now()
-    where id = ${userId}`;
+    where id = ${userId} and status <> 'deleted'
+    returning id`;
+  return rows.length > 0;
 }
 
-export async function setPhotoPath(sql: Db, userId: string, path: string): Promise<string | null> {
+/**
+ * Stores the new photo path and returns the previous one (`{ previous: null }` when there was
+ * none). Returns null, writing nothing, when the account is deleted.
+ */
+export async function setPhotoPath(
+  sql: Db,
+  userId: string,
+  path: string,
+): Promise<{ previous: string | null } | null> {
   const rows = await sql<{ previous: string | null }[]>`
     update app.profiles p set photo_path = ${path}, updated_at = now()
     from (select photo_path from app.profiles where id = ${userId} for update) old
-    where p.id = ${userId}
+    where p.id = ${userId} and p.status <> 'deleted'
     returning old.photo_path as previous`;
-  return rows[0]?.previous ?? null;
+  return rows[0] ? { previous: rows[0].previous ?? null } : null;
 }
 
 type VehicleRow = {
@@ -177,23 +195,32 @@ export async function getVehicle(sql: Db, ownerId: string): Promise<VehicleRespo
   return rows[0] ? toVehicle(rows[0]) : null;
 }
 
-/** One vehicle per user: create or replace. Published rides keep their own snapshot. */
+/**
+ * One vehicle per user: create or replace. Published rides keep their own snapshot. Returns null,
+ * writing nothing, when the account is deleted.
+ */
 export async function upsertVehicle(
   sql: Db,
   ownerId: string,
   v: VehicleResponse,
-): Promise<VehicleResponse> {
-  const rows = await sql<VehicleRow[]>`
-    insert into app.vehicles (owner_id, make, model, colour, plate, fuel_type, seats)
-    values (${ownerId}, ${v.make}, ${v.model}, ${v.colour}, ${v.plate}, ${v.fuelType}, ${v.seats})
-    on conflict (owner_id) do update set
-      make = excluded.make, model = excluded.model, colour = excluded.colour,
-      plate = excluded.plate, fuel_type = excluded.fuel_type, seats = excluded.seats,
-      updated_at = now()
-    returning make, model, colour, plate, fuel_type, seats`;
-  const row = rows[0];
-  if (!row) throw new Error('vehicle upsert returned no row');
-  return toVehicle(row);
+): Promise<VehicleResponse | null> {
+  // Share-lock the profile first (the lockLiveDriver pattern): DELETE /me's scrub takes
+  // `for no key update`, so a vehicle row cannot appear after the scrub.
+  return await sql.begin(async (txn) => {
+    const tx = asDb(txn);
+    const live = await tx`
+      select 1 from app.profiles where id = ${ownerId} and status <> 'deleted' for share`;
+    if (live.length === 0) return null;
+    const rows = await tx<VehicleRow[]>`
+      insert into app.vehicles (owner_id, make, model, colour, plate, fuel_type, seats)
+      values (${ownerId}, ${v.make}, ${v.model}, ${v.colour}, ${v.plate}, ${v.fuelType}, ${v.seats})
+      on conflict (owner_id) do update set
+        make = excluded.make, model = excluded.model, colour = excluded.colour,
+        plate = excluded.plate, fuel_type = excluded.fuel_type, seats = excluded.seats,
+        updated_at = now()
+      returning make, model, colour, plate, fuel_type, seats`;
+    return rows[0] ? toVehicle(rows[0]) : null;
+  });
 }
 
 export type { PublicProfileRow } from './ratingSummary.ts';

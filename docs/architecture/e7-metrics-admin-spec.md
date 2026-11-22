@@ -94,7 +94,7 @@ Published rides keep their snapshot; `energyPriceFor()` already picks the row in
 | Action | Checks → effect |
 |---|---|
 | Dismiss | report unknown `404`; not `open` `409 INVALID_STATE` → `admin_dismiss_report`. Nobody is emailed |
-| Suspend `{reasonCode, statement, reportId?}` | self `400 fields.userId = self`; unknown `404`; not `active` (suspended or deleted) `409 INVALID_STATE`; `reportId` about someone else `400 fields.reportId = mismatch`, not open `409` → `admin_suspend_user(…, reasonCode)` (report → `actioned`) + outbox `account_suspended {reasonCode, statement}` (sent to suspended recipients). The tick sweep cancels future rides/bookings with notifications within a minute |
+| Suspend `{reasonCode, statement, reportId?}` | self `400 fields.userId = self`; another admin `400 fields.userId = admin` (also refused by `app.admin_suspend_user`, SQLSTATE 42501); unknown `404`; not `active` (suspended or deleted) `409 INVALID_STATE`; `reportId` about someone else `400 fields.reportId = mismatch`, not open `409` → `admin_suspend_user(…, reasonCode)` (report → `actioned`) + outbox `account_suspended {reasonCode, statement}` (sent to suspended recipients). The tick sweep cancels future rides/bookings with notifications within a minute |
 | Unsuspend `{note?}` | not `suspended` `409 INVALID_STATE` → `admin_unsuspend_user` + outbox `account_reinstated {}`. Cancelled items stay cancelled |
 
 Other open reports about a suspended user stay open; the queue shows the reported user's status so the admin can dismiss them. Concurrency: two parallel suspends → one `204`, one `409`.

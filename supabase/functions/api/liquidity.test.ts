@@ -125,6 +125,7 @@ function liquidityDb(init: Partial<State> = {}) {
     if (t.startsWith('delete from app.ride_alerts'))
       return state.alertDeleted ? [{ id: ALERT_ID }] : [];
     if (t.includes('pg_advisory_xact_lock')) return [];
+    if (t.includes('for share')) return [{ ok: 1 }];
     if (t.startsWith('insert into app.ride_series')) return [{ id: SERIES_ID }];
     if (t.includes('from app.ride_series s')) {
       return [

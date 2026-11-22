@@ -426,7 +426,9 @@ describe('POST /bookings', () => {
   });
 
   it('a replay with the same key returns the current view without inserting', async () => {
-    const { app, calls } = makeBookingApp({ keyRow: { id: BOOKING, ride_id: RIDE } });
+    const { app, calls } = makeBookingApp({
+      keyRow: { id: BOOKING, ride_id: RIDE, pickup_fraction: 0.45, dropoff_fraction: 0.97 },
+    });
     const res = await post(app);
     expect(res.status).toBe(201);
     expect(bookingViewSchema.parse(await res.json()).id).toBe(BOOKING);
@@ -434,8 +436,38 @@ describe('POST /bookings', () => {
     expect(has(calls, 'insert into app.outbox')).toBe(false);
   });
 
+  it.each([
+    ['other points', { pickup_fraction: 0.2, dropoff_fraction: 0.97 }, undefined],
+    ['other drop-off', { pickup_fraction: 0.45, dropoff_fraction: 0.8 }, undefined],
+  ])('the same key and ride with %s is a 400 reused key, not a replay', async (_n, fr, match) => {
+    const { app, calls } = makeBookingApp({
+      keyRow: { id: BOOKING, ride_id: RIDE, ...fr },
+      ...(match === null ? { match: null } : {}),
+    });
+    const res = await post(app);
+    expect(res.status).toBe(400);
+    expect(await errorOf(res)).toMatchObject({
+      code: 'VALIDATION_FAILED',
+      fields: { idempotencyKey: 'reused' },
+    });
+    expect(has(calls, 'insert into app.bookings')).toBe(false);
+  });
+
+  it('a replay after the driver is no longer matchable (suspended, deleted) returns the original booking', async () => {
+    const { app, calls } = makeBookingApp({
+      keyRow: { id: BOOKING, ride_id: RIDE, pickup_fraction: 0.45, dropoff_fraction: 0.97 },
+      match: null,
+    });
+    const res = await post(app);
+    expect(res.status).toBe(201);
+    expect(bookingViewSchema.parse(await res.json()).id).toBe(BOOKING);
+    expect(has(calls, 'insert into app.bookings')).toBe(false);
+  });
+
   it('the same key for another ride is a 400 reused key', async () => {
-    const { app } = makeBookingApp({ keyRow: { id: BOOKING, ride_id: OTHER_RIDE } });
+    const { app } = makeBookingApp({
+      keyRow: { id: BOOKING, ride_id: OTHER_RIDE, pickup_fraction: 0.45, dropoff_fraction: 0.97 },
+    });
     const res = await post(app);
     expect(res.status).toBe(400);
     expect(await errorOf(res)).toMatchObject({
