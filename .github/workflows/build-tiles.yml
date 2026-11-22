@@ -3,11 +3,6 @@ name: Build tiles
 # Manual only. Builds the self-hosted Sibiu map assets (ADR 0014) and uploads them as an artifact.
 # Nothing is pushed: download the artifact `haide-map-assets` and commit its files in a PR (deploy.md section 6).
 on:
-  # TEMPORARY (removed before the PR is final): lets the workflow run from this branch before it is
-  # on the default branch, where GitHub requires it for workflow_dispatch.
-  push:
-    branches: [chore/tiles]
-    paths: ['.github/workflows/build-tiles.yml']
   workflow_dispatch:
     inputs:
       protomaps_build:
