@@ -1,4 +1,10 @@
-import { Map as MapLibreMap, addProtocol, type StyleSpecification } from 'maplibre-gl';
+import {
+  Map as MapLibreMap,
+  addProtocol,
+  setWorkerUrl,
+  type StyleSpecification,
+} from 'maplibre-gl';
+import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { PMTiles, Protocol } from 'pmtiles';
 import { useEffect, useRef, useState } from 'react';
@@ -42,6 +48,8 @@ function ensureProtocol() {
   if (protocolAdded) return;
   const protocol = new Protocol();
   addProtocol('pmtiles', protocol.tile);
+  // MapLibre 6 loads its worker by URL; Vite must emit it as a hashed asset (else it 404s into the SPA fallback).
+  setWorkerUrl(workerUrl);
   protocolAdded = true;
 }
 
@@ -171,32 +179,49 @@ export default function RouteMap({
       if (cancelled || !host.current) return;
 
       ensureProtocol();
-      const m = new MapLibreMap({
-        container: host.current,
-        style: buildStyle(),
-        maxBounds: [
-          [SIBIU_BOUNDS[0], SIBIU_BOUNDS[1]],
-          [SIBIU_BOUNDS[2], SIBIU_BOUNDS[3]],
-        ],
-        bounds: [
-          [
-            Math.min(pickup.lng, dropoff.lng, you?.from.lng ?? Infinity, you?.to.lng ?? Infinity),
-            Math.min(pickup.lat, dropoff.lat, you?.from.lat ?? Infinity, you?.to.lat ?? Infinity),
+      let m: MapLibreMap;
+      try {
+        m = new MapLibreMap({
+          container: host.current,
+          style: buildStyle(),
+          maxBounds: [
+            [SIBIU_BOUNDS[0], SIBIU_BOUNDS[1]],
+            [SIBIU_BOUNDS[2], SIBIU_BOUNDS[3]],
           ],
-          [
-            Math.max(pickup.lng, dropoff.lng, you?.from.lng ?? -Infinity, you?.to.lng ?? -Infinity),
-            Math.max(pickup.lat, dropoff.lat, you?.from.lat ?? -Infinity, you?.to.lat ?? -Infinity),
+          bounds: [
+            [
+              Math.min(pickup.lng, dropoff.lng, you?.from.lng ?? Infinity, you?.to.lng ?? Infinity),
+              Math.min(pickup.lat, dropoff.lat, you?.from.lat ?? Infinity, you?.to.lat ?? Infinity),
+            ],
+            [
+              Math.max(
+                pickup.lng,
+                dropoff.lng,
+                you?.from.lng ?? -Infinity,
+                you?.to.lng ?? -Infinity,
+              ),
+              Math.max(
+                pickup.lat,
+                dropoff.lat,
+                you?.from.lat ?? -Infinity,
+                you?.to.lat ?? -Infinity,
+              ),
+            ],
           ],
-        ],
-        fitBoundsOptions: { padding: 48, maxZoom: 15 },
-        maxZoom: 15,
-        dragRotate: false,
-        pitchWithRotate: false,
-        touchPitch: false,
-        keyboard: false, // the canvas is decorative for assistive tech: the text alternative carries the content
-        cooperativeGestures: true,
-        attributionControl: false, // rendered below as a plain link, outside the aria-hidden canvas
-      });
+          fitBoundsOptions: { padding: 48, maxZoom: 15 },
+          maxZoom: 15,
+          dragRotate: false,
+          pitchWithRotate: false,
+          touchPitch: false,
+          keyboard: false, // the canvas is decorative for assistive tech: the text alternative carries the content
+          cooperativeGestures: true,
+          attributionControl: false, // rendered below as a plain link, outside the aria-hidden canvas
+        });
+      } catch {
+        // No WebGL (or the worker cannot start): fall back to the plain background and the text description.
+        if (!cancelled) setPhase('unavailable');
+        return;
+      }
       map = m;
       m.touchZoomRotate.disableRotation();
       m.getCanvas().removeAttribute('tabindex'); // the canvas must not be a keyboard stop
