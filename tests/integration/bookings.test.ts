@@ -210,6 +210,12 @@ describe.skipIf(!BASE || !SECRET)('booking lifecycle against the local stack', (
     expect(replay.status).toBe(201);
     expect(bookingViewSchema.parse(await replay.json()).id).toBe(view.id);
 
+    // same key and ride but other points is not a replay either (spec: 400)
+    const shifted = { from: trip.from, to: { lat: trip.to.lat - 0.002, lng: trip.to.lng - 0.012 } };
+    const otherPoints = await requestSeat(p, ride.id, shifted, key);
+    expect(otherPoints.status).toBe(400);
+    expect(await errorOf(otherPoints)).toMatchObject({ fields: { idempotencyKey: 'reused' } });
+
     // a key reused for another ride is a validation error
     const other = await publish(await user('Mihai', '0722 000 111'), lane(), departure());
     const reused = await requestSeat(p, other.id, trip, key);

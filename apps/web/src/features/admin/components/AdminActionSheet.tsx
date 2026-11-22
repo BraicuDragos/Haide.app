@@ -109,6 +109,11 @@ function Body({ action, onClose }: { action: AdminAction; onClose: () => void })
         setError(t('admin.suspend.contactDetails'));
         return;
       }
+      // The server never suspends an admin account (fields.userId = 'admin').
+      if (err instanceof ApiError && err.fields?.userId === 'admin') {
+        setError(t('admin.suspend.adminTarget'));
+        return;
+      }
       setError(tError(code));
     },
   });

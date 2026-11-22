@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { Hono, type MiddlewareHandler } from 'hono';
 import { describe, expect, it } from 'vitest';
 import {
@@ -25,6 +26,8 @@ type State = {
   legal: { kind: string; version: string; url: string; published_at?: Date }[];
   vehicle: Record<string, unknown> | null;
   public: Record<string, unknown> | null;
+  /** The account was deleted after the gate ran: every guarded write matches no row. */
+  deleted?: boolean;
 };
 
 const profileRow = (over: Record<string, unknown> = {}) => ({
@@ -91,14 +94,16 @@ function accountDb(init: Partial<State> = {}) {
         ...(ph ? { phone_e164: ph } : {}),
         ...(bioSet ? { bio } : {}),
       };
-      return [];
+      return state.deleted ? [] : [{ id: USER }];
     }
     if (t.startsWith('update app.profiles p set photo_path')) {
       writes.push(q);
+      if (state.deleted) return [];
       const previous = (state.profile?.photo_path as string | null) ?? null;
       state.profile = { ...state.profile, photo_path: q.values[0] };
       return [{ previous }];
     }
+    if (t.includes('for share')) return state.deleted ? [] : [{ ok: 1 }];
     if (t.includes('from app.vehicles where owner_id')) return state.vehicle ? [state.vehicle] : [];
     if (t.startsWith('insert into app.vehicles')) {
       writes.push(q);
@@ -565,6 +570,47 @@ describe('PUT /me/photo', () => {
     const res = await app.request(`${BASE}/me/photo`, await upload(fakeJpeg(100, 100)));
     expect(res.status).toBe(500);
     expect(removed).toEqual([uploaded[0]?.path]);
+  });
+
+  it('a deleted account: PATCH, photo and vehicle write nothing and answer ACCOUNT_DELETED', async () => {
+    const { handler, state, writes } = accountDb({ deleted: true });
+    const { app, uploaded, removed } = makeApp([handler]);
+    const patch = await app.request(
+      `${BASE}/me/profile`,
+      jsonReq('PATCH', { firstName: 'Ioana' }, await auth()),
+    );
+    expect(patch.status).toBe(403);
+    expect((await errorCode(patch)).code).toBe('ACCOUNT_DELETED');
+    const photo = await app.request(`${BASE}/me/photo`, await upload(fakeJpeg(100, 100)));
+    expect(photo.status).toBe(403);
+    expect((await errorCode(photo)).code).toBe('ACCOUNT_DELETED');
+    // the object stored before the guarded write is removed again
+    expect(removed).toEqual([uploaded[0]?.path]);
+    const put = await app.request(
+      `${BASE}/me/vehicle`,
+      jsonReq(
+        'PUT',
+        {
+          make: 'Dacia',
+          model: 'Logan',
+          colour: 'Grey',
+          plate: 'SB12ABC',
+          fuelType: 'petrol',
+          seats: 3,
+        },
+        await auth(),
+      ),
+    );
+    expect(put.status).toBe(403);
+    expect((await errorCode(put)).code).toBe('ACCOUNT_DELETED');
+    expect(state.vehicle).toBeNull();
+    expect(writes.some((w) => w.text.startsWith('insert into app.vehicles'))).toBe(false);
+  });
+
+  it('the write SQL itself refuses a deleted account', () => {
+    const src = readFileSync(new URL('./repo/accounts.ts', import.meta.url), 'utf8');
+    expect(src.match(/status <> 'deleted'/g)?.length).toBe(3);
+    expect(src).toContain('for share');
   });
 
   it('requires auth and consent', async () => {

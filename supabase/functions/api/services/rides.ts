@@ -38,6 +38,7 @@ import {
   listPastRides,
   listUpcomingRides,
   lockDriverPublishing,
+  lockLiveDriver,
   selectOwnerRide,
   selectPublicRide,
   setAutoAccept,
@@ -146,6 +147,9 @@ export async function publishRide(
     const tx = asDb(txn);
     // One publish at a time per driver: the count below is then race-free (4 per Bucharest day).
     await lockDriverPublishing(tx, account.id);
+    if (!(await lockLiveDriver(tx, account.id))) {
+      throw new AppError('ACCOUNT_DELETED', 'Account deleted.');
+    }
     assertDailyLimit(await countDriverRidesBetween(tx, account.id, startUtc, endUtc));
 
     const price = await energyPriceFor(tx, vehicle.fuelType, now);

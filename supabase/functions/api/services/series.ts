@@ -24,6 +24,7 @@ import {
   insertRideFromPreview,
   insertRidePublishedEvent,
   lockDriverPublishing,
+  lockLiveDriver,
   selectOwnerRide,
 } from '../repo/rides.ts';
 import {
@@ -79,6 +80,9 @@ export async function createSeries(
     const tx = asDb(txn);
     // One publish at a time per driver: the per-day counts below are then race-free.
     await lockDriverPublishing(tx, account.id);
+    if (!(await lockLiveDriver(tx, account.id))) {
+      throw new AppError('ACCOUNT_DELETED', 'Account deleted.');
+    }
 
     const price = await energyPriceFor(tx, vehicle.fuelType, now);
     if (!price) throw new Error('energy_prices has no row for the fuel type');

@@ -192,6 +192,7 @@ function rideDb(init: Partial<State> = {}) {
       return [{ id: PREVIEW_ID, route_geojson: ROUTE_GEOJSON }];
     }
     if (t.includes('pg_advisory_xact_lock')) return [];
+    if (t.includes('for share')) return [{ ok: 1 }];
     if (t.includes('select count(*)::int as n from app.rides')) return [{ n: state.dailyCount }];
     if (t.startsWith('insert into app.rides')) return state.previewValid ? [{ id: RIDE_ID }] : [];
     if (t.startsWith('insert into app.analytics_events')) return [];
@@ -489,6 +490,17 @@ describe('POST /rides', () => {
     expect((await errorOf(far)).code).toBe('DEPARTURE_TOO_FAR');
     expect((await publish(app, { ...base, departureAt: '2026-11-16T05:15:00Z' })).status).toBe(201);
     expect((await publish(app, { ...base, departureAt: '2026-11-30T05:00:00Z' })).status).toBe(201);
+  });
+
+  it('a deleted driver (account deleted after the gate) publishes nothing', async () => {
+    const live: Handler = (q) => (q.text.includes('for share') ? [] : rideDb().handler(q));
+    const { app, calls } = makeApp([live]);
+    const res = await publish(app, base);
+    expect(res.status).toBe(403);
+    expect((await errorOf(res)).code).toBe('ACCOUNT_DELETED');
+    expect(has(calls, 'insert into app.rides')).toBe(false);
+    // the check shares the profile row with DELETE /me's no-key-update lock, inside the transaction
+    expect(calls.find((c) => c.text.includes('for share'))?.text).toContain("status <> 'deleted'");
   });
 
   it('refuses more seats than the vehicle has', async () => {

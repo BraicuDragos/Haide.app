@@ -141,7 +141,9 @@ accountRoutes.patch(
     if (Object.keys(fields).length > 0) {
       throw new AppError('VALIDATION_FAILED', 'Request validation failed.', { fields });
     }
-    await updateProfile(deps.sql, c.get('account').id, values);
+    if (!(await updateProfile(deps.sql, c.get('account').id, values))) {
+      throw new AppError('ACCOUNT_DELETED', 'Account deleted.');
+    }
     const fresh = await loadAccount(
       deps.sql,
       c.get('account').id,
@@ -183,13 +185,18 @@ accountRoutes.put('/me/photo', requireConsent, rateLimit('photo', RATE_LIMITS.ph
 
   const path = `avatars/${crypto.randomUUID()}.jpg`;
   await deps.storage.upload(path, jpeg);
-  let previous: string | null;
+  let stored: { previous: string | null } | null;
   try {
-    previous = await setPhotoPath(deps.sql, c.get('account').id, path);
+    stored = await setPhotoPath(deps.sql, c.get('account').id, path);
   } catch (err) {
     await deps.storage.remove(path);
     throw err;
   }
+  if (!stored) {
+    await deps.storage.remove(path);
+    throw new AppError('ACCOUNT_DELETED', 'Account deleted.');
+  }
+  const { previous } = stored;
   if (previous && previous !== path) await deps.storage.remove(previous);
   const body: PhotoResponse = { photoUrl: avatarUrl(deps.env, path) as string };
   return c.json(body);
@@ -231,7 +238,9 @@ accountRoutes.put(
     if (Object.keys(fields).length > 0) {
       throw new AppError('VALIDATION_FAILED', 'Request validation failed.', { fields });
     }
-    return c.json(await upsertVehicle(c.get('deps').sql, c.get('account').id, normalised));
+    const saved = await upsertVehicle(c.get('deps').sql, c.get('account').id, normalised);
+    if (!saved) throw new AppError('ACCOUNT_DELETED', 'Account deleted.');
+    return c.json(saved);
   },
 );
 

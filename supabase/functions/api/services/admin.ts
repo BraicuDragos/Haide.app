@@ -193,6 +193,11 @@ export async function suspendUser(
     // Two parallel suspends queue here; the second sees `suspended` and gets 409.
     const profile = await lockProfile(db, userId);
     if (!profile) throw notFound('User');
+    if (profile.role === 'admin') {
+      throw new AppError('VALIDATION_FAILED', 'An admin account cannot be suspended.', {
+        fields: { userId: 'admin' },
+      });
+    }
     if (profile.status !== 'active') {
       throw new AppError('INVALID_STATE', 'This account is not active.');
     }

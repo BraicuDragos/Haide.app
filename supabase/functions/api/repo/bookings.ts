@@ -122,9 +122,13 @@ export async function findBookingByKey(
   sql: Db,
   passengerId: string,
   key: string,
-): Promise<{ id: string; ride_id: string } | undefined> {
-  const rows = await sql<{ id: string; ride_id: string }[]>`
-    select id, ride_id from app.bookings
+): Promise<
+  { id: string; ride_id: string; pickup_fraction: number; dropoff_fraction: number } | undefined
+> {
+  const rows = await sql<
+    { id: string; ride_id: string; pickup_fraction: number; dropoff_fraction: number }[]
+  >`
+    select id, ride_id, pickup_fraction, dropoff_fraction from app.bookings
     where passenger_id = ${passengerId} and idempotency_key = ${key}`;
   return rows[0];
 }

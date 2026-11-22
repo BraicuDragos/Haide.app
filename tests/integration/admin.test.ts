@@ -293,6 +293,22 @@ describe.skipIf(!BASE || !SECRET || DB_SKIP)('admin against the local stack', ()
 
   // ---- suspend, the tick sweep, unsuspend --------------------------------------------------------------------------------
 
+  it('an admin cannot suspend another admin: 400, nothing changes, SQL refuses too', async () => {
+    const other = await makeAdmin(sql, { firstName: 'Peer' });
+    const res = await admin.send('POST', `/admin/users/${other.id}/suspend`, {
+      reasonCode: 'other',
+      statement: STATEMENT,
+    });
+    expect(res.status).toBe(400);
+    expect((await errorOf(res)).fields).toEqual({ userId: 'admin' });
+    expect(await profileStatus(other.id)).toBe('active');
+    // defence in depth: the audited function itself refuses (the SQL console path)
+    await expect(
+      sql`select app.admin_suspend_user(${other.id}::uuid, 'x', null, null, 'other')`,
+    ).rejects.toMatchObject({ code: '42501' });
+    expect(await profileStatus(other.id)).toBe('active');
+  });
+
   it('suspending from a report: audited, the user is told, the sweep cancels, unsuspend reinstates', async () => {
     const [driver, p] = await Promise.all([
       createUser({ firstName: 'Radu' }),

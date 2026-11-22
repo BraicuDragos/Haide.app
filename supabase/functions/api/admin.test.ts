@@ -655,6 +655,15 @@ describe('POST /admin/users/{id}/suspend', () => {
     expect(has(calls, 'for no key update')).toBe(false);
   });
 
+  it('refuses to suspend another admin and never calls the function', async () => {
+    const { app, calls } = appWith({ locked: { status: 'active', role: 'admin' } as never });
+    const res = await send(app, 'POST', `/admin/users/${USER}/suspend`, ADMIN, SUSPEND_BODY);
+    expect(res.status).toBe(400);
+    expect((await errorOf(res)).fields).toEqual({ userId: 'admin' });
+    expect(has(calls, 'app.admin_suspend_user(')).toBe(false);
+    expect(has(calls, 'insert into app.outbox')).toBe(false);
+  });
+
   it.each([
     [{ ...SUSPEND_BODY, statement: 'too short' }, 'too_short'],
     [{ ...SUSPEND_BODY, statement: 'x'.repeat(301) }, 'too_long'],
