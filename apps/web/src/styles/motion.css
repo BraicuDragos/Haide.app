@@ -32,6 +32,21 @@
     stroke-width: 6px;
     stroke-linecap: round;
   }
+  .map-attribution {
+    position: absolute;
+    right: var(--tk-space-2);
+    bottom: var(--tk-space-2);
+    z-index: 6;
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    padding: 0 var(--tk-space-2);
+    border-radius: var(--tk-radius-lg);
+    font-size: var(--tk-text-xs);
+    line-height: 16px;
+    color: var(--theme-text);
+    text-decoration: underline;
+  }
   .map-note {
     position: absolute;
     left: var(--tk-space-3);

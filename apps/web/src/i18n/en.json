@@ -74,6 +74,7 @@
   "me.about.title": "About and data sources",
   "me.about.osm": "Maps and place names use data from OpenStreetMap, © OpenStreetMap contributors, available under the Open Database Licence (ODbL).",
   "me.about.osmLink": "OpenStreetMap copyright and licence",
+  "map.attribution": "© OpenStreetMap contributors",
   "map.unavailable": "The map isn’t available right now. The route is described in text.",
   "map.loading": "Loading map",
   "map.pickup": "Pickup",

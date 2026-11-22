@@ -168,3 +168,7 @@ Every merge to `main` triggers `deploy.yml`. It waits for the owner's approval o
 | Grant the admin role (E7) | Once per admin (at most two) | SQL Editor: `update app.profiles set role = 'admin' where id = '<uuid>';` (no endpoint can). Revoke with `role = 'user'`: it applies on the next request |
 | Breach | On incident | DPIA §7: contain, assess, notify ANSPDCP within 72 h if risk |
 | Backup restore drill | Quarterly | §5.2 step 8 |
+
+### Map tiles refresh
+
+Run the **Build tiles** workflow (Actions tab, manual, optional `protomaps_build` input). It installs a pinned, checksum-verified go-pmtiles, runs `scripts/geo/build-tiles.sh` and fails if `sibiu.pmtiles` is missing or over 25 MiB. Download the `haide-map-assets` artifact, copy `tiles/`, `glyphs/` and `sprites/` into `apps/web/public/`, and commit them in a PR (the workflow never pushes). The service worker needs no change: tiles are read from `/tiles/` with range requests and the cache name is versioned in `sw.ts`.

@@ -1,0 +1,79 @@
+name: Build tiles
+
+# Manual only. Builds the self-hosted Sibiu map assets (ADR 0014) and uploads them as an artifact.
+# Nothing is pushed: download the artifact `haide-map-assets` and commit its files in a PR (deploy.md section 6).
+on:
+  workflow_dispatch:
+    inputs:
+      protomaps_build:
+        description: 'Optional Protomaps build, e.g. 20261101.pmtiles (default: newest of the last 14 days)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+env:
+  PMTILES_VERSION: '1.31.2'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install go-pmtiles (pinned, checksum verified)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          name="go-pmtiles_${PMTILES_VERSION}_Linux_x86_64.tar.gz"
+          base="https://github.com/protomaps/go-pmtiles/releases/download/v${PMTILES_VERSION}"
+          dir="$RUNNER_TEMP/pmtiles"
+          mkdir -p "$dir"
+          curl -fsSL --retry 3 "$base/$name" -o "$dir/$name"
+          # The release has no checksums file; GitHub records a sha256 digest for every asset.
+          expected="$(gh api "repos/protomaps/go-pmtiles/releases/tags/v${PMTILES_VERSION}" \
+            --jq ".assets[] | select(.name == \"$name\") | .digest" | sed 's/^sha256://')"
+          if [[ ! "$expected" =~ ^[0-9a-f]{64}$ ]]; then
+            echo "error: no sha256 digest published for $name (got '$expected')" >&2
+            exit 1
+          fi
+          actual="$(sha256sum "$dir/$name" | cut -d' ' -f1)"
+          if [[ "$actual" != "$expected" ]]; then
+            echo "error: checksum mismatch for $name: expected $expected, got $actual" >&2
+            exit 1
+          fi
+          tar -xzf "$dir/$name" -C "$dir" pmtiles
+          echo "$dir" >> "$GITHUB_PATH"
+          "$dir/pmtiles" version
+
+      - name: Build tiles, glyphs and sprites
+        env:
+          PROTOMAPS_BUILD: ${{ inputs.protomaps_build }}
+        run: bash scripts/geo/build-tiles.sh
+
+      - name: Check sizes
+        run: |
+          set -euo pipefail
+          du -ah apps/web/public/tiles apps/web/public/glyphs apps/web/public/sprites
+          f=apps/web/public/tiles/sibiu.pmtiles
+          test -f "$f" || { echo "error: $f is missing" >&2; exit 1; }
+          size="$(wc -c < "$f")"
+          echo "sibiu.pmtiles: $size bytes"
+          if (( size > 25 * 1024 * 1024 )); then
+            echo "error: sibiu.pmtiles is over 25 MiB (Cloudflare Pages limit)" >&2
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: haide-map-assets
+          path: |
+            apps/web/public/tiles
+            apps/web/public/glyphs
+            apps/web/public/sprites
+          if-no-files-found: error
+          include-hidden-files: true
+          retention-days: 14

@@ -1,4 +1,10 @@
-import { Map as MapLibreMap, addProtocol, type StyleSpecification } from 'maplibre-gl';
+import {
+  Map as MapLibreMap,
+  addProtocol,
+  setWorkerUrl,
+  type StyleSpecification,
+} from 'maplibre-gl';
+import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { PMTiles, Protocol } from 'pmtiles';
 import { useEffect, useRef, useState } from 'react';
@@ -42,6 +48,8 @@ function ensureProtocol() {
   if (protocolAdded) return;
   const protocol = new Protocol();
   addProtocol('pmtiles', protocol.tile);
+  // MapLibre 6 loads its worker by URL; Vite must emit it as a hashed asset (else it 404s into the SPA fallback).
+  setWorkerUrl(workerUrl);
   protocolAdded = true;
 }
 
@@ -171,34 +179,52 @@ export default function RouteMap({
       if (cancelled || !host.current) return;
 
       ensureProtocol();
-      const m = new MapLibreMap({
-        container: host.current,
-        style: buildStyle(),
-        maxBounds: [
-          [SIBIU_BOUNDS[0], SIBIU_BOUNDS[1]],
-          [SIBIU_BOUNDS[2], SIBIU_BOUNDS[3]],
-        ],
-        bounds: [
-          [
-            Math.min(pickup.lng, dropoff.lng, you?.from.lng ?? Infinity, you?.to.lng ?? Infinity),
-            Math.min(pickup.lat, dropoff.lat, you?.from.lat ?? Infinity, you?.to.lat ?? Infinity),
+      let m: MapLibreMap;
+      try {
+        m = new MapLibreMap({
+          container: host.current,
+          style: buildStyle(),
+          maxBounds: [
+            [SIBIU_BOUNDS[0], SIBIU_BOUNDS[1]],
+            [SIBIU_BOUNDS[2], SIBIU_BOUNDS[3]],
           ],
-          [
-            Math.max(pickup.lng, dropoff.lng, you?.from.lng ?? -Infinity, you?.to.lng ?? -Infinity),
-            Math.max(pickup.lat, dropoff.lat, you?.from.lat ?? -Infinity, you?.to.lat ?? -Infinity),
+          bounds: [
+            [
+              Math.min(pickup.lng, dropoff.lng, you?.from.lng ?? Infinity, you?.to.lng ?? Infinity),
+              Math.min(pickup.lat, dropoff.lat, you?.from.lat ?? Infinity, you?.to.lat ?? Infinity),
+            ],
+            [
+              Math.max(
+                pickup.lng,
+                dropoff.lng,
+                you?.from.lng ?? -Infinity,
+                you?.to.lng ?? -Infinity,
+              ),
+              Math.max(
+                pickup.lat,
+                dropoff.lat,
+                you?.from.lat ?? -Infinity,
+                you?.to.lat ?? -Infinity,
+              ),
+            ],
           ],
-        ],
-        fitBoundsOptions: { padding: 48, maxZoom: 15 },
-        maxZoom: 15,
-        dragRotate: false,
-        pitchWithRotate: false,
-        touchPitch: false,
-        keyboard: false, // the canvas is decorative for assistive tech: the text alternative carries the content
-        cooperativeGestures: true,
-        attributionControl: { compact: true },
-      });
+          fitBoundsOptions: { padding: 48, maxZoom: 15 },
+          maxZoom: 15,
+          dragRotate: false,
+          pitchWithRotate: false,
+          touchPitch: false,
+          keyboard: false, // the canvas is decorative for assistive tech: the text alternative carries the content
+          cooperativeGestures: true,
+          attributionControl: false, // rendered below as a plain link, outside the aria-hidden canvas
+        });
+      } catch {
+        // No WebGL (or the worker cannot start): fall back to the plain background and the text description.
+        if (!cancelled) setPhase('unavailable');
+        return;
+      }
       map = m;
       m.touchZoomRotate.disableRotation();
+      m.getCanvas().removeAttribute('tabindex'); // the canvas must not be a keyboard stop
 
       m.on('error', () => undefined); // missing glyphs/tiles must never break the page
       // Re-project the route whenever the view changes (rare: the map is static under cooperative gestures).
@@ -292,8 +318,8 @@ export default function RouteMap({
   return (
     <figure className={`m-0 flex flex-col gap-2 ${className}`}>
       <div className="relative">
-        <div ref={frame} className="map-frame" role="img" aria-label={label}>
-          {phase !== 'unavailable' && <div ref={host} className="size-full" />}
+        <div ref={frame} className="map-frame" role="group" aria-label={label}>
+          {phase !== 'unavailable' && <div ref={host} className="size-full" aria-hidden="true" />}
           {phase === 'unavailable' && w > 0 && (
             <svg
               className="map-plain"
@@ -313,6 +339,16 @@ export default function RouteMap({
             <div role="status" className="absolute inset-0 grid place-items-center">
               <MiniLoader label={t('map.loading')} />
             </div>
+          )}
+          {phase !== 'unavailable' && (
+            <a
+              className="map-attribution glass"
+              href="https://www.openstreetmap.org/copyright"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {t('map.attribution')}
+            </a>
           )}
           {phase === 'unavailable' && <p className="map-note glass">{t('map.unavailable')}</p>}
         </div>
