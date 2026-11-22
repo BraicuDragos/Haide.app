@@ -63,7 +63,25 @@ jobs:
 
       - name: Push migrations
         if: ${{ env.ONLY == 'all' }}
-        run: supabase db push
+        # CLI >= 2.x defaults to the local stack (--remote) and asks for confirmation (--yes).
+        run: supabase db push --remote --yes
+
+      - name: Create storage buckets (avatars)
+        if: ${{ env.ONLY == 'all' }}
+        # Hosted projects run neither seed.sql nor create the buckets declared in config.toml, and
+        # `db push` does not either. Idempotent, same command as ci.yml.
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -uo pipefail
+          # The CLI renamed --linked to --remote in some versions: try both, then plain SQL with the
+          # same settings as [storage.buckets.avatars] in config.toml (public, 1.5 MiB, JPEG only).
+          if ! supabase seed buckets --remote --yes && ! supabase seed buckets --linked --yes; then
+            echo "seed buckets failed, creating the bucket with SQL"
+            sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client jq
+            psql "$(bash scripts/deploy/pooler-url.sh)" -v ON_ERROR_STOP=1 -c               "insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types) values ('avatars', 'avatars', true, 1572864, array['image/jpeg']) on conflict (id) do update set public = excluded.public, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types"
+          fi
 
       - name: Roles and Vault (idempotent)
         if: ${{ env.ONLY == 'all' }}
@@ -74,7 +92,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update && sudo apt-get install -y postgresql-client
-          psql "$(cat supabase/.temp/pooler-url)" -v ON_ERROR_STOP=1 \
+          psql "$(bash scripts/deploy/pooler-url.sh)" -v ON_ERROR_STOP=1 \
             -v api_pw="$API_DB_PASSWORD" -v cron="$CRON_SECRET" \
             -v tick_url="https://${PROJECT_REF}.supabase.co/functions/v1/api/v1/internal/tick" \
             -f scripts/deploy/setup-roles.sql
@@ -91,6 +109,8 @@ jobs:
           # Production-only overrides of the local config (deploy.md 4.4), applied on the runner copy.
           sed -i "s#^site_url = .*#site_url = \"${PAGES_URL}\"#" supabase/config.toml
           sed -i "s#\"http://localhost:5173/auth/callback\",#\"${PAGES_URL}/auth/callback\",#" supabase/config.toml
+          # No local-dev redirect targets in production.
+          sed -i '/^  "http:\/\/\(127\.0\.0\.1\|localhost\):[0-9]*\/auth\/callback",$/d' supabase/config.toml
           sed -i '/^\[auth.external.google\]/,/^$/ s/enabled = false/enabled = true/' supabase/config.toml
           sed -i 's/^# \[auth.email.smtp\]/[auth.email.smtp]/; s/^# \(host\|port\|user\|pass\|admin_email\|sender_name\) =/\1 =/' supabase/config.toml
           # The Brevo single sender is the owner's verified address (no domain, ADR 0040).
@@ -110,17 +130,18 @@ jobs:
         run: |
           set -euo pipefail
           umask 077
-          pooler_host="$(sed -E 's#.*@([^:/]+).*#\1#' supabase/.temp/pooler-url)"
+          pooler_host="$(bash scripts/deploy/pooler-url.sh | sed -E 's#.*@([^:/]+).*#\1#')"
+          api_pw_enc="$(jq -rn --arg p "$API_DB_PASSWORD" '$p|@uri')"
           {
             echo "APP_ENV=production"
             echo "APP_VERSION=${GITHUB_SHA}"
-            echo "API_DB_URL=postgresql://haide_api.${PROJECT_REF}:${API_DB_PASSWORD}@${pooler_host}:6543/postgres"
+            echo "API_DB_URL=postgresql://haide_api.${PROJECT_REF}:${api_pw_enc}@${pooler_host}:6543/postgres"
             echo "CRON_SECRET=${CRON_SECRET}"
             echo "ROUTING_PROVIDER=ors"
             echo "ORS_API_KEY=${ORS_API_KEY}"
             echo "EMAIL_PROVIDER=brevo"
             echo "BREVO_API_KEY=${BREVO_API_KEY}"
-            echo "EMAIL_FROM=Haide <${SUPPORT_EMAIL}>"
+            echo "EMAIL_FROM=\"Haide <${SUPPORT_EMAIL}>\""
             echo "EMAIL_SUPPORT_TO=${SUPPORT_EMAIL}"
             echo "EMAIL_DAILY_CAP=280"
             echo "APP_BASE_URL=${PAGES_URL}"
@@ -143,7 +164,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           npx --yes wrangler@4 pages project create "$PAGES_PROJECT" --production-branch main || echo "project already exists"
-          npx --yes wrangler@4 pages deploy apps/web/dist --project-name "$PAGES_PROJECT" --branch main
+          npx --yes wrangler@4 pages deploy apps/web/dist --project-name "$PAGES_PROJECT" --branch main --commit-dirty=true
 
       - name: Smoke test
         run: |
