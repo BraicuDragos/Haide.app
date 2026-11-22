@@ -13,7 +13,7 @@
 #   PROTOMAPS_BUILD  a build URL or file name such as 20261101.pmtiles (default: newest of the last
 #                    14 days from https://build.protomaps.com/)
 #   MAX_ZOOM         starting maxzoom, default 15
-#   FONTS            comma-separated glyph fonts, default "Noto Sans Regular,Noto Sans Medium,Noto Sans Italic"
+#   FONTS            comma-separated glyph fonts, default "Noto Sans Regular" (the only font RouteMap.tsx uses)
 #                    (must match the font names used by the map style in apps/web)
 #   SPRITE           sprite flavour, default "light"
 #
@@ -24,7 +24,7 @@ set -euo pipefail
 BBOX="23.98,45.68,24.32,45.86"   # west,south,east,north. Same box as the gazetteer and COVERAGE_BBOX.
 MAX_BYTES=$((25 * 1024 * 1024))
 MAX_ZOOM="${MAX_ZOOM:-15}"
-FONTS="${FONTS:-Noto Sans Regular,Noto Sans Medium,Noto Sans Italic}"
+FONTS="${FONTS:-Noto Sans Regular}"
 SPRITE="${SPRITE:-light}"
 ASSETS_BASE="https://protomaps.github.io/basemaps-assets"
 BUILDS_BASE="https://build.protomaps.com"
