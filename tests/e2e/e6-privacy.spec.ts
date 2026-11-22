@@ -155,7 +155,7 @@ for (const theme of ['dark', 'light'] as const) {
         page.getByRole('heading', { level: 1, name: 'We’ve updated our terms' }),
       ).toBeVisible();
       await expect(page.getByRole('heading', { name: 'What changed' })).toBeVisible();
-      await expect(page.getByText(/cost-sharing rules are now written out/)).toBeVisible();
+      await expect(page.getByText(/Who runs Haide is now stated/)).toBeVisible();
       await expect(page.getByRole('link', { name: 'Read the full Terms of use' })).toBeVisible();
       // no age box in update mode
       await expect(page.getByLabel('I am 18 or older')).toHaveCount(0);

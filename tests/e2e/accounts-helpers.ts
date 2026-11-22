@@ -9,6 +9,16 @@ export const PNG_1X1 = Buffer.from(
 const AVATAR_DATA_URL = `data:image/png;base64,${PNG_1X1.toString('base64')}`;
 
 export async function expectNoAxeViolations(page: Page) {
+  // Let entrance animations (sheets, toasts) end first: axe reads the blended colour mid-fade and
+  // reports a false 4.43:1. Looping animations (glow, spinners) are skipped, they never finish.
+  await page.evaluate(() =>
+    Promise.all(
+      document
+        .getAnimations()
+        .filter((a) => Number.isFinite(a.effect?.getComputedTiming().endTime ?? Infinity))
+        .map((a) => a.finished.catch(() => undefined)),
+    ),
+  );
   const results = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
     .analyze();
