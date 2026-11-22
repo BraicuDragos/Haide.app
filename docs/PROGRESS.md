@@ -3,8 +3,8 @@
 > Updated by the Orchestrator after every step. Read at the start of every session.
 
 ## Current state
-- **Phase:** 7 prep — E-DM and E1–E8 merged (PRs #5–#14). Branch `chore/deploy` (zero-cost deploy config, legal v1.2, ADR 0040) in progress. GATE 3 = owner sets `DEPLOY_ENABLED=true` and approves the `production` run
-- **Open PRs:** chore/deploy (once opened)
+- **Phase:** 7 — deploy. E-DM and E1–E8 merged (PRs #5–#14), deploy config + legal v1.2 merged (#15). GATE 3 in progress: `DEPLOY_ENABLED=true` is set; the first real deploy has not yet passed the migrations step on hosted Supabase (see Deploy status below)
+- **Open PRs (2026-11-22 night):** #16 deploy fixes (CI green), #18 hardening (CI green), #17 map tiles + MapLibre worker fix (CI green). Owner merges all three (all CI green), then approves the Deploy run.
 - **Approved gates:** GATE 1 (PR #1), GATE 2 (PR #2); merged: E0 #3, E1 #5, E-DM #6, E2 #7, E3 #8, E4 #9
 
 ## Done
@@ -23,7 +23,7 @@
 - [x] E8 - liquidity boosters (`feat/liquidity`): ADRs 0036-0039, spec `docs/architecture/e8-liquidity-spec.md`, migration `20261123090000_liquidity.sql` (ride_series, ride_alerts + hits, push_subscriptions, auto_accept), recurring rides (28 days, skips days over the 4/day limit), ride alerts matched in the tick (once per ride, push first), auto-accept under the ride lock, own RFC 8291 web push sender, monthly stats; alerts/push/series screens. QA: APPROVED after 5 small fixes (1316 unit, 243 mocked Playwright passed, initial JS 167.0 kB gzip). Ride-wanted posts (E8-6) out of scope. CI must confirm: migration, pgTAP 011 (82) and 009 (147), `tests/integration/liquidity.test.ts`, the ci.yml VAPID step, real push delivery. Owner at deploy: run `node scripts/vapid-keys.mjs`, set VAPID_PUBLIC_KEY/PRIVATE_KEY/SUBJECT (push stays off without them). Docs still owed: deploy.md VAPID runbook, DPIA.
 
 ## Next step
-- Owner: merge the chore/deploy PR, set variable `DEPLOY_ENABLED=true`, run Actions → Deploy, approve on the phone; then set `PROD_API_URL`, grant yourself admin (deploy.md 5.1). Open: map tiles (`apps/web/public/tiles/sibiu.pmtiles`) not in the repo yet, see Blockers.
+- Owner: follow `docs/OWNER_CHECKLIST.md` (merge #16, #18, #17 in that order, approve the Deploy run, then the post-deploy steps).
 - Older: E5 (ratings, no-show, reliability), then E6…E8. E-DM leftovers: match moment + live trip + shared-element ride morphs land with E3/E4 screens; real-phone fps, real tiles, screen readers unverified
 
 ## Not verified locally in E1 — CI must confirm
@@ -77,3 +77,11 @@
 - Done: `production` environment has required reviewer + all 15 secrets (owner 10, generated 5 incl. VAPID) and 3 variables. `DEPLOY_ENABLED` and `PROD_API_URL` deliberately unset. CI re-run of main after E8 started (one flaky 503 in rides.test.ts, 145/148 passed).
 - Open: map tiles file missing (`build-tiles.sh` needs the go-pmtiles CLI; running a downloaded binary was blocked in the agent session, owner can run it or approve). Without it the map falls back to text.
 - Open: Brevo mail from a Gmail sender may hit spam; Google OAuth in Testing mode needs each tester added as a test user.
+
+## Deploy status (2026-11-22, autonomous night session)
+- Run 1 failed at `db push` (CLI now defaults to the local stack): fixed with `--remote --yes` (#16). Run 2 reached the real project and stopped at the confirmation prompt (nothing changed): fixed. A third run (45067753344, from `fix/deploy-remote`) is queued and waits for the owner's approval; claude never approves it.
+- #16 also: avatars storage bucket step (hosted runs no seed.sql), `scripts/deploy/pooler-url.sh` fallback when `supabase link` writes no pooler-url, URL-encoded API password, quoted EMAIL_FROM, local redirect URLs removed from prod auth config. Untested against hosted Supabase until the run is approved: migrations (gazetteer data 2.3 MB), roles/Vault, `config push`, function deploy, Pages deploy, smoke test.
+- #18 hardening (CI green): search time-band widening (fixed the flaky "empty window" test), deleted-user write guards (profile, photo, vehicle, publish), admin cannot suspend admin (migration 20261125090000, pgTAP 010 plan 116), idempotency-key replay rule.
+- #17 map: real Sibiu tiles built by the new Build tiles workflow (5.9 MB), plus two real bugs the tiles exposed: the map wrapper `role="img"` contained focusable MapLibre controls (axe nested-interactive), and the MapLibre worker file was never emitted by Vite so the map stayed on "Loading map" forever.
+- CI root causes fixed on the way: consent call without retry (Edge Runtime 5xx), integration files now run sequentially, bookings fixture left the coverage box, e2e legal text, axe read a sheet mid-fade.
+- Known remaining (not blocking): Brevo mail from a Gmail sender may land in spam; Google OAuth in Testing mode needs each tester as a test user; the service worker precache for the new MapLibre worker asset is unverified; no Lighthouse step in CI; real-phone, real-email and real-push delivery unverified; legal text still says "private individual" (v1.2) and has no postal address.
