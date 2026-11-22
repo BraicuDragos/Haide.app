@@ -195,10 +195,11 @@ export default function RouteMap({
         touchPitch: false,
         keyboard: false, // the canvas is decorative for assistive tech: the text alternative carries the content
         cooperativeGestures: true,
-        attributionControl: { compact: true },
+        attributionControl: false, // rendered below as a plain link, outside the aria-hidden canvas
       });
       map = m;
       m.touchZoomRotate.disableRotation();
+      m.getCanvas().removeAttribute('tabindex'); // the canvas must not be a keyboard stop
 
       m.on('error', () => undefined); // missing glyphs/tiles must never break the page
       // Re-project the route whenever the view changes (rare: the map is static under cooperative gestures).
@@ -292,8 +293,8 @@ export default function RouteMap({
   return (
     <figure className={`m-0 flex flex-col gap-2 ${className}`}>
       <div className="relative">
-        <div ref={frame} className="map-frame" role="img" aria-label={label}>
-          {phase !== 'unavailable' && <div ref={host} className="size-full" />}
+        <div ref={frame} className="map-frame" role="group" aria-label={label}>
+          {phase !== 'unavailable' && <div ref={host} className="size-full" aria-hidden="true" />}
           {phase === 'unavailable' && w > 0 && (
             <svg
               className="map-plain"
@@ -313,6 +314,16 @@ export default function RouteMap({
             <div role="status" className="absolute inset-0 grid place-items-center">
               <MiniLoader label={t('map.loading')} />
             </div>
+          )}
+          {phase !== 'unavailable' && (
+            <a
+              className="map-attribution glass"
+              href="https://www.openstreetmap.org/copyright"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {t('map.attribution')}
+            </a>
           )}
           {phase === 'unavailable' && <p className="map-note glass">{t('map.unavailable')}</p>}
         </div>

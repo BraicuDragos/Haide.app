@@ -219,7 +219,7 @@ test('security headers (CSP) are served and the app runs under them', async ({ p
 test('RouteMap degrades gracefully and keeps its text alternative', async ({ page }) => {
   await page.goto('/dev/map');
   await expect(page.getByRole('heading', { level: 1, name: 'Map demo' })).toBeVisible();
-  await expect(page.getByRole('img', { name: /Map of the route/ })).toHaveCount(2);
+  await expect(page.getByRole('group', { name: /Map of the route/ })).toHaveCount(2);
   await expect(page.getByText('Pickup: Cisnădie. Drop-off: Piața Mare.').first()).toBeVisible();
   // The tile file may be absent before scripts/geo/build-tiles.sh runs: the canvas or the fallback message is fine.
   await expect(

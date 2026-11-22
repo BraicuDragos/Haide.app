@@ -157,7 +157,7 @@ for (const theme of ['dark', 'light'] as const) {
       await expect(page.getByText('No requests yet.')).toBeVisible();
       await expect(page.getByText('No passengers yet.', { exact: true })).toBeVisible();
       await expect(page.getByRole('row', { name: /3 passengers/ })).toContainText('1.50 RON');
-      await expect(page.getByRole('img', { name: /exact pickup and drop-off/ })).toBeVisible();
+      await expect(page.getByRole('group', { name: /exact pickup and drop-off/ })).toBeVisible();
       await expectNoAxeViolations(page);
 
       // Driving list (2.5)
