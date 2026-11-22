@@ -14,6 +14,7 @@ describe('parseEnv', () => {
     expect(env.ROUTING_PROVIDER).toBe('fixture');
     expect(env.EMAIL_PROVIDER).toBe('console');
     expect(env.EMAIL_DAILY_CAP).toBe(280);
+    expect(env.EMAIL_SUPPORT_TO).toBe('dragosbraicu9@gmail.com');
     expect(env.CORS_ORIGINS).toEqual(['http://localhost:5173']);
   });
 

@@ -40,7 +40,7 @@ import {
  *   INT_DB=skip      skips the whole file
  *   CRON_SECRET      same value as the function's: lets the suite call POST /internal/tick (the tests that
  *                    run the tick are skipped without it)
- *   INT_LEGAL_BUMP=1 also runs the test that publishes legal text v1.2. It changes the current document
+ *   INT_LEGAL_BUMP=1 also runs the test that publishes legal text v1.3. It changes the current document
  *                    version for everyone for a moment, so run this file alone when you set it.
  * The function needs SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (set by `supabase functions serve`)
  * for the avatar and auth-user removal.
@@ -463,8 +463,8 @@ describe.skipIf(!BASE || !SECRET || DB_SKIP)('privacy against the local stack', 
 
   it('the newest published legal versions equal the version in the web content files', async () => {
     const files = {
-      terms: '../../apps/web/src/features/policy/content/terms.en.ts',
-      privacy: '../../apps/web/src/features/policy/content/privacy.en.ts',
+      terms: '../../apps/web/src/features/policy/content/terms.v1_2.en.ts',
+      privacy: '../../apps/web/src/features/policy/content/privacy.v1_2.en.ts',
     } as const;
     for (const kind of ['terms', 'privacy'] as const) {
       const path = new URL(files[kind], import.meta.url);
@@ -485,8 +485,8 @@ describe.skipIf(!BASE || !SECRET || DB_SKIP)('privacy against the local stack', 
       try {
         await sql`
         insert into app.legal_documents (kind, version, published_at, url) values
-          ('terms', '1.2', now() - interval '1 minute', '/policy/terms'),
-          ('privacy', '1.2', now() - interval '1 minute', '/policy/privacy')`;
+          ('terms', '1.3', now() - interval '1 minute', '/policy/terms'),
+          ('privacy', '1.3', now() - interval '1 minute', '/policy/privacy')`;
         const me = meResponseSchema.parse(await (await u.call('/me')).json());
         expect(me.consent).toMatchObject({ upToDate: false, reaccept: true });
         expect(me.consent.required).toEqual(['terms', 'privacy']);
@@ -496,8 +496,8 @@ describe.skipIf(!BASE || !SECRET || DB_SKIP)('privacy against the local stack', 
 
         // accepting needs no age18 again
         const ok = await u.send('POST', '/me/consents', {
-          termsVersion: '1.2',
-          privacyVersion: '1.2',
+          termsVersion: '1.3',
+          privacyVersion: '1.3',
         });
         expect(ok.status).toBe(204);
         expect(meResponseSchema.parse(await (await u.call('/me')).json()).consent).toMatchObject({
@@ -507,10 +507,10 @@ describe.skipIf(!BASE || !SECRET || DB_SKIP)('privacy against the local stack', 
 
         // a user who has not accepted can still delete
         const other = await createUser({ firstName: 'Late' });
-        await sql`delete from app.consents where user_id = ${other.id}::uuid and document_version = '1.2'`;
+        await sql`delete from app.consents where user_id = ${other.id}::uuid and document_version = '1.3'`;
         expect((await deleteMe(other)).status).toBe(204);
       } finally {
-        await sql`delete from app.legal_documents where version = '1.2'`;
+        await sql`delete from app.legal_documents where version = '1.3'`;
       }
       expect(await (await fetch(`${BASE}/legal/current`)).json()).toEqual(before);
     },

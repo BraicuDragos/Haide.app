@@ -19,10 +19,10 @@ function renderScreen(ui: React.ReactElement) {
   );
 }
 
-describe('policy content v1.1', () => {
-  it('both documents are version 1.1 (matches the legal_documents migration)', async () => {
-    expect((await loadPolicy('terms')).version).toBe('1.1');
-    expect((await loadPolicy('privacy')).version).toBe('1.1');
+describe('policy content v1.2', () => {
+  it('both documents are version 1.2 (matches the legal_documents migration)', async () => {
+    expect((await loadPolicy('terms')).version).toBe('1.2');
+    expect((await loadPolicy('privacy')).version).toBe('1.2');
   });
 
   it('terms carry the cost-sharing, age and ride-limit clauses', async () => {
@@ -41,7 +41,9 @@ describe('policy content v1.1', () => {
     for (const id of ['controller', 'purposes', 'processors', 'retention', 'rights', 'complaints'])
       expect(ids).toContain(id);
     const text = doc.sections.flatMap((s) => s.body).join(' ');
-    expect(text).toMatch(/\[name, registration number and address to be added before launch\]/);
+    expect(text).toMatch(/Dragoș Braicu, a private individual/);
+    expect(text).toMatch(/dragosbraicu9@gmail\.com/);
+    expect(text).not.toMatch(/haide\.example|name, registration number/);
     expect(text).toMatch(/ANSPDCP/);
     expect(text).toMatch(/anspdcp@dataprotection\.ro/);
   });
@@ -57,7 +59,7 @@ describe('policy content v1.1', () => {
 describe('PolicyScreen', () => {
   it('renders the terms with a contents list that links to every section', async () => {
     renderScreen(<TermsScreen />);
-    expect(await screen.findByText(/Version 1\.1, in force from 21 November 2026/)).toBeTruthy();
+    expect(await screen.findByText(/Version 1\.2, in force from 22 November 2026/)).toBeTruthy();
     const nav = screen.getByRole('navigation', { name: 'Contents' });
     const links = nav.querySelectorAll('a');
     expect(links.length).toBeGreaterThan(5);

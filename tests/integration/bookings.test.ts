@@ -453,9 +453,12 @@ describe.skipIf(!BASE || !SECRET)('booking lifecycle against the local stack', (
     const own = await requestSeat(driver, ride.id, whole(l));
     expect((await errorOf(own)).code).toBe('OWN_RIDE');
 
+    // 3 km off the ride, but always inside the coverage box (lat 45.68 to 45.86): lanes start
+    // anywhere in 45.70 to 45.84, so shifting north blindly fails with VALIDATION_FAILED near the top.
+    const dy = l.from.lat > 45.77 ? -0.03 : 0.03;
     const away = await requestSeat(p1, ride.id, {
-      from: { lat: r5(l.from.lat + 0.03), lng: l.from.lng },
-      to: { lat: r5(l.to.lat + 0.03), lng: l.to.lng },
+      from: { lat: r5(l.from.lat + dy), lng: l.from.lng },
+      to: { lat: r5(l.to.lat + dy), lng: l.to.lng },
     });
     expect((await errorOf(away)).code).toBe('NO_LONGER_MATCHES');
 

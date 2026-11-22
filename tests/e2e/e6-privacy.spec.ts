@@ -98,13 +98,13 @@ for (const theme of ['dark', 'light'] as const) {
       ).toBeVisible();
     });
 
-    test('Policy pages open signed out, with contents anchors and the v1.1 text', async ({
+    test('Policy pages open signed out, with contents anchors and the v1.2 text', async ({
       page,
     }) => {
       await setupE6(page, { theme, signedIn: false });
       await page.goto('/policy/terms');
       await expect(page.getByRole('heading', { level: 1, name: 'Terms of use' })).toBeVisible();
-      await expect(page.getByText('Version 1.1, in force from 21 November 2026')).toBeVisible();
+      await expect(page.getByText('Version 1.2, in force from 22 November 2026')).toBeVisible();
       await expect(page.getByText(/The driver makes no profit from a ride/)).toBeVisible();
       await expect(
         page.getByText(/Drivers must not ask for extra payments, surcharges or tips/),
@@ -121,7 +121,7 @@ for (const theme of ['dark', 'light'] as const) {
       await page.goto('/policy/privacy');
       await expect(page.getByRole('heading', { level: 1, name: 'Privacy policy' })).toBeVisible();
       await expect(
-        page.getByText(/\[name, registration number and address to be added before launch\]/),
+        page.getByText(/Data controller: Dragoș Braicu, a private individual/),
       ).toBeVisible();
       await expect(page.getByText(/ANSPDCP/).first()).toBeVisible();
       await expect(page.getByRole('heading', { name: /Processors and transfers/ })).toBeVisible();
@@ -155,7 +155,7 @@ for (const theme of ['dark', 'light'] as const) {
         page.getByRole('heading', { level: 1, name: 'We’ve updated our terms' }),
       ).toBeVisible();
       await expect(page.getByRole('heading', { name: 'What changed' })).toBeVisible();
-      await expect(page.getByText(/cost-sharing rules are now written out/)).toBeVisible();
+      await expect(page.getByText(/Who runs Haide is now stated/)).toBeVisible();
       await expect(page.getByRole('link', { name: 'Read the full Terms of use' })).toBeVisible();
       // no age box in update mode
       await expect(page.getByLabel('I am 18 or older')).toHaveCount(0);
@@ -171,7 +171,7 @@ for (const theme of ['dark', 'light'] as const) {
       await page.getByLabel('I accept the updated Terms of use and Privacy policy').check();
       await page.getByRole('button', { name: 'Agree and continue' }).click();
       await expect(page).toHaveURL(/\/rides$/);
-      expect(calls.consents).toEqual([{ termsVersion: '1.1', privacyVersion: '1.1' }]);
+      expect(calls.consents).toEqual([{ termsVersion: '1.2', privacyVersion: '1.2' }]);
     });
 
     test('updated terms: policy pages stay readable, and delete is offered', async ({ page }) => {

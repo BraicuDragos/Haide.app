@@ -3,8 +3,8 @@
 > Updated by the Orchestrator after every step. Read at the start of every session.
 
 ## Current state
-- **Phase:** 6 — features. E-DM and E1–E7 merged (PRs #5–#13); E8 (`feat/liquidity`) implemented and QA-approved, PR being opened. After E8 merges: GATE 3 (deploy)
-- **Open PRs:** E8 liquidity (see PR list)
+- **Phase:** 7 prep — E-DM and E1–E8 merged (PRs #5–#14). Branch `chore/deploy` (zero-cost deploy config, legal v1.2, ADR 0040) in progress. GATE 3 = owner sets `DEPLOY_ENABLED=true` and approves the `production` run
+- **Open PRs:** chore/deploy (once opened)
 - **Approved gates:** GATE 1 (PR #1), GATE 2 (PR #2); merged: E0 #3, E1 #5, E-DM #6, E2 #7, E3 #8, E4 #9
 
 ## Done
@@ -23,7 +23,7 @@
 - [x] E8 - liquidity boosters (`feat/liquidity`): ADRs 0036-0039, spec `docs/architecture/e8-liquidity-spec.md`, migration `20261123090000_liquidity.sql` (ride_series, ride_alerts + hits, push_subscriptions, auto_accept), recurring rides (28 days, skips days over the 4/day limit), ride alerts matched in the tick (once per ride, push first), auto-accept under the ride lock, own RFC 8291 web push sender, monthly stats; alerts/push/series screens. QA: APPROVED after 5 small fixes (1316 unit, 243 mocked Playwright passed, initial JS 167.0 kB gzip). Ride-wanted posts (E8-6) out of scope. CI must confirm: migration, pgTAP 011 (82) and 009 (147), `tests/integration/liquidity.test.ts`, the ci.yml VAPID step, real push delivery. Owner at deploy: run `node scripts/vapid-keys.mjs`, set VAPID_PUBLIC_KEY/PRIVATE_KEY/SUBJECT (push stays off without them). Docs still owed: deploy.md VAPID runbook, DPIA.
 
 ## Next step
-- Owner: check CI on the E8 PR (`gh pr checks`), merge it, then GATE 3 (deploy; batch in `docs/architecture/deploy.md` §3).
+- Owner: merge the chore/deploy PR, set variable `DEPLOY_ENABLED=true`, run Actions → Deploy, approve on the phone; then set `PROD_API_URL`, grant yourself admin (deploy.md 5.1). Open: map tiles (`apps/web/public/tiles/sibiu.pmtiles`) not in the repo yet, see Blockers.
 - Older: E5 (ratings, no-show, reliability), then E6…E8. E-DM leftovers: match moment + live trip + shared-element ride morphs land with E3/E4 screens; real-phone fps, real tiles, screen readers unverified
 
 ## Not verified locally in E1 — CI must confirm
@@ -72,3 +72,8 @@
 - No Docker/psql/Deno/Supabase CLI on the review machine: migration `20261122090000_metrics_admin.sql` (the props CHECK validating existing rows, the `admin_actions_action_check` name, dropping the 4-argument `admin_suspend_user`, `admin_cron_runs` where pg_cron has no runs), pgTAP 010 (114 assertions, recounted section by section and matches `plan(114)`; the seeded week answers, the ISO week and Europe/Bucharest DST bounds, the retention cohort, the cancellation rate without system cancels, the high-volume boundary at 40 and 41 and the fixture inserts against the E4/E5 constraints were checked by hand, never executed), pgTAP 008 after the signature change, `tests/integration/admin.test.ts` and `events.test.ts` (event audit, parallel suspends, parallel energy posts; the tick flows need CRON_SECRET), the SQL in `api/repo/{admin,metrics,energyPrices}.ts`, `deno check/lint`.
 - Lighthouse not run (heading order fixed by reading); axe (WCAG tags only) clean on the five admin screens, dark and light, at 360 px; real phone unverified. Real Brevo mail for `account_suspended` and `account_reinstated` unverified; the suspension wording joins the pending legal review.
 - Low findings: (1) `matchRate.overall` carries a status judged against the launch-corridor target, the UI shows only the launch status; (2) reports are cards at every width, not a table from 1024 px (spec 7.2); (3) a failed `/me` call inside the admin gate shows the not-found screen instead of an error; (4) an admin can suspend another admin (the spec only blocks self); (5) `deploy.md` repeats the suspend and unsuspend rows (UI row plus SQL rows); (6) the payload guard finds phones, emails, plates and coordinates by pattern, so a statement can still hold a name or a street: the hint tells the admin not to; (7) initial JS grew 1.2 kB (spec asked for within 1 kB); (8) `repo/rides.ts` still builds the `ride_published` props in SQL instead of typed props (the CHECK and the integration audit cover it); (9) report `details` are the reporter's free text and are shown to admins as written, so they can hold a phone number.
+
+## Deploy prep (2026-11-22)
+- Done: `production` environment has required reviewer + all 15 secrets (owner 10, generated 5 incl. VAPID) and 3 variables. `DEPLOY_ENABLED` and `PROD_API_URL` deliberately unset. CI re-run of main after E8 started (one flaky 503 in rides.test.ts, 145/148 passed).
+- Open: map tiles file missing (`build-tiles.sh` needs the go-pmtiles CLI; running a downloaded binary was blocked in the agent session, owner can run it or approve). Without it the map falls back to text.
+- Open: Brevo mail from a Gmail sender may hit spam; Google OAuth in Testing mode needs each tester added as a test user.

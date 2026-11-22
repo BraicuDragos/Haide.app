@@ -19,13 +19,13 @@ export interface E6Options {
 }
 
 const LEGAL = {
-  terms: { version: '1.1', url: '/policy/terms' },
-  privacy: { version: '1.1', url: '/policy/privacy' },
+  terms: { version: '1.2', url: '/policy/terms' },
+  privacy: { version: '1.2', url: '/policy/privacy' },
 };
 
 /**
  * Mocked API for the E6 screens (e6 spec section 6): GET /me with `consent.reaccept`, DELETE /me, POST /me/consents
- * without `age18`, POST /me/data-export-request, GET /legal/current at v1.1. The server rules are covered by the
+ * without `age18`, POST /me/data-export-request, GET /legal/current at v1.2. The server rules are covered by the
  * backend suites; these specs check what the person sees and sends at 360x800.
  */
 export async function setupE6(page: Page, opts: E6Options = {}) {

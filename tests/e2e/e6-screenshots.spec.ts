@@ -72,7 +72,7 @@ for (const theme of ['dark', 'light'] as const) {
     await setupE6(page, { theme, reaccept: true });
     await page.goto('/rides');
     await page.getByRole('heading', { level: 1, name: 'We’ve updated our terms' }).waitFor();
-    await page.getByText(/cost-sharing rules are now written out/).waitFor();
+    await page.getByText(/Who runs Haide is now stated/).waitFor();
     await page.waitForTimeout(600);
     await page.screenshot({
       path: `${OUT}/1.3b-consent-update-${theme}.jpg`,
