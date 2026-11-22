@@ -63,7 +63,8 @@ jobs:
 
       - name: Push migrations
         if: ${{ env.ONLY == 'all' }}
-        run: supabase db push --remote
+        # CLI >= 2.x defaults to the local stack (--remote) and asks for confirmation (--yes).
+        run: supabase db push --remote --yes
 
       - name: Roles and Vault (idempotent)
         if: ${{ env.ONLY == 'all' }}
