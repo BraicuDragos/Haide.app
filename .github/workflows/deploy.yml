@@ -151,11 +151,11 @@ jobs:
             echo "VAPID_SUBJECT=mailto:${SUPPORT_EMAIL}"
             echo "IP_HASH_SALT_SEED=${IP_HASH_SALT_SEED}"
           } > "$RUNNER_TEMP/function.env"
-          supabase secrets set --env-file "$RUNNER_TEMP/function.env" --project-ref "$PROJECT_REF"
+          supabase secrets set --env-file "$RUNNER_TEMP/function.env" --project-ref "$PROJECT_REF" --yes
           rm -f "$RUNNER_TEMP/function.env"
 
       - name: Deploy API function
-        run: supabase functions deploy api --no-verify-jwt --project-ref "$PROJECT_REF"
+        run: supabase functions deploy api --no-verify-jwt --project-ref "$PROJECT_REF" --yes
 
       - name: Deploy web to Cloudflare Pages
         if: ${{ env.ONLY == 'all' }}
