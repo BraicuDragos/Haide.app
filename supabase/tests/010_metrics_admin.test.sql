@@ -278,7 +278,7 @@ select throws_ok($$select app.admin_suspend_user('00000000-0000-4000-8000-000000
   '22023', null, 'an unknown reason code is rejected');
 select ok(to_regprocedure('app.admin_suspend_user(uuid, text, uuid, uuid)') is null,
   'the four-argument overload is gone (no ambiguity)');
-select throws_ok($$select app.admin_suspend_user('00000000-0000-4000-8000-000000001003'::uuid, 'x', '00000000-0000-4000-8000-000000001001'::uuid, null, 'rude')$$,
+select throws_ok($$select app.admin_suspend_user('00000000-0000-4000-8000-000000001003'::uuid, 'x', '00000000-0000-4000-8000-000000001001'::uuid, null, 'harassment')$$,
   '42501', null, 'an admin cannot be suspended, not even by another admin');
 select is((select status::text from app.profiles where id = pg_temp.u(3)), 'active', 'and the admin stays active');
 
