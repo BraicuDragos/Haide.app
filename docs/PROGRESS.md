@@ -3,8 +3,8 @@
 > Updated by the Orchestrator after every step. Read at the start of every session.
 
 ## Current state
-- **Phase:** 7 — deploy. E-DM and E1–E8 merged (PRs #5–#14), deploy config + legal v1.2 merged (#15). GATE 3 in progress: `DEPLOY_ENABLED=true` is set; the first real deploy has not yet passed the migrations step on hosted Supabase (see Deploy status below)
-- **Open PRs (2026-11-22 night):** #16 deploy fixes (CI green), #18 hardening (CI green), #17 map tiles + MapLibre worker fix (CI green). Owner merges all three (all CI green), then approves the Deploy run.
+- **Phase:** 7 — deployed. First successful production deploy 2026-11-23 (run 45073870863, from `fix/deploy-yes`, PR #20). Live: https://haide.pages.dev, API `https://ddyqnfxrizpswvpsrpbc.supabase.co/functions/v1/api/v1`. Remaining work is owner-side verification (see docs/OWNER_CHECKLIST.md)
+- **Open PRs:** #20 (--yes for secrets set / functions deploy; the live deploy was built from this branch, merge it so main matches) and the docs PR with this text.
 - **Approved gates:** GATE 1 (PR #1), GATE 2 (PR #2); merged: E0 #3, E1 #5, E-DM #6, E2 #7, E3 #8, E4 #9
 
 ## Done
@@ -85,3 +85,10 @@
 - #17 map: real Sibiu tiles built by the new Build tiles workflow (5.9 MB), plus two real bugs the tiles exposed: the map wrapper `role="img"` contained focusable MapLibre controls (axe nested-interactive), and the MapLibre worker file was never emitted by Vite so the map stayed on "Loading map" forever.
 - CI root causes fixed on the way: consent call without retry (Edge Runtime 5xx), integration files now run sequentially, bookings fixture left the coverage box, e2e legal text, axe read a sheet mid-fade.
 - Known remaining (not blocking): Brevo mail from a Gmail sender may land in spam; Google OAuth in Testing mode needs each tester as a test user; the service worker precache for the new MapLibre worker asset is unverified; no Lighthouse step in CI; real-phone, real-email and real-push delivery unverified; legal text still says "private individual" (v1.2) and has no postal address.
+
+## Production verified (2026-11-23, by claude with curl, no login)
+- Deploy run green end to end: migrations (11), avatars bucket, roles/Vault, auth config (Google + Brevo SMTP), 17 function secrets, API function, Pages, smoke test.
+- Checked live: `GET /health` db ok; `GET /legal/current` = 1.2; signed-out `POST /search` runs (empty, no rides yet); `GET /places?q=Piata Mare` returns "Piața Mare" (unaccent + gazetteer work on hosted); `GET /push/config` returns the VAPID key; `/tiles/sibiu.pmtiles` is real PMTiles data (not the SPA fallback); manifest, sw.js, HSTS/CSP/frame headers present; CORS preflight allows only the Pages origin; Keepalive workflow green; a magic-link request for the owner's address returned 200 (SMTP accepted, inbox delivery not checked).
+- Repo variable PROD_API_URL set by claude (turns on Keepalive and Backup).
+- **Backup workflow fails** (manual run 45120623945): it has no `environment:`, so the secrets stored in the `production` environment arrive empty. Owner must add SUPABASE_ACCESS_TOKEN and SUPABASE_DB_PASSWORD as repository-level secrets (values cannot be copied by claude); then run Actions -> Backup once and check the artifact.
+- Not verifiable without a login: sign-in (Google, magic link mail delivery), onboarding, publish/search/book on real data, push delivery, pg_cron `haide-tick` runs (needs the Supabase dashboard), admin screens.

@@ -2,19 +2,14 @@
 
 > Written 2026-11-22 by the Orchestrator. Claude never approves a production deploy, never merges and never changes environment protection: these steps are yours.
 
-## 1. Merge the PRs (in this order; all three had green CI on 2026-11-22 night, re-check `gh pr checks <n>` if you wait)
-1. **#16** `fix(deploy)`: deploy workflow fixes (needed before any deploy).
-2. **#18** `fix: hardening`: deleted-user guards, admin rule, idempotency, search flake.
-3. **#17** `feat(web)`: map tiles + MapLibre worker fix + a11y fix.
-Each merge to `main` queues a Deploy run that waits for you; GitHub keeps only the newest waiting run, so the one you approve at the end is the one built from the last merge.
+## 1. Done already (by you and claude, 2026-11-23)
+- PRs #15-#19 merged, production deploy approved and green, `PROD_API_URL` set. Still to merge: **#20** (the live deploy was built from its branch; merging makes `main` identical) and the docs PR. A merge queues a Deploy run: approve it or cancel it, both are fine.
 
-## 2. Approve the deploy
-- Actions → **Deploy** → open the newest *Waiting* run → **Review deployments** → tick `production` → **Approve and deploy** (works in the GitHub mobile app).
-- Tell Claude "deploy running". Claude reads the log and fixes what breaks (this is the first run that touches the real Supabase project; expect one or two fixes).
-- A run that is stuck on a branch name (`fix/deploy-remote`) can be cancelled: Actions → that run → Cancel.
+## 2. Fix the backup (5 minutes)
+- Settings -> Secrets and variables -> Actions -> **Secrets** tab -> New repository secret, twice: `SUPABASE_ACCESS_TOKEN` (Supabase -> Account -> Access Tokens, make a new one or reuse the `github-actions` token value) and `SUPABASE_DB_PASSWORD` (the database password you saved from the project creation; if lost: Supabase -> Project Settings -> Database -> Reset password, then update the same secret in the `production` environment too).
+- Then Actions -> Backup -> Run workflow, and tell claude (it checks the artifact is created).
 
-## 3. After the deploy is green
-1. Set the repo variable `PROD_API_URL` = `https://<project-ref>.supabase.co/functions/v1/api/v1` (no trailing slash). Settings → Secrets and variables → Actions → Variables. This turns on the nightly backup and the keepalive (free Supabase pauses after 7 days idle).
+## 3. Do on your side (claude cannot log in)
 2. Open `https://haide.pages.dev` on your phone, sign in once, then in Supabase → SQL Editor run:
    `update app.profiles set role = 'admin' where id = (select id from auth.users where email = 'dragosbraicu9@gmail.com');`
 3. Google Cloud → Google Auth Platform → Audience: add yourself and each tester as a **test user** (Testing mode allows 100). Without this Google sign-in is refused.
