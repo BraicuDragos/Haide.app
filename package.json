@@ -34,7 +34,7 @@
     "eslint": "10.15.0",
     "eslint-config-prettier": "10.1.8",
     "fast-check": "4.10.3",
-    "globals": "16.5.0",
+    "globals": "17.14.0",
     "hono": "4.13.19",
     "jimp": "1.6.1",
     "jose": "6.2.18",
