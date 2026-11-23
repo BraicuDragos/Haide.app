@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { keys } from '@/api/keys';
 import { getPopularRoutes } from '@/api/popular';
@@ -6,11 +7,13 @@ import type { PopularRoute } from '@/api/types';
 import { t, tp } from '@/i18n';
 import { bucharestToday, dayOptions } from '@/lib/dates';
 import { minTimeFor } from '@/lib/timeSlots';
+import { ms, reduced as reducedMotion } from '@/motion/core';
 import { Button } from '@/ui/Button';
 import { Icon } from '@/ui/Icon';
 import { Loader } from '@/ui/Loader';
 import { Notice } from '@/ui/Notice';
 import { saveSearch, type SearchCriteria } from '../searchState';
+import { RouteLaunch } from './RouteLaunch';
 
 /**
  * Search criteria for one tap on a popular route: today, the next free 5 minute slot (Europe/Bucharest), plus or minus
@@ -37,10 +40,30 @@ export function PopularRoutes() {
     staleTime: 5 * 60_000,
   });
   const items = q.data?.items ?? [];
+  const [launch, setLaunch] = useState<{ key: string; w: number; h: number; said: string } | null>(
+    null,
+  );
+  const busy = useRef(false);
+  const timer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(timer.current), []);
 
-  function open(route: PopularRoute) {
-    saveSearch(criteriaFor(route));
-    void navigate('/results');
+  /**
+   * Saves the search and opens the results after a short signature moment on the tapped card (about `reveal`, the
+   * results open while the light arrives). With reduced motion: the card is just highlighted for `fast`. Taps while
+   * launching are ignored, so there is never a double navigation.
+   */
+  function open(route: PopularRoute, key: string, said: string, card: HTMLElement) {
+    if (busy.current) return;
+    busy.current = true;
+    const calm = reducedMotion();
+    setLaunch({ key, w: calm ? 0 : card.offsetWidth, h: calm ? 0 : card.offsetHeight, said });
+    timer.current = window.setTimeout(
+      () => {
+        saveSearch(criteriaFor(route));
+        void navigate('/results');
+      },
+      ms(calm ? 'fast' : 'reveal'),
+    );
   }
 
   return (
@@ -52,6 +75,9 @@ export function PopularRoutes() {
       <h2 id="popular-h" className="type-h3">
         {t('find.corridors')}
       </h2>
+      <p aria-live="polite" className="sr-only">
+        {launch?.said}
+      </p>
       {q.isPending && <Loader label={t('find.popular.loading')} />}
       {q.isError && (
         <div className="flex flex-col items-start gap-3">
@@ -65,15 +91,27 @@ export function PopularRoutes() {
         <p className="text-text-muted">{t('find.popular.empty')}</p>
       )}
       {q.isSuccess && items.length > 0 && (
-        <ul className="m-0 flex list-none flex-col gap-2 p-0">
+        <ul
+          className="pr-list m-0 flex list-none flex-col gap-2 p-0"
+          data-launching={launch ? '' : undefined}
+        >
           {items.map((r) => {
             const name = t('find.popular.route', { from: r.from.name, to: r.to.name });
+            const key = `${r.from.id}:${r.to.id}`;
+            const picked = launch?.key === key;
             return (
-              <li key={`${r.from.id}:${r.to.id}`}>
+              <li key={key}>
                 <button
                   type="button"
-                  onClick={() => open(r)}
-                  className="card flex min-h-12 w-full items-center gap-3 px-4 py-3 text-left font-semibold"
+                  onClick={(e) =>
+                    open(
+                      r,
+                      key,
+                      t('find.popular.searching', { from: r.from.name, to: r.to.name }),
+                      e.currentTarget,
+                    )
+                  }
+                  className={`card pr-card flex min-h-12 w-full items-center gap-3 px-4 py-3 text-left font-semibold${picked ? ' is-picked' : ''}`}
                 >
                   <Icon name="route" className="text-outline" />
                   <span className="min-w-0 flex-1">
@@ -84,6 +122,7 @@ export function PopularRoutes() {
                       </span>
                     )}
                   </span>
+                  {picked && launch.w > 0 && <RouteLaunch w={launch.w} h={launch.h} />}
                 </button>
               </li>
             );

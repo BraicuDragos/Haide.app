@@ -61,6 +61,63 @@ test.describe('popular routes', () => {
     await expectNoAxeViolations(page);
   });
 
+  test('a tap plays the route moment on that card, then lands on the results', async ({ page }) => {
+    await setup(page);
+    await mockPopularApi(page);
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await page.goto('/find');
+    const card = page.getByRole('button', { name: 'Șelimbăr to Zona Industrială Vest' });
+    const other = page.getByRole('button', { name: 'Piața Mare to Șelimbăr' });
+    await expect(card).toBeVisible();
+    const shot = (n: string) =>
+      page.screenshot({ path: `docs/screenshots/improvements/popular-tap-${n}.png` });
+    await shot('0-idle');
+    await card.click();
+    await expect(page.getByTestId('route-launch')).toHaveCount(1);
+    await expect(card).toHaveClass(/is-picked/);
+    await expect(
+      page.getByText('Searching rides from Șelimbăr to Zona Industrială Vest'),
+    ).toBeAttached();
+    await expect(other).toHaveCSS('opacity', /0\.[4-9]/); // the other cards dim (settling from 1)
+    await shot('1-early');
+    await page.waitForTimeout(120);
+    await shot('2-mid');
+    // A second tap while launching does nothing; the navigation happens once.
+    await other.click({ force: true, noWaitAfter: true, timeout: 1000 }).catch(() => undefined);
+    await page.waitForTimeout(100);
+    await shot('3-late').catch(() => undefined);
+    await expect(page).toHaveURL(/\/results$/);
+    await expect(heading(page, '1 ride found')).toBeVisible();
+  });
+
+  test('the moment is accessible at 360 px while it plays', async ({ page }) => {
+    await setup(page);
+    await mockPopularApi(page);
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    await page.goto('/find');
+    await page.getByRole('button', { name: 'Șelimbăr to Zona Industrială Vest' }).click();
+    await expect(page.getByTestId('route-launch')).toHaveCount(1);
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    );
+    expect(overflow).toBe(false);
+    await expectNoAxeViolations(page);
+  });
+
+  test('with reduced motion there is no animation element and the results open at once', async ({
+    page,
+  }) => {
+    await setup(page);
+    await mockPopularApi(page);
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.goto('/find');
+    const card = page.getByRole('button', { name: 'Șelimbăr to Zona Industrială Vest' });
+    await card.click();
+    await expect(page.getByTestId('route-launch')).toHaveCount(0);
+    await expect(page).toHaveURL(/\/results$/);
+    await expect(heading(page, '1 ride found')).toBeVisible();
+  });
+
   test('loading shows a busy state, then the list', async ({ page }) => {
     await setup(page);
     let release!: () => void;

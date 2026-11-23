@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '@/api/client';
@@ -114,6 +114,78 @@ describe('PopularRoutes', () => {
     expect(saved.day).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(saved.time).toMatch(/^\d{2}:\d{2}$/);
     expect(Number(saved.time.slice(3)) % 5).toBe(0);
+  });
+});
+
+describe('tap moment', () => {
+  const NAME = /^Șelimbăr to Zona Industrială Vest/;
+  const root = document.documentElement;
+
+  async function ready() {
+    api.getPopularRoutes.mockResolvedValue({ items: [route()] });
+    show();
+    return screen.findByRole('button', { name: NAME });
+  }
+
+  beforeEach(() => {
+    root.style.setProperty('--tk-dur-reveal', '700ms');
+    root.style.setProperty('--tk-dur-fast', '120ms');
+    delete root.dataset.motion;
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    root.style.removeProperty('--tk-dur-reveal');
+    root.style.removeProperty('--tk-dur-fast');
+    delete root.dataset.motion;
+  });
+
+  it('plays the moment, announces it, and opens the results after it', async () => {
+    const btn = await ready();
+    vi.useFakeTimers();
+    fireEvent.click(btn);
+    expect(btn.className).toContain('is-picked');
+    expect(screen.getByText('Searching rides from Șelimbăr to Zona Industrială Vest')).toBeTruthy();
+    expect(btn.getAttribute('aria-label')).toBeNull();
+    // Hold: the results are not open yet and nothing is saved yet.
+    act(() => void vi.advanceTimersByTime(699));
+    expect(screen.queryByText('results page')).toBeNull();
+    expect(sessionStorage.getItem('haide.search')).toBeNull();
+    act(() => void vi.advanceTimersByTime(1));
+    expect(screen.getByText('results page')).toBeTruthy();
+    expect(sessionStorage.getItem('haide.search')).toContain('p-1');
+  });
+
+  it('with reduced motion there is no animation, only a short highlight', async () => {
+    root.dataset.motion = 'reduced';
+    const btn = await ready();
+    vi.useFakeTimers();
+    fireEvent.click(btn);
+    expect(btn.className).toContain('is-picked');
+    expect(screen.queryByTestId('route-launch')).toBeNull();
+    act(() => void vi.advanceTimersByTime(119));
+    expect(screen.queryByText('results page')).toBeNull();
+    act(() => void vi.advanceTimersByTime(1));
+    expect(screen.getByText('results page')).toBeTruthy();
+  });
+
+  it('ignores taps while launching', async () => {
+    const btn = await ready();
+    vi.useFakeTimers();
+    fireEvent.click(btn);
+    fireEvent.click(btn);
+    fireEvent.click(btn);
+    act(() => void vi.advanceTimersByTime(700));
+    expect(screen.getByText('results page')).toBeTruthy();
+    expect(api.getPopularRoutes).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not navigate when unmounted mid-animation', async () => {
+    const btn = await ready();
+    vi.useFakeTimers();
+    fireEvent.click(btn);
+    cleanup();
+    act(() => void vi.advanceTimersByTime(1000));
+    expect(sessionStorage.getItem('haide.search')).toBeNull();
   });
 });
 

@@ -44,6 +44,7 @@
   "find.popular.rides.other": "{n} rides lately",
   "find.popular.loading": "Loading popular routes",
   "find.popular.err": "We couldn’t load popular routes. Check your connection and try again.",
+  "find.popular.searching": "Searching rides from {from} to {to}",
   "find.popular.empty": "No popular routes yet. Search for your own trip above.",
   "find.visitorHint": "You can look around without an account.",
   "find.err.missing": "Choose where you start and where you’re going.",
