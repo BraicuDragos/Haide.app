@@ -37,6 +37,11 @@ jobs:
       PAGES_PROJECT: ${{ vars.PAGES_PROJECT || 'haide' }}
       PAGES_URL: https://${{ vars.PAGES_PROJECT || 'haide' }}.pages.dev
       SUPPORT_EMAIL: dragosbraicu9@gmail.com
+      # The ONE place the mail sender address is chosen (docs/architecture/email-sender.md). Today it
+      # is the Gmail address. After a domain is verified in Brevo, set the repo variable
+      # EMAIL_FROM_ADDRESS (e.g. no-reply@yourdomain). The env context cannot read SUPPORT_EMAIL from
+      # the same env block, so the fallback repeats the address.
+      EMAIL_FROM_ADDRESS: ${{ vars.EMAIL_FROM_ADDRESS || 'dragosbraicu9@gmail.com' }}
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -141,7 +146,8 @@ jobs:
             echo "ORS_API_KEY=${ORS_API_KEY}"
             echo "EMAIL_PROVIDER=brevo"
             echo "BREVO_API_KEY=${BREVO_API_KEY}"
-            echo "EMAIL_FROM=\"Haide <${SUPPORT_EMAIL}>\""
+            echo "EMAIL_FROM=\"Haide <${EMAIL_FROM_ADDRESS}>\""
+            echo "EMAIL_REPLY_TO=${SUPPORT_EMAIL}"
             echo "EMAIL_SUPPORT_TO=${SUPPORT_EMAIL}"
             echo "EMAIL_DAILY_CAP=280"
             echo "APP_BASE_URL=${PAGES_URL}"

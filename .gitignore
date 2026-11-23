@@ -9,6 +9,9 @@ build/
 out/
 coverage/
 
+# Local scratch output (email preview)
+tmp/
+
 # Env / secrets
 .env
 .env.*

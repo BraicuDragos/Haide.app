@@ -133,6 +133,9 @@ const ALL: TemplateInput[] = [
   },
 ];
 
+// Staff mailbox and suspended user get no app button.
+const NO_BUTTON = new Set(['data_export_requested', 'account_suspended']);
+
 const at = (i: number): TemplateInput => ALL[i] as TemplateInput;
 
 describe('whenLabel', () => {
@@ -151,8 +154,10 @@ describe('renderEmail', () => {
     for (const input of ALL) {
       const out = renderEmail(input, ctx);
       expect(out.subject.length, input.template).toBeGreaterThan(5);
-      expect(out.text, input.template).toContain(out.link);
-      expect(out.html, input.template).toContain(`href="${out.link}"`);
+      if (!NO_BUTTON.has(input.template)) {
+        expect(out.text, input.template).toContain(out.link);
+        expect(out.html, input.template).toContain(`href="${out.link}"`);
+      }
       expect(out.link.startsWith('https://haide.ro'), input.template).toBe(true);
       expect(out.link).not.toContain('//booking');
       expect(`${out.subject}${out.text}`).not.toMatch(/\{\w+\}|undefined|null/);
@@ -246,7 +251,10 @@ describe('renderEmail', () => {
       expect(all).not.toMatch(/\d+\.\d{4,}/);
       expect(all).not.toMatch(/\+40|\b07\d{8}\b/);
       expect(all).not.toMatch(/\b[A-Z]{1,2}\s?\d{2,3}\s?[A-Z]{3}\b/);
-      expect(all).not.toMatch(/[^\s@]+@[^\s@]+\.[^\s@]+/);
+      // Only the clearly marked placeholder contacts may appear.
+      expect(all.replace(/\b(support|privacy)@haide\.example\b/g, '')).not.toMatch(
+        /[^\s@]+@[^\s@]+\.[^\s@]+/,
+      );
     }
   });
 
@@ -271,5 +279,53 @@ describe('renderEmail', () => {
       ctx,
     );
     expect(out.subject).toBe('Your driver can’t take you this time');
+  });
+});
+
+describe('shared layout', () => {
+  it('every template renders the wordmark, preheader, footer, button and text alternative', () => {
+    for (const input of ALL) {
+      const out = renderEmail(input, { ...ctx, supportEmail: 'help@haide.example' });
+      const name = input.template;
+      expect(out.html, name).toContain('name="color-scheme" content="light dark"');
+      expect(out.html, name).toContain('prefers-color-scheme:dark');
+      expect(out.html, name).toMatch(/>haide<span/);
+      expect(out.html, name).toMatch(/<h1[^>]*>/);
+      expect(out.html, name).toContain('display:none');
+      expect(out.html, name).toContain('help@haide.example');
+      expect(out.html, name).toContain('privacy@haide.example');
+      expect(out.text, name).toContain('help@haide.example');
+      expect(out.text, name).toContain(out.subject);
+      if (NO_BUTTON.has(name)) {
+        expect(out.html, name).not.toContain('Open Haide');
+      } else {
+        expect(out.html, name).toContain(`<a href="${out.link}"`);
+        expect(out.html, name).toContain('<v:roundrect');
+        expect(out.html, name).toContain('>Open Haide</a>');
+        expect(out.html, name).toContain(`Or copy this link: ${out.link}`);
+      }
+    }
+  });
+
+  it('uses no images, no http links and no external resources', () => {
+    for (const input of ALL) {
+      const html = renderEmail(input, ctx).html;
+      expect(html).not.toMatch(/<img|<link|<script|<iframe|url\(|@import|http:\/\//i);
+      const urls = [...html.matchAll(/(?:src|href)="([^"]+)"/g)].map((m) => m[1] ?? '');
+      expect(urls.every((u) => u.startsWith('https://haide.ro'))).toBe(true);
+    }
+  });
+
+  it('escapes hostile dynamic values in the title, body and link', () => {
+    const out = renderEmail(
+      {
+        template: 'booking_requested',
+        payload: { passengerFirstName: '<b>"x"</b>', rideId: 'a"b' } as never,
+      },
+      ctx,
+    );
+    expect(out.html).not.toContain('<b>');
+    expect(out.html).not.toContain('a"b');
+    expect(out.html).toContain('&lt;b&gt;');
   });
 });

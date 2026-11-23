@@ -81,6 +81,10 @@ export const en = {
   'email.priceDropped.body': 'Price changed to {price} because a second passenger joined.',
   'email.openLabel': 'Open Haide',
   'email.open': 'Open Haide: {link}',
+  'email.linkLine': 'Or copy this link: {link}',
+  'email.support': 'Questions? Write to {support}.',
+  'email.controller':
+    'Haide, data controller: [name and address to be added before launch]. Privacy: {privacy}.',
   'email.footer': 'You get this email because of activity on your Haide account.',
   'email.fallback.passenger': 'A passenger',
   'email.fallback.driver': 'Your driver',

@@ -18,6 +18,7 @@
     "test:int": "vitest run --project integration --no-file-parallelism",
     "test:e2e": "playwright test",
     "tokens": "pnpm --filter ./apps/web tokens",
+    "email:preview": "node --experimental-strip-types scripts/email-preview.ts",
     "gazetteer": "node --experimental-strip-types scripts/geo/build-gazetteer.ts",
     "db:reset": "supabase db reset",
     "fn:serve": "supabase functions serve api --no-verify-jwt --env-file .env"
