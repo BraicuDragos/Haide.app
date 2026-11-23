@@ -35,7 +35,7 @@ function Shell({
   const describedBy =
     [hint ? hintId : '', error ? errId : ''].filter(Boolean).join(' ') || undefined;
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex min-w-0 flex-col gap-1">
       <label htmlFor={id} className="type-label">
         {label}
         {optional && <span className="font-normal text-text-muted"> ({t('common.optional')})</span>}

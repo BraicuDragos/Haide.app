@@ -257,12 +257,34 @@
 
   /* ---- form controls ---- */
   .control {
+    box-sizing: border-box;
     width: 100%;
+    max-width: 100%;
+    /* min-width: 0 lets a control shrink inside a grid/flex cell (iOS gives native pickers an intrinsic width
+       that can exceed a half-width column). */
+    min-width: 0;
     background: var(--theme-bg-deep);
     color: var(--theme-text);
     border-radius: var(--tk-radius-md);
     padding-inline: var(--tk-space-4);
     font-size: var(--tk-text-md);
+  }
+  /* A long value is cut with an ellipsis instead of widening the column. */
+  select.control {
+    text-overflow: ellipsis;
+  }
+  /* Native date/time inputs: drop the iOS intrinsic width, keep the value left-aligned. */
+  input.control[type='date'],
+  input.control[type='time'] {
+    -webkit-appearance: none;
+    appearance: none;
+    display: block;
+    text-align: left;
+  }
+  input.control[type='date']::-webkit-date-and-time-value,
+  input.control[type='time']::-webkit-date-and-time-value {
+    min-width: 0;
+    text-align: left;
   }
 
   /* ---- chips, segmented control, switch ---- */

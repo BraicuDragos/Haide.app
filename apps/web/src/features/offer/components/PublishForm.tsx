@@ -292,7 +292,7 @@ export function PublishForm() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3">
         <SelectField
           id="offer-day"
           label={t('offer.day')}

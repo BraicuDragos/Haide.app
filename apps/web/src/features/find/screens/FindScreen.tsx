@@ -140,8 +140,8 @@ export function FindScreen() {
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div className="flex flex-col gap-1">
+        <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3">
+          <div className="flex min-w-0 flex-col gap-1">
             <label htmlFor="find-day" className="type-label">
               {t('find.day')}
             </label>
@@ -174,7 +174,7 @@ export function FindScreen() {
 
         <fieldset className="m-0 min-w-0 border-0 p-0">
           <legend className="type-label mb-1 p-0">{t('find.window')}</legend>
-          <div className="grid grid-cols-3 gap-1.5">
+          <div className="grid grid-cols-[repeat(3,minmax(0,1fr))] gap-1.5">
             {WINDOWS.map((w) => (
               <label
                 key={w}
