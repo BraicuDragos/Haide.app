@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { pickTime } from './time-helpers';
 import { mockAccountApi, seedSession } from './accounts-helpers';
 import { BOOKING_ID, bookingView, mockBookingsApi, newFakeBookings } from './booking-helpers';
 import {
@@ -84,7 +85,7 @@ for (const theme of ['dark', 'light'] as const) {
     await page.getByRole('dialog').getByRole('listitem').first().getByRole('button').click();
     await page.getByText('9.6 km, about 17 min').waitFor();
     await page.getByLabel('Day', { exact: true }).selectOption({ label: 'Tomorrow' });
-    await page.getByLabel('Leaving at').fill('07:30');
+    await pickTime(page, 'Leaving at', '07:30');
     await page.getByRole('switch', { name: 'Confirm requests automatically' }).check();
     await page.getByRole('switch', { name: 'Repeat on weekdays' }).check();
     await page.getByLabel('Until').fill(day(21));

@@ -16,7 +16,9 @@ import { PlaceField } from '@/features/find/components/PlaceField';
 import { PlacePickerSheet, type PickerKind } from '@/features/find/components/PlacePickerSheet';
 import { PriceTable } from '@/features/rides/components/PriceTable';
 import { Button } from '@/ui/Button';
-import { SelectField, TextArea, TextField } from '@/ui/Field';
+import { SelectField, TextArea } from '@/ui/Field';
+import { TimePicker } from '@/ui/TimePicker';
+import { minTimeFor } from '@/lib/timeSlots';
 import { Icon } from '@/ui/Icon';
 import { LaunchButton, type LaunchResult } from '@/ui/LaunchButton';
 import { Loader, MiniLoader } from '@/ui/Loader';
@@ -78,7 +80,7 @@ export function PublishForm() {
 
   const fromBtn = useRef<HTMLButtonElement>(null);
   const toBtn = useRef<HTMLButtonElement>(null);
-  const timeInput = useRef<HTMLInputElement>(null);
+  const timeInput = useRef<HTMLButtonElement>(null);
   const created = useRef<string | null>(null);
   const createdSeries = useRef<SeriesCreated | null>(null);
 
@@ -307,15 +309,15 @@ export function PublishForm() {
             </option>
           ))}
         </SelectField>
-        <TextField
+        <TimePicker
           id="offer-time"
           ref={timeInput}
-          type="time"
           label={t('offer.time')}
           value={time}
+          minTime={() => minTimeFor(day, MIN_LEAD_MS)}
           error={errors.time}
-          onChange={(e) => {
-            setTime(e.target.value);
+          onChange={(v) => {
+            setTime(v);
             setErrors((x) => ({ ...x, time: undefined }));
           }}
         />
