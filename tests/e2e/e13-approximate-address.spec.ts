@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { pickTime } from './time-helpers';
+import { pickDay, pickTime } from './time-helpers';
 import { expectNoAxeViolations, mockAccountApi, seedSession } from './accounts-helpers';
 import { mockPopularApi } from './popular-helpers';
 import { mockPlaces, mockRidesApi, newFakeRides, readyDriver } from './rides-helpers';
@@ -105,7 +105,7 @@ test('find: the approximate point is searched, coordinates only', async ({ page 
   await dialog.getByRole('searchbox').fill('zona');
   await expect(dialog.getByRole('heading', { name: /places? found/ })).toBeVisible();
   await dialog.getByRole('listitem').first().getByRole('button').click();
-  await page.getByLabel('Day', { exact: true }).selectOption({ label: 'Tomorrow' });
+  await pickDay(page, 'Day', 'Tomorrow');
   await pickTime(page, 'Leave around', '07:30');
   await expectNoAxeViolations(page);
   await page.screenshot({ path: `${SHOTS}/find-selected-360.png` });

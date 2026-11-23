@@ -9,7 +9,8 @@ import { t, tp } from '@/i18n';
 import { bucharestParts, bucharestToIso, dateLabel, dayOptions } from '@/lib/dates';
 import { minTimeFor } from '@/lib/timeSlots';
 import { Button } from '@/ui/Button';
-import { SelectField, TextArea } from '@/ui/Field';
+import { TextArea } from '@/ui/Field';
+import { DayPicker } from '@/ui/DayPicker';
 import { Icon } from '@/ui/Icon';
 import { Notice } from '@/ui/Notice';
 import { SeatPicker } from '@/ui/SeatPicker';
@@ -72,7 +73,7 @@ function EditForm({ ride, onClose }: { ride: OwnerRide; onClose: () => void }) {
   const [errors, setErrors] = useState<Errors>({});
   const [banner, setBanner] = useState<string | null>(null);
 
-  const dayRef = useRef<HTMLSelectElement>(null);
+  const dayRef = useRef<HTMLButtonElement>(null);
   const timeRef = useRef<HTMLButtonElement>(null);
   const seatsRef = useRef<HTMLDivElement>(null);
   const noteRef = useRef<HTMLTextAreaElement>(null);
@@ -158,24 +159,19 @@ function EditForm({ ride, onClose }: { ride: OwnerRide; onClose: () => void }) {
       </p>
 
       <div className="grid grid-cols-2 gap-3">
-        <SelectField
+        <DayPicker
           id="edit-day"
           ref={dayRef}
           label={t('offer.day')}
           value={day}
+          options={days}
           error={errors.day}
-          onChange={(e) => {
-            setDay(e.target.value);
+          onChange={(v) => {
+            setDay(v);
             clear('day');
             clear('time');
           }}
-        >
-          {days.map((d) => (
-            <option key={d.value} value={d.value}>
-              {d.label}
-            </option>
-          ))}
-        </SelectField>
+        />
         <TimePicker
           id="edit-time"
           ref={timeRef}

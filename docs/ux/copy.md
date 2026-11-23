@@ -394,6 +394,10 @@ First name, photo, phone required before booking or publishing. Bio optional.
 | `time.minute` | Minute |
 | `time.confirm` | Set time |
 | `time.cancel` | Cancel |
+| `day.confirm` | Set day |
+| `wheel.day` | Day |
+| `wheel.hours` | Hours |
+| `wheel.minutes` | Minutes |
 | `profile.edit.title` | Edit profile |
 
 ## 18. Vehicle (E1-4)
@@ -1245,3 +1249,33 @@ Repeat on weekdays, auto-accept, ride alerts, push notifications and the monthly
 | `push.off.toast` | Notifications turned off. |
 | `profile.month.driver` | This month you shared {amount} of fuel costs |
 | `profile.month.passenger` | This month you paid {amount} toward fuel costs |
+
+## 41. Choose on map (place picker)
+
+Opened from “Choose on map” in the place picker (Find and Offer, start and destination). The result is a normal place: exact point, label by rule (see `mapPick.ts`).
+
+| Key | Text |
+|---|---|
+| `mapPick.title.from` | Choose your start on the map |
+| `mapPick.title.to` | Choose your destination on the map |
+| `mapPick.region` | Map of Sibiu. Drag the map to move the pin. Arrow keys move the map, plus and minus zoom. (accessible name of the map region) |
+| `mapPick.confirm` | Confirm |
+| `mapPick.cancel` | Cancel |
+| `mapPick.myLocation` | My location (asks for permission only when tapped) |
+| `mapPick.zoomIn` / `mapPick.zoomOut` | Zoom in / Zoom out |
+| `mapPick.moving` | Moving… |
+| `mapPick.finding` | Finding the nearest address… |
+| `mapPick.outside` | This place is outside the area we cover |
+| `mapPick.outside.hint` | Move the map back towards Sibiu to choose a place. |
+| `mapPick.failed` | We couldn’t look up an address for this spot. (with “Try again”; the primary button becomes the next key) |
+| `mapPick.useAnyway` | Use this point anyway |
+| `mapPick.near` | Near {name} |
+| `mapPick.inArea` | Pin in {area} |
+| `mapPick.pinned` | Pinned location |
+| `mapPick.privacy` | The pin location is only sent to Haide to find the nearest address. |
+| `mapPick.unavailable` | The map couldn’t load. Check your connection, or search for the place instead. |
+| `mapPick.search` | Search instead (closes the map, back to the text search) |
+| `mapPick.loading` | Loading the map |
+| `mapPick.pin` | Pin position (label of the address card) |
+
+Label rule (max 80 characters, never empty): a found address, POI or street within 60 m of the pin uses its own name; any other found place gives “Near {name}”; an area result or none with a known area gives “Pin in {area}”; otherwise “Pinned location”. `place.mapSoon` is no longer shown.

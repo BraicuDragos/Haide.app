@@ -192,6 +192,12 @@ const PATHS = {
       <line x1="15.41" x2="8.59" y1="6.51" y2="10.49" />
     </>
   ),
+  calendar: (
+    <>
+      <rect x="3" y="4.5" width="18" height="16" rx="3" />
+      <path d="M3 10h18M8 2.5v4M16 2.5v4" />
+    </>
+  ),
   done: (
     <>
       <circle cx="12" cy="12" r="10" />

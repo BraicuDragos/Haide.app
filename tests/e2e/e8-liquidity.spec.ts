@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 import { expect, test, type Page } from '@playwright/test';
-import { pickTime } from './time-helpers';
+import { pickDay, pickTime } from './time-helpers';
 import { expectNoAxeViolations, mockAccountApi, newAccount, seedSession } from './accounts-helpers';
 import { bookingView, mockBookingsApi, newFakeBookings, BOOKING_ID } from './booking-helpers';
 import {
@@ -84,7 +84,7 @@ async function chooseTripBTomorrow(page: Page) {
   await pickPlace(page, 'From', 'selimbar', 'Șelimbăr');
   await pickPlace(page, 'To', 'zona', 'Zona Industrială Vest');
   await expect(page.getByText('9.6 km, about 17 min')).toBeVisible();
-  await page.getByLabel('Day', { exact: true }).selectOption({ label: 'Tomorrow' });
+  await pickDay(page, 'Day', 'Tomorrow');
   await pickTime(page, 'Leaving at', '07:30');
 }
 
@@ -108,7 +108,7 @@ test.describe('repeat on weekdays (E8-1)', () => {
     const on = page.getByRole('button', { pressed: true });
     await expect(on).toHaveCount(1);
     const pressed = page.getByRole('button', { name: (await on.textContent())!, exact: true });
-    await page.getByLabel('Until').fill(dayOffset(14));
+    await pickDay(page, 'Until', dayOffset(14));
     await expect(page.getByText(/^Creates \d+ rides?$/)).toBeVisible();
     await expectNoAxeViolations(page);
 

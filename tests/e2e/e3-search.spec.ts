@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { pickTime } from './time-helpers';
+import { pickDay, pickTime } from './time-helpers';
 import { expectNoAxeViolations, mockAccountApi, newAccount, seedSession } from './accounts-helpers';
 import { mockPopularApi } from './popular-helpers';
 import { mockPlaces } from './rides-helpers';
@@ -42,7 +42,7 @@ async function searchTripB(page: Page) {
   await page.goto('/find');
   await pickPlace(page, 'From', 'selimbar', 'Șelimbăr');
   await pickPlace(page, 'To', 'zona', 'Zona Industrială Vest');
-  await page.getByLabel('Day', { exact: true }).selectOption({ label: 'Tomorrow' });
+  await pickDay(page, 'Day', 'Tomorrow');
   await pickTime(page, 'Leave around', '07:30');
   await page.getByRole('button', { name: 'Search rides' }).click();
 }
