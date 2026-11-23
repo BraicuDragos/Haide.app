@@ -5,13 +5,15 @@ import { ApiError } from '@/api/client';
 import { keys } from '@/api/keys';
 import { getVehicle } from '@/api/account';
 import { postSeries, type SeriesCreated } from '@/api/liquidity';
-import { postRide, postRidePreview } from '@/api/rides';
+import { postRide, postRidePreview, toPreviewRequest } from '@/api/rides';
 import type { Place, RoutePreview } from '@/api/types';
 import { t, tError, tp } from '@/i18n';
 import { bucharestToday, bucharestToIso, dateLabel, dayOptions } from '@/lib/dates';
 import { formatRon } from '@/lib/format';
 import { addDays, isoWeekday, SERIES_MAX_DAYS, seriesDates } from '@/lib/seriesDates';
 import { triggerPushPrompt } from '@/features/push/trigger';
+import { ApproxHint } from '@/features/find/components/ApproxBadge';
+import { joinIds } from '@/features/find/placeApprox';
 import { PlaceField } from '@/features/find/components/PlaceField';
 import { PlacePickerSheet, type PickerKind } from '@/features/find/components/PlacePickerSheet';
 import { PriceTable } from '@/features/rides/components/PriceTable';
@@ -96,15 +98,7 @@ export function PublishForm() {
     }
     const ctl = new AbortController();
     setPreview({ status: 'loading' });
-    postRidePreview(
-      {
-        origin: from.point,
-        destination: to.point,
-        originLabel: from.name,
-        destinationLabel: to.name,
-      },
-      ctl.signal,
-    )
+    postRidePreview(toPreviewRequest(from, to), ctl.signal)
       .then((data) => setPreview({ status: 'ok', data }))
       .catch((err: unknown) => {
         if (ctl.signal.aborted) return;
@@ -251,17 +245,25 @@ export function PublishForm() {
           kind="from"
           place={from}
           invalid={Boolean(placesError) && !from}
-          describedBy={placesError ? 'offer-places-err' : undefined}
+          describedBy={joinIds(
+            placesError && 'offer-places-err',
+            from?.approximate === true && 'offer-from-approx',
+          )}
           onOpen={() => setPicker('from')}
         />
+        {from?.approximate === true && <ApproxHint id="offer-from-approx" kind="from" />}
         <PlaceField
           ref={toBtn}
           kind="to"
           place={to}
           invalid={Boolean(placesError) && (!to || same || Boolean(previewFail?.places))}
-          describedBy={placesError ? 'offer-places-err' : undefined}
+          describedBy={joinIds(
+            placesError && 'offer-places-err',
+            to?.approximate === true && 'offer-to-approx',
+          )}
           onOpen={() => setPicker('to')}
         />
+        {to?.approximate === true && <ApproxHint id="offer-to-approx" kind="to" />}
         {placesError && (
           <p
             id="offer-places-err"

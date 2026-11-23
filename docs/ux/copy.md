@@ -159,6 +159,9 @@ Address search is diacritics-insensitive: “Selimbar” finds “Șelimbăr”.
 | `place.locating` | Finding your location |
 | `place.permissionDenied` | Location is off for Haide. Search for an address instead. |
 | `place.mapSoon` | Choosing on a map is part of the full app. Search for a place for now. |
+| `place.approx` | Approximate position (badge on a street + house number suggestion; icon plus text) |
+| `place.approx.hint.from` | Start position is approximate, the pickup point may be some tens of metres off. |
+| `place.approx.hint.to` | Destination position is approximate, the drop-off may be some tens of metres off. |
 
 ## 10. Results and empty states (E3-2, E3-5)
 

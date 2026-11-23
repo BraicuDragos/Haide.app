@@ -2,6 +2,7 @@ import { apiRequest } from './client';
 import type {
   EditRideRequest,
   OwnerRide,
+  Place,
   PublishRideRequest,
   RideListResponse,
   RoutePreview,
@@ -9,6 +10,21 @@ import type {
 } from './types';
 
 /** Ride endpoints (api-contract section 4). Locations go in POST bodies only. */
+/**
+ * Preview body from the two picked places. The label is exactly `place.name` (never altered); the approximate flags
+ * are sent only for synthetic house-number suggestions (ADR 0042).
+ */
+export function toPreviewRequest(from: Place, to: Place): RoutePreviewRequest {
+  return {
+    origin: from.point,
+    destination: to.point,
+    originLabel: from.name,
+    destinationLabel: to.name,
+    ...(from.approximate === true ? { originApproximate: true } : {}),
+    ...(to.approximate === true ? { destinationApproximate: true } : {}),
+  };
+}
+
 export const postRidePreview = (body: RoutePreviewRequest, signal?: AbortSignal) =>
   apiRequest<RoutePreview>('/rides/preview', { method: 'POST', body, signal, timeoutMs: 15_000 });
 

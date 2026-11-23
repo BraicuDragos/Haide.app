@@ -35,10 +35,41 @@ const fold = (s: string) =>
     .replace(/\p{Diacritic}/gu, '')
     .toLowerCase();
 
-export async function mockPlaces(page: Page) {
+/** Streets the fake gazetteer knows without the asked house number (ADR 0042). */
+const STREETS: Record<string, { name: string; area: string; point: { lat: number; lng: number } }> =
+  {
+    negoveanu: {
+      name: 'Strada Negoveanu',
+      area: 'Terezian',
+      point: { lat: 45.7856, lng: 24.1747 },
+    },
+  };
+
+/**
+ * Mocked GET /places. A query that is a known street plus a house number ("Negoveanu 2", "2/B Negoveanu") answers with
+ * the synthetic approximate suggestion first, label = street + the number exactly as typed. `queries` records every `q`.
+ */
+export async function mockPlaces(page: Page, queries: string[] = []) {
   await page.route('**/places?*', (route: Route) => {
-    const q = fold(new URL(route.request().url()).searchParams.get('q') ?? '');
-    return route.fulfill({ json: { items: PLACES.filter((p) => fold(p.name).includes(q)) } });
+    const raw = new URL(route.request().url()).searchParams.get('q') ?? '';
+    queries.push(raw);
+    const q = fold(raw);
+    const m = /^(\p{L}+)\s+(\d\S*)$/u.exec(q);
+    const street = m?.[1] ? STREETS[m[1]] : undefined;
+    const number = m?.[2] ? /(\d\S*)$/.exec(raw.trim())?.[1] : undefined;
+    const items: unknown[] = PLACES.filter((p) => fold(p.name).includes(q));
+    if (street && number) {
+      items.unshift({
+        id: `approx:${m?.[1]}-${number}`,
+        name: `${street.name} ${number}`,
+        secondary: `Sibiu, ${street.area}`,
+        kind: 'address',
+        point: street.point,
+        areaName: street.area,
+        approximate: true,
+      });
+    }
+    return route.fulfill({ json: { items } });
   });
 }
 

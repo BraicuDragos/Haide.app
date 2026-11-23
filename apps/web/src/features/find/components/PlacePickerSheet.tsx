@@ -12,6 +12,7 @@ import { Icon } from '@/ui/Icon';
 import { MiniLoader } from '@/ui/Loader';
 import { Notice } from '@/ui/Notice';
 import { Sheet } from '@/ui/Sheet';
+import { ApproxBadge } from './ApproxBadge';
 
 export type PickerKind = 'from' | 'to';
 
@@ -202,6 +203,7 @@ function PickerBody({ onSelect }: { onSelect: (place: Place) => void }) {
                         <span className="block text-sm leading-5 text-text-muted">
                           {p.secondary || p.areaName}
                         </span>
+                        {p.approximate === true && <ApproxBadge />}
                       </span>
                     </button>
                   </li>
