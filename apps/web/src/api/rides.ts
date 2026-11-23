@@ -1,5 +1,6 @@
 import { apiRequest } from './client';
 import type {
+  EditRideRequest,
   OwnerRide,
   PublishRideRequest,
   RideListResponse,
@@ -22,6 +23,10 @@ export const getMyRides = (
 
 export const getMyRide = (id: string, signal?: AbortSignal) =>
   apiRequest<OwnerRide>(`/me/rides/${encodeURIComponent(id)}`, { signal });
+
+/** Edit a published ride (ADR 0041). Send only the fields that changed; `note: null` clears the note. */
+export const patchRide = (id: string, body: EditRideRequest) =>
+  apiRequest<OwnerRide>(`/rides/${encodeURIComponent(id)}`, { method: 'PATCH', body });
 
 export const postRideCancel = (id: string) =>
   apiRequest<OwnerRide>(`/rides/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: {} });

@@ -24,6 +24,7 @@ import { PriceRoll } from '@/ui/PriceRoll';
 import { SeatStrip } from '@/ui/SeatPicker';
 import { Sheet } from '@/ui/Sheet';
 import { useToast } from '@/ui/Toast';
+import { EditRideSheet } from '../components/EditRideSheet';
 import { OwnerMap } from '../components/OwnerMap';
 import { PassengerCard, type PassengerAction } from '../components/PassengerCard';
 import { PriceTable } from '../components/PriceTable';
@@ -98,6 +99,7 @@ function Ride() {
 
 function RideDetail({ ride, back }: { ride: OwnerRide; back: () => void }) {
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [sheet, setSheet] = useState<{
     action: PassengerAction;
     passenger: RidePassengerItem;
@@ -265,13 +267,25 @@ function RideDetail({ ride, back }: { ride: OwnerRide; back: () => void }) {
           )}
         </section>
 
-        {open && ride.canCancel && (
-          <Button variant="danger" block onClick={() => setCancelOpen(true)}>
-            {t('driverRide.cancel')}
-          </Button>
+        {open && (ride.canEdit || ride.canCancel) && (
+          <div className="flex gap-3">
+            {ride.canEdit && (
+              <Button variant="secondary" block onClick={() => setEditOpen(true)}>
+                {t('driverRide.edit')}
+              </Button>
+            )}
+            {ride.canCancel && (
+              <Button variant="danger" block onClick={() => setCancelOpen(true)}>
+                {t('driverRide.cancel')}
+              </Button>
+            )}
+          </div>
         )}
       </div>
 
+      {ride.canEdit && (
+        <EditRideSheet ride={ride} open={editOpen} onClose={() => setEditOpen(false)} />
+      )}
       <CancelSheet ride={ride} open={cancelOpen} onClose={() => setCancelOpen(false)} />
       {who && (
         <>

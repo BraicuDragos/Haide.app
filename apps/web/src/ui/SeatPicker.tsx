@@ -6,6 +6,8 @@ import { Icon } from './Icon';
 interface PickerProps {
   /** Number of seats offered (1 to max). */
   max: number;
+  /** Seats below this number cannot be chosen (seats already taken by passengers). Default 1. */
+  min?: number;
   /** Chosen number of seats (0 = none yet). */
   value: number;
   onChange: (n: number) => void;
@@ -29,6 +31,7 @@ const LEAN_MAX = 7; // px
  */
 export function SeatPicker({
   max,
+  min = 1,
   value,
   onChange,
   legend,
@@ -118,6 +121,7 @@ export function SeatPicker({
               name={name}
               value={n}
               checked={value === n}
+              disabled={n < min}
               onChange={() => onChange(n)}
               onPointerDown={(e) => {
                 const f = faces.current[n - 1];

@@ -398,6 +398,12 @@
     color: var(--theme-on-action);
     box-shadow: var(--elev-seat);
   }
+  .seat input:disabled {
+    cursor: not-allowed;
+  }
+  .seat input:disabled + .mag .face:not(.on) {
+    opacity: 0.45;
+  }
   .seat input:focus-visible + .mag .face {
     outline: 3px solid var(--theme-focus-ring);
     outline-offset: 3px;

@@ -64,6 +64,13 @@ export function bucharestToIso(day: string, time: string): string {
   return new Date(ms).toISOString();
 }
 
+/** An instant as its Europe/Bucharest calendar day (YYYY-MM-DD) and 24 h time (HH:MM): what the edit form shows. */
+export function bucharestParts(iso: string): { day: string; time: string } {
+  const d = new Date(iso);
+  const p = Object.fromEntries(wall.formatToParts(d).map((x) => [x.type, x.value]));
+  return { day: ymd.format(d), time: `${p.hour}:${p.minute}` };
+}
+
 /** "Today", "Tomorrow", or "Mon 17 Nov" for an instant, by Europe/Bucharest calendar day. */
 export function dayLabel(iso: string, now: Date = new Date()): string {
   const d = new Date(iso);

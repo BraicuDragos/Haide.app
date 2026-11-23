@@ -644,6 +644,32 @@ Requests, passengers, cancel and no-show.
 | `driverRide.rate` | Rate {name} |
 | `driverRide.fuelRule` | Prices are set by Haide and split fuel cost. Asking passengers for more is against the Terms of use. |
 
+### Edit ride (ADR 0041)
+
+A secondary "Edit ride" button next to "Cancel ride" opens a sheet with day, time, seats, note and auto-accept. The route and price are fixed, and the sheet says so. A changed time tells every passenger with a seat or a pending request; other changes tell nobody.
+
+| Key | Copy |
+|---|---|
+| `driverRide.edit` | Edit ride |
+| `editRide.title` | Edit ride |
+| `editRide.route` | The route and the price can’t be changed. To change them, cancel this ride and publish a new one. |
+| `editRide.seats.booked.one` | 1 seat is already taken, so you can’t offer fewer. |
+| `editRide.seats.booked.other` | {n} seats are already taken, so you can’t offer fewer. |
+| `editRide.notify.one` | 1 passenger will be told about the new time. |
+| `editRide.notify.other` | {n} passengers will be told about the new time. |
+| `editRide.save` | Save changes |
+| `editRide.discard` | Close without saving |
+| `editRide.toast` | Ride updated |
+| `editRide.toast.told` | Ride updated, passengers told |
+| `errors.RIDE_NOT_EDITABLE` | This ride can’t be edited any more. It may have left or been cancelled. |
+| `errors.SEATS_BELOW_BOOKED` | Some seats are already taken. Choose at least as many seats as you have passengers. |
+| `errors.ROUTE_NOT_EDITABLE` | The route and the price can’t be changed. Cancel this ride and publish a new one. |
+| `errors.DEPARTURE_TOO_SOON` | Choose a time at least 15 minutes from now. |
+| `errors.DEPARTURE_TOO_FAR` | You can set a time up to 14 days ahead. |
+| `errors.SEATS_EXCEED_VEHICLE` | That’s more seats than your car has. Choose fewer seats. |
+
+Errors land next to the field: time errors at the time field, `SEATS_BELOW_BOOKED` and `SEATS_EXCEED_VEHICLE` at the seats, `DAILY_RIDE_LIMIT` at the day. The passenger side reuses the existing "New update" dot; no separate "driver changed the time" note (the new time is shown on the booking).
+
 ## 25. Ratings (E5-3)
 
 Blind ratings: the other person sees yours once both are in, or after 7 days.

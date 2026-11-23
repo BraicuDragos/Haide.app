@@ -105,6 +105,14 @@ export type OwnerRide = Omit<RideOwnerView, 'passengers'> & {
   call112Window?: Call112Window | null;
 };
 
+/** PATCH /rides/{id}: a strict partial body, at least one field (ADR 0041). */
+export type EditRideRequest = {
+  departureAt?: string;
+  seats?: number;
+  note?: string | null;
+  autoAccept?: boolean;
+};
+
 export type SharedTrip = {
   departureAt: string;
   pickupEtaAt: string;
