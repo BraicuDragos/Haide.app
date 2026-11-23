@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { ROAD_GRID, roadLayout, roundedPath } from './geometry';
+import {
+  clamp,
+  heroScene,
+  LAYER_BLEED,
+  PARALLAX_MAX,
+  parallaxOffset,
+  rng,
+  ROAD_GRID,
+  roadLayout,
+  roundedPath,
+} from './geometry';
 
 const nums = (d: string) => (d.match(/-?\d+(\.\d+)?/g) ?? []).map(Number);
 const points = (d: string) => {
@@ -81,5 +91,53 @@ describe('roadLayout', () => {
   it('is deterministic and draws side streets', () => {
     expect(roadLayout(360, 330)).toEqual(roadLayout(360, 330));
     expect(roadLayout(360, 330).streets.length).toBeGreaterThan(5);
+  });
+});
+
+describe('parallaxOffset', () => {
+  it('moves against the input and scales with depth', () => {
+    expect(parallaxOffset(1, 0, 1).x).toBeCloseTo(-PARALLAX_MAX);
+    expect(parallaxOffset(-1, 0, 2).x).toBeCloseTo(2 * PARALLAX_MAX);
+    expect(Math.abs(parallaxOffset(0.5, 0, 0.4).x)).toBeLessThan(
+      Math.abs(parallaxOffset(0.5, 0, 2).x),
+    );
+  });
+  it('clamps wild input and stays inside the layer bleed at the deepest layer', () => {
+    const o = parallaxOffset(99, -99, 2);
+    expect(Math.abs(o.x)).toBeLessThanOrEqual(LAYER_BLEED);
+    expect(Math.abs(o.y)).toBeLessThanOrEqual(LAYER_BLEED);
+    expect(clamp(5, -1, 1)).toBe(1);
+  });
+  it('rests at zero', () => {
+    expect(Math.abs(parallaxOffset(0, 0, 2).x)).toBe(0);
+    expect(Math.abs(parallaxOffset(0, 0, 2).y)).toBe(0);
+  });
+});
+
+describe('heroScene', () => {
+  it('is deterministic (same box, same scene) and varies with the box', () => {
+    expect(heroScene(360, 330)).toEqual(heroScene(360, 330));
+    expect(heroScene(360, 330).grid).not.toBe(heroScene(1280, 330).grid);
+    const a = rng(7);
+    const b = rng(7);
+    expect([a(), a()]).toEqual([b(), b()]);
+  });
+  it.each([
+    [360, 330],
+    [1280, 330],
+  ])('keeps lights and bokeh inside the %i x %i box and clear of the headline', (w, h) => {
+    const s = heroScene(w, h);
+    for (const p of [...s.lights[0], ...s.lights[1], ...s.bokeh]) {
+      expect(p.x).toBeGreaterThanOrEqual(0);
+      expect(p.x).toBeLessThanOrEqual(w);
+      expect(p.y).toBeGreaterThanOrEqual(0);
+      expect(p.y).toBeLessThanOrEqual(h);
+      // the headline sits top left: nothing there but the grid
+      expect(p.x < w * 0.4 && p.y < h * 0.4).toBe(false);
+    }
+    expect(s.lights[0].length + s.lights[1].length).toBeGreaterThan(8);
+  });
+  it('has traffic lanes on the road layout', () => {
+    expect(roadLayout(360, 330).lanes).toHaveLength(2);
   });
 });
