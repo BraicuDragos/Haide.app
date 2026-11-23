@@ -126,6 +126,20 @@ export type RideAlertMatchPayload = {
   moreCount: number;
 };
 
+/**
+ * ADR 0041: to each passenger with a requested or confirmed booking when the driver moved the
+ * departure. Ids, two times, the driver's first name and the passenger's own areas only.
+ */
+export type RideUpdatedPayload = {
+  bookingId: string;
+  rideId: string;
+  driverFirstName: string | null;
+  previousDepartureAt: string;
+  departureAt: string;
+  pickupArea: string;
+  dropoffArea: string;
+};
+
 export type OutboxPayloadMap = {
   booking_requested: BookingRequestedPayload;
   booking_confirmed: BookingConfirmedPayload;
@@ -143,6 +157,7 @@ export type OutboxPayloadMap = {
   account_reinstated: AccountReinstatedPayload;
   booking_auto_confirmed: BookingAutoConfirmedPayload;
   ride_alert_match: RideAlertMatchPayload;
+  ride_updated: RideUpdatedPayload;
 };
 
 export type OutboxTemplate = keyof OutboxPayloadMap;
@@ -164,6 +179,7 @@ export const OUTBOX_TEMPLATES = [
   'account_reinstated',
   'booking_auto_confirmed',
   'ride_alert_match',
+  'ride_updated',
 ] as const satisfies readonly OutboxTemplate[];
 
 /** One row to insert into app.outbox. Distributes over the template so payload and name stay paired. */
@@ -214,6 +230,9 @@ export function outboxDedupeKey(row: { template: string; payload: unknown }): st
       return join(id('bookingId'));
     case 'rating_prompt_driver':
       return join(id('rideId'));
+    case 'ride_updated':
+      // One row per booking and new departure: a retry is one row, a second move is a new event.
+      return join(id('bookingId'), id('departureAt'));
     case 'no_show_reported':
       return join(id('bookingId'), id('reporterRole'));
     case 'report_received':

@@ -84,6 +84,17 @@ export function renderPush(input: TemplateInput, ctx: RenderContext): PushMessag
       id = str(p.bookingId, '');
       break;
     }
+    case 'ride_updated': {
+      const p = input.payload;
+      vars = {
+        time: pushTime(date(p.departureAt)),
+        previous: pushTime(date(p.previousDepartureAt)),
+        pickup: str(p.pickupArea, SIBIU),
+        dropoff: str(p.dropoffArea, SIBIU),
+      };
+      id = str(p.bookingId, '');
+      break;
+    }
     case 'ride_alert_match': {
       const p = input.payload;
       vars = {

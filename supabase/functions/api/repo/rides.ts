@@ -492,3 +492,48 @@ export async function setAutoAccept(
 ): Promise<void> {
   await sql`update app.rides set auto_accept = ${value}, updated_at = ${now} where id = ${rideId}`;
 }
+
+// ---- editing a published ride (ADR 0041) ------------------------------------------------------------
+
+/**
+ * The driver's other rides that count toward the daily limit on [start, end): the same rule as
+ * countDriverRidesBetween, without the ride being moved (so a ride that stays on its day never counts
+ * against itself).
+ */
+export async function countOtherDriverRidesBetween(
+  sql: Db,
+  driverId: string,
+  excludeRideId: string,
+  start: Date,
+  end: Date,
+): Promise<number> {
+  const rows = await sql<{ n: number }[]>`
+    select count(*)::int as n
+    from app.rides
+    where driver_id = ${driverId} and id <> ${excludeRideId}::uuid and status <> 'cancelled'
+      and departure_at >= ${start} and departure_at < ${end}`;
+  return rows[0]?.n ?? 0;
+}
+
+export type RideEditValues = {
+  departureAt: Date;
+  seats: number;
+  note: string | null;
+  autoAccept: boolean;
+};
+
+/** The only columns a driver may change. Guarded by status so a concurrent cancel is never overwritten. */
+export async function updateRideEditable(
+  sql: Db,
+  rideId: string,
+  v: RideEditValues,
+  now: Date,
+): Promise<boolean> {
+  const rows = await sql`
+    update app.rides
+    set departure_at = ${v.departureAt}::timestamptz, seats_offered = ${v.seats}::smallint,
+        note = ${v.note}::text, auto_accept = ${v.autoAccept}::boolean, updated_at = ${now}::timestamptz
+    where id = ${rideId} and status = 'published'
+    returning id`;
+  return rows.length > 0;
+}

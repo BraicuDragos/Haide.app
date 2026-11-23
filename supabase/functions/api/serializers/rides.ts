@@ -13,7 +13,7 @@ import {
 import type { Clock } from '../../_shared/domain/clock.ts';
 import { priceTable, tripCostBani } from '../../_shared/domain/pricing.ts';
 import { roundCoord } from '../../_shared/domain/privacy.ts';
-import { canCancelRide, isLateRideCancel } from '../../_shared/domain/rides.ts';
+import { canCancelRide, canEditRide, isLateRideCancel } from '../../_shared/domain/rides.ts';
 import { call112Window, call112WindowDto, show112 } from '../../_shared/domain/safety.ts';
 import type { OwnerRideRow, PublicRideRow, RideListRow } from '../repo/rides.ts';
 
@@ -98,6 +98,7 @@ export function toOwnerView(
     requests: extras.requests,
     passengers: extras.passengers,
     canCancel: canCancelRide(ctx, clock),
+    canEdit: canEditRide(ctx, clock),
     lateCancelIfNow: isLateRideCancel(ctx, clock),
     lateCancel: row.late_cancel,
     cancelledAt: row.cancelled_at ? iso(row.cancelled_at) : null,

@@ -58,7 +58,12 @@ export const en = {
   'email.alertMatch.body':
     'A ride leaves {pickup} for {dropoff} at {time}. Open Haide to request a seat.',
   'email.alertMatch.more': '{count} more rides match too.',
+  'email.rideUpdated.subject': '{driver} changed the time of your ride',
+  'email.rideUpdated.body':
+    'Now leaving at {time} (was {previous}). Open Haide to check it still suits you, or cancel your seat.',
   // Push (E8-4): lock-screen text, area names and times only, never a name.
+  'push.ride_updated.title': 'Ride time changed',
+  'push.ride_updated.body': 'Now leaving {time} (was {previous}), {pickup} to {dropoff}.',
   'push.booking_requested.title': 'New seat request',
   'push.booking_requested.body':
     'Someone asked for a seat on your {time} ride, {pickup} to {dropoff}.',

@@ -224,6 +224,8 @@ export const rideOwnerViewSchema = z.object({
   passengers: z.array(ridePassengerItemSchema),
   /** True while published and before departure. */
   canCancel: z.boolean(),
+  /** True while published and before departure (ADR 0041): PATCH /rides/{id} is allowed. */
+  canEdit: z.boolean(),
   /** Cancelling right now would count as a late cancellation (30 min or less before departure). */
   lateCancelIfNow: z.boolean(),
   /** Set once cancelled: true when it was a late cancellation. */
@@ -288,6 +290,27 @@ export type RideListResponse = z.infer<typeof rideListResponseSchema>;
 
 /** Body is `{}` (an empty body is accepted too). Response: the owner view. */
 export const cancelRideBodySchema = z.object({}).strict();
+
+// ---- PATCH /rides/{id} (ADR 0041) -------------------------------------------------------------------------
+// Editable: departureAt, seats, note, autoAccept. Send only what changes (at least one field). The route,
+// price and vehicle are fixed: to change them the driver cancels and publishes again (ROUTE_NOT_EDITABLE).
+// A new departureAt follows the publish rules (15 min to 14 days ahead, 4 rides per day) and notifies every
+// passenger with a requested or confirmed seat. Response: the updated owner view.
+
+export const editRideBodySchema = z
+  .object({
+    /** ISO 8601 UTC with Z. */
+    departureAt: z.iso.datetime().optional(),
+    seats: z.number().int().min(1).max(RIDE_LIMITS.maxSeats).optional(),
+    /** `null` or an empty string clears the note. */
+    note: z.string().trim().max(RIDE_LIMITS.noteMax).nullable().optional(),
+    autoAccept: z.boolean().optional(),
+  })
+  .strict()
+  .refine((b) => Object.values(b).some((v) => v !== undefined), {
+    message: 'Send at least one field to change.',
+  });
+export type EditRideBody = z.infer<typeof editRideBodySchema>;
 
 // ---- GET /rides/{id} (public) -------------------------------------------------------------------------
 // Approximate points (300 m grid), area labels, trimmed route. Never the plate or exact points.

@@ -131,6 +131,18 @@ const ALL: TemplateInput[] = [
       moreCount: 2,
     },
   },
+  {
+    template: 'ride_updated',
+    payload: {
+      bookingId: 'b1',
+      rideId: 'r1',
+      driverFirstName: 'Rădulescu',
+      previousDepartureAt: DEP,
+      departureAt: LATER,
+      pickupArea: 'Turnișor',
+      dropoffArea: 'Piața Mare',
+    },
+  },
 ];
 
 // Staff mailbox and suspended user get no app button.
@@ -172,6 +184,26 @@ describe('renderEmail', () => {
     expect(link(3)).toBe('https://haide.ro/booking/b1');
     expect(link(4)).toBe('https://haide.ro/booking/b1');
     expect(link(5)).toBe('https://haide.ro/driving/r1');
+  });
+
+  it('ride_updated: shared layout, new and previous time, links to the booking, driver name from the payload', () => {
+    const input = ALL.find((i) => i.template === 'ride_updated') as TemplateInput;
+    const out = renderEmail(input, ctx);
+    expect(out.subject).toBe('Rădulescu changed the time of your ride');
+    expect(out.text).toContain(
+      'Now leaving at Fri 20 Nov, 07:40 (was 09:30). Open Haide to check it still suits you, or cancel your seat.',
+    );
+    expect(out.link).toBe('https://haide.ro/booking/b1');
+    expect(out.html).toContain('href="https://haide.ro/booking/b1"');
+    expect(out.html).toContain('haide'); // the shared layout wordmark
+    const anon = renderEmail(
+      {
+        template: 'ride_updated',
+        payload: { ...(input.payload as object), driverFirstName: null },
+      } as TemplateInput,
+      ctx,
+    );
+    expect(anon.subject).toBe('Your driver changed the time of your ride');
   });
 
   it('uses the copy from docs/ux/copy.md section 34', () => {

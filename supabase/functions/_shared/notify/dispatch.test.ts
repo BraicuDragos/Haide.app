@@ -111,6 +111,8 @@ const run = (
     log: silentLogger,
     dailyCap: 280,
     baseUrl: 'https://haide.ro',
+    // Sequential by default: send order is otherwise timing dependent. A test that checks concurrency overrides it.
+    concurrency: 1,
     ...over,
   });
 
@@ -175,7 +177,7 @@ describe('dispatchOutbox', () => {
     const rows = Array.from({ length: 10 }, (_, i) => row(`r${i}`));
     const { store } = fakeStore(rows);
     const p = fakeProvider();
-    const out = await run(store, p.provider);
+    const out = await run(store, p.provider, { concurrency: 4 });
     expect(out.sent).toBe(10);
     expect(p.maxInFlight()).toBeLessThanOrEqual(4);
     expect(p.maxInFlight()).toBeGreaterThan(1);

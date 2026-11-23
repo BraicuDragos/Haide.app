@@ -31,11 +31,11 @@
 
 | HTTP | Codes |
 |---|---|
-| 400 | `VALIDATION_FAILED`, `SAME_PLACE`, `DEPARTURE_TOO_SOON` (< 15 min), `DEPARTURE_TOO_FAR` (> 14 days), `ROUTE_TOO_SHORT` (< 1 km), `ROUTE_TOO_LONG` (> 40 km), `SEATS_EXCEED_VEHICLE`, `PREVIEW_EXPIRED`, `PHOTO_INVALID`, `PHOTO_TOO_LARGE`, `CONFIRMATION_REQUIRED` |
+| 400 | `VALIDATION_FAILED`, `SAME_PLACE`, `DEPARTURE_TOO_SOON` (< 15 min), `DEPARTURE_TOO_FAR` (> 14 days), `ROUTE_TOO_SHORT` (< 1 km), `ROUTE_TOO_LONG` (> 40 km), `SEATS_EXCEED_VEHICLE`, `PREVIEW_EXPIRED`, `PHOTO_INVALID`, `PHOTO_TOO_LARGE`, `CONFIRMATION_REQUIRED`, `ROUTE_NOT_EDITABLE` (ride edit: route, price or vehicle field sent) |
 | 401 | `UNAUTHENTICATED` |
 | 403 | `ACCOUNT_SUSPENDED`, `ACCOUNT_DELETED`, `CONSENT_REQUIRED`, `PROFILE_INCOMPLETE`, `VEHICLE_REQUIRED`, `FORBIDDEN` (admin routes) |
 | 404 | `NOT_FOUND` (also used when the caller may not see the resource) |
-| 409 | `DAILY_RIDE_LIMIT` (4 per day), `RIDE_FULL`, `RIDE_NOT_BOOKABLE` (cancelled/completed/departing in < 10 min), `OWN_RIDE`, `BLOCKED`, `ALREADY_REQUESTED`, `NO_LONGER_MATCHES`, `INVALID_STATE` (transition not allowed), `REQUEST_EXPIRED`, `WINDOW_CLOSED` (rating/no-show window over), `ALREADY_RATED`, `ALERT_LIMIT` (E8), `LARGE_CHANGE` (admin energy price ±30 %) |
+| 409 | `DAILY_RIDE_LIMIT` (4 per day), `RIDE_FULL`, `RIDE_NOT_BOOKABLE` (cancelled/completed/departing in < 10 min), `OWN_RIDE`, `BLOCKED`, `ALREADY_REQUESTED`, `NO_LONGER_MATCHES`, `INVALID_STATE` (transition not allowed), `REQUEST_EXPIRED`, `WINDOW_CLOSED` (rating/no-show window over), `ALREADY_RATED`, `ALERT_LIMIT` (E8), `LARGE_CHANGE` (admin energy price ±30 %), `RIDE_NOT_EDITABLE` (ride edit: not published or already departed), `SEATS_BELOW_BOOKED` (ride edit: fewer seats than are booked) |
 | 422 | `ROUTE_NOT_FOUND` (router found no route) |
 | 429 | `RATE_LIMITED` |
 | 502/503 | `ROUTING_UNAVAILABLE`, `UPSTREAM_ERROR`, `TEMPORARILY_UNAVAILABLE` (E6: `DELETE /me` lost a lock race twice; retry) |
@@ -213,10 +213,20 @@ Driver list. `{ items: [{ id, departureAt, originLabel, destinationLabel, status
                     "pickup": { "point": LatLng, "label": "…" }, "dropoff": {...},   // exact only within window
                     "phoneE164": "+40…" /* only within window */, "priceLockedBani": 200, "finalPriceBani": null,
                     "canMarkNoShow": false, "canRate": false } ],
-  "canCancel": true, "lateCancelIfNow": false,
+  "canCancel": true, "canEdit": true, "lateCancelIfNow": false,
   "fuelType": "diesel", "lateCancel": false, "cancelledAt": null, "createdAt": "…" }
 ```
 Additive fields added in E2: `fuelType` (from the vehicle snapshot), `lateCancel` (true once cancelled within 30 min of departure), `cancelledAt`, `createdAt`. Implemented in E4: `requests` holds the open requests (`requested`, `expires_at` in the future, soonest deadline first): public profile, **area labels** and `segmentM`, never a point. `priceIfAcceptedBani` is `seatPrice(segment, rate, confirmed + 1)`. `passengers` holds the `confirmed` bookings. `pickup.point`, `dropoff.point` and `phoneE164` go through `revealFor` (confirmed or completed, and now < departure + 24 h): outside it the points are 300 m grid centres (`approx: true`) and `phoneE164` is `null`. `label` is always an area name. `GET /me/rides` `pendingRequests` counts the open requests. For a coarsened ride (no stored route) `route` falls back to a straight line between the two points.
+
+### `PATCH /rides/{id}`: edit a published ride, driver only (ADR 0041)
+Body: a partial, strict object with **at least one** of `{ "departureAt"?: ISO UTC, "seats"?: 1..4, "note"?: string | null, "autoAccept"?: boolean }`. `note: null` (or an empty string) clears the note. Anything else is `400 VALIDATION_FAILED` (`fields` names the key). Sending the **origin, destination, labels, route, previewId, isFree, price, priceTable, vehicle, car, distanceM or durationS** is `400 ROUTE_NOT_EDITABLE` with `fields.<key> = "not_editable"`: changing the route would change the distance, the price and every passenger's pickup segment, so the driver cancels the ride and publishes a new one. A body that changes nothing (same values) is a `200` no-op that writes nothing.
+`200` returns the updated owner view (same shape as `GET /me/rides/{id}`, plus `canEdit`). Gates: signed in, active, consent (`CONSENT_REQUIRED`); rate limit 20/hour (`ride-edit`). The ride must belong to the caller (else `404`, never 403).
+Rules, in one transaction under the ride row lock (the same lock as booking, approve and cancel):
+- not `published` or already departed: `409 RIDE_NOT_EDITABLE` (`canEdit` in the owner view is the same test);
+- a changed `departureAt` follows the publish rules: `400 DEPARTURE_TOO_SOON` (< 15 min ahead) or `DEPARTURE_TOO_FAR` (> 14 days), and the daily limit of 4 non-cancelled rides on the Europe/Bucharest day of the NEW time (this ride is not counted): `409 DAILY_RIDE_LIMIT`. An unchanged `departureAt` is not re-checked, so seats and note can still be corrected minutes before departure;
+- `seats` 1..4 (`400 VALIDATION_FAILED`), not above the vehicle's seats when raised (`400 SEATS_EXCEED_VEHICLE`), not below the seats already confirmed: `409 SEATS_BELOW_BOOKED` (`fields.seats = "below_booked"`);
+- when the **departure time changed**: every open request is clamped (`expires_at = least(expires_at, newDeparture - 10 min)`), every requested or confirmed booking is flagged unseen for its passenger and one `ride_updated` outbox row per such booking is queued (email + push, dedupe `ride_updated:{bookingId}:{new departureAt}`). Confirmed seats and locked prices are untouched. Seats, note and auto-accept notify nobody (switching auto-accept on never confirms requests that are already pending).
+No new analytics event (the `analytics_events.props` check would need a migration). `PATCH /me/rides/{id}` (auto-accept only, below) keeps working.
 
 ### `POST /rides/{id}/cancel`: driver only
 Body `{}`. Ride → `cancelled`. All `requested` and `confirmed` bookings → `cancelled` (`cancelled_by='driver'`), passengers emailed. Within 30 min of departure: `late_cancel=true` + a reliability event. `200` returns the owner view. `INVALID_STATE` if not `published`.

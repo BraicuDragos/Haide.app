@@ -2,14 +2,17 @@ import { Hono } from 'hono';
 import {
   cancelRideBodySchema,
   createRideBodySchema,
+  editRideBodySchema,
   previewBodySchema,
   ridesQuerySchema,
 } from '../../_shared/contracts/rides.ts';
 import { RATE_LIMITS } from '../../_shared/domain/rules.ts';
-import { requireActive, requireVehicle } from '../middleware/gates.ts';
+import { requireActive, requireConsent, requireVehicle } from '../middleware/gates.ts';
 import { rateLimit } from '../middleware/rateLimit.ts';
 import {
+  assertNoFixedFields,
   cancelRide,
+  editRide,
   getMyRide,
   getPublicRide,
   listMyRides,
@@ -75,6 +78,20 @@ rideRoutes.post(
   async (c) => {
     parse(cancelRideBodySchema, await readOptionalJson(c));
     return c.json(await cancelRide(c.get('deps'), c.get('account'), c.req.param('id')));
+  },
+);
+
+// PATCH /rides/{id}: driver only (404 for anyone else). Time, seats, note, auto-accept (ADR 0041).
+// Route, price and vehicle are fixed: sending them is ROUTE_NOT_EDITABLE.
+rideRoutes.patch(
+  '/rides/:id',
+  requireConsent,
+  rateLimit('ride-edit', RATE_LIMITS.rideEdit),
+  async (c) => {
+    const raw = await readJson(c);
+    assertNoFixedFields(raw);
+    const body = parse(editRideBodySchema, raw);
+    return c.json(await editRide(c.get('deps'), c.get('account'), c.req.param('id'), body));
   },
 );
 

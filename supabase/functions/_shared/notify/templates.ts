@@ -280,6 +280,19 @@ function parts(input: TemplateInput, ctx: RenderContext): Parts {
         path: `/ride/${encodeURIComponent(str(p.rideId, ''))}?alert=${encodeURIComponent(str(p.alertId, ''))}`,
       };
     }
+    case 'ride_updated': {
+      const p = input.payload;
+      return {
+        subject: t('email.rideUpdated.subject', {
+          driver: str(p.driverFirstName, t('email.fallback.driver')),
+        }),
+        body: t('email.rideUpdated.body', {
+          time: whenLabel(date(p.departureAt), ctx.now),
+          previous: whenLabel(date(p.previousDepartureAt), ctx.now),
+        }),
+        path: `/booking/${encodeURIComponent(str(p.bookingId, ''))}`,
+      };
+    }
     case 'data_export_ack':
       return {
         subject: t('email.dataAck.subject'),

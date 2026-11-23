@@ -14,6 +14,8 @@ export const ERROR_STATUS = {
   PHOTO_INVALID: 400,
   PHOTO_TOO_LARGE: 400,
   CONFIRMATION_REQUIRED: 400,
+  // ADR 0041: an edit that tries to change the route, the price or the vehicle
+  ROUTE_NOT_EDITABLE: 400,
   // 401
   UNAUTHENTICATED: 401,
   // 403
@@ -39,6 +41,9 @@ export const ERROR_STATUS = {
   ALREADY_RATED: 409,
   ALERT_LIMIT: 409,
   LARGE_CHANGE: 409,
+  // ADR 0041: ride edit
+  RIDE_NOT_EDITABLE: 409,
+  SEATS_BELOW_BOOKED: 409,
   // 422
   ROUTE_NOT_FOUND: 422,
   // 429

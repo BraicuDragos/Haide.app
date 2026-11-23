@@ -793,3 +793,34 @@ export async function markSeen(
     where passenger_id = ${passengerId}
       and id in ${sql([...bookingIds])}`;
 }
+
+// ---- the ride moved (ADR 0041) ---------------------------------------------------------------------------------
+
+export type MovedBooking = {
+  id: string;
+  passenger_id: string;
+  pickup_label: string;
+  dropoff_label: string;
+};
+
+/**
+ * The ride's departure changed: every requested or confirmed booking is flagged for its passenger (the
+ * unseen badge) and returned so each gets a `ride_updated` row. A requested booking must not outlive
+ * the new departure: `expires_at = least(expires_at, expiryCap)` where the cap is departure - 10 minutes
+ * (the same margin as bookingExpiresAt). A confirmed booking keeps its seat and its locked price.
+ * Runs in the edit transaction, which already holds the ride lock.
+ */
+export async function touchBookingsOfMovedRide(
+  sql: Db,
+  rideId: string,
+  expiryCap: Date,
+  now: Date,
+): Promise<MovedBooking[]> {
+  return await sql<MovedBooking[]>`
+    update app.bookings
+    set expires_at = case when status = 'requested' then least(expires_at, ${expiryCap}::timestamptz)
+                          else expires_at end,
+        passenger_event_at = ${now}::timestamptz, updated_at = ${now}::timestamptz
+    where ride_id = ${rideId} and status in ('requested', 'confirmed')
+    returning id, passenger_id, pickup_label, dropoff_label`;
+}

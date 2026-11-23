@@ -10,10 +10,10 @@ const B = '22222222-2222-4222-8222-222222222222';
 const C = '33333333-3333-4333-8333-333333333333';
 const PLACE_IDS: Record<string, string> = {
   Cisnădie: 'aaaaaaaa-0000-4000-8000-000000000001',
-  'Piața Mare': 'aaaaaaaa-0000-4000-8000-000000000002',
+  'Centrul Istoric': 'aaaaaaaa-0000-4000-8000-000000000002',
   Șelimbăr: 'aaaaaaaa-0000-4000-8000-000000000003',
-  'Zona Industrială Vest': 'aaaaaaaa-0000-4000-8000-000000000004',
-  Hipodrom: 'aaaaaaaa-0000-4000-8000-000000000005',
+  Turnișor: 'aaaaaaaa-0000-4000-8000-000000000004',
+  'Hipodrom I': 'aaaaaaaa-0000-4000-8000-000000000005',
 };
 
 const areaRow = (areaId: string, name: string, lat: number, lng: number) => ({
@@ -99,14 +99,14 @@ describe('GET /popular-routes', () => {
     expect(out.items[1]).toMatchObject({
       rides: 0,
       from: { name: 'Cisnădie' },
-      to: { name: 'Piața Mare' },
+      to: { name: 'Centrul Istoric' },
     });
   });
 
   it('with no data returns the three curated corridors, and skips one that cannot be resolved', async () => {
     const { app } = makeApp([popularDb()], {}, { clock: fixedClock(NOW) });
     const out = popularRoutesResponseSchema.parse(await (await get(app)).json());
-    expect(out.items.map((i) => i.from.name)).toEqual(['Cisnădie', 'Șelimbăr', 'Hipodrom']);
+    expect(out.items.map((i) => i.from.name)).toEqual(['Cisnădie', 'Șelimbăr', 'Hipodrom I']);
 
     const { app: app2 } = makeApp(
       [popularDb({ unresolved: ['Șelimbăr'] })],
@@ -114,7 +114,7 @@ describe('GET /popular-routes', () => {
       { clock: fixedClock(NOW) },
     );
     const out2 = popularRoutesResponseSchema.parse(await (await get(app2)).json());
-    expect(out2.items.map((i) => i.from.name)).toEqual(['Cisnădie', 'Hipodrom']);
+    expect(out2.items.map((i) => i.from.name)).toEqual(['Cisnădie', 'Hipodrom I']);
   });
 
   it('passes the limit to the ranking and rejects a bad one', async () => {

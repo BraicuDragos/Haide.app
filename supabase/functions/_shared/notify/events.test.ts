@@ -23,6 +23,7 @@ import {
   ratingPromptOutbox,
   reportReceivedOutbox,
 } from '../domain/safety.ts';
+import { rideUpdatedRows } from '../domain/rides.ts';
 import { silentLogger } from '../log.ts';
 import type { EmailMessage, EmailProvider } from '../providers/email/types.ts';
 import { dispatchOutbox, type OutboxRecord, type OutboxStore } from './dispatch.ts';
@@ -101,6 +102,9 @@ function world() {
       dailyCap: 280,
       baseUrl: 'https://haide.test',
       supportTo: SUPPORT,
+      // One at a time: with the production concurrency the send order depends on async timing,
+      // and these tests assert who gets which mail in enqueue order.
+      concurrency: 1,
     });
   return { rows, sent, enqueue, dispatch, messageIds };
 }
@@ -201,6 +205,32 @@ describe('who is emailed for each event', () => {
       [mail(PASS_2), 'ride_cancelled'],
     ]);
     expect(out.some(([to]) => to === mail(DRIVER))).toBe(false);
+  });
+
+  it('ride_updated goes to EACH requested or confirmed passenger with their own areas, never to the driver', async () => {
+    const rows = rideUpdatedRows(
+      {
+        id: 'r1',
+        driverFirstName: 'Radu',
+        previousDepartureAt: new Date(DEP),
+        departureAt: new Date('2026-11-17T08:30:00.000Z'),
+      },
+      [
+        { id: 'b1', passengerId: PASS, pickupArea: 'A', dropoffArea: 'B' },
+        { id: 'b2', passengerId: PASS_2, pickupArea: 'C', dropoffArea: 'D' },
+      ],
+    );
+    const w = world();
+    w.enqueue(rows);
+    w.enqueue(rows); // a retry of the same move is the same event
+    await w.dispatch();
+    // the dispatcher sends concurrently: compare as a set, one mail per passenger despite the retry
+    expect(w.sent.map((m) => `${m.to}|${m.tag}`).sort()).toEqual([
+      `${mail(PASS)}|ride_updated`,
+      `${mail(PASS_2)}|ride_updated`,
+    ]);
+    expect(w.sent.some((m) => m.to === mail(DRIVER))).toBe(false);
+    for (const m of w.sent) expect(m.subject).toBe('Radu changed the time of your ride');
   });
 
   it('booking_cancelled (a passenger cancels a confirmed booking) goes to the driver', async () => {

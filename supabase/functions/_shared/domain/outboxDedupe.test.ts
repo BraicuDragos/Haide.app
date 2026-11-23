@@ -20,6 +20,15 @@ describe('outboxDedupeKey', () => {
     expect(key('ride_alert_match', { alertId: 'a1', rideId: 'r1' })).toBe('ride_alert_match:a1:r1');
   });
 
+  it('ride_updated: one row per booking and new departure, so a second move is a new event', () => {
+    const p = { bookingId: 'b1', departureAt: '2026-11-17T07:30:00.000Z' };
+    expect(key('ride_updated', p)).toBe('ride_updated:b1:2026-11-17T07:30:00.000Z');
+    expect(key('ride_updated', { ...p, departureAt: '2026-11-17T08:00:00.000Z' })).not.toBe(
+      key('ride_updated', p),
+    );
+    expect(key('ride_updated', { bookingId: 'b1' })).toBeNull();
+  });
+
   it('is null (never deduplicate) for suspensions, reinstatements and unknown templates', () => {
     expect(key('account_suspended', { reasonCode: 'other', statement: 'x' })).toBeNull();
     expect(key('account_reinstated', {})).toBeNull();
@@ -42,6 +51,7 @@ describe('outboxDedupeKey', () => {
         reportId: 'p',
         requestId: 'q',
         reporterRole: 'driver',
+        departureAt: '2026-11-17T07:30:00.000Z',
       });
       if (t === 'account_suspended' || t === 'account_reinstated') expect(k).toBeNull();
       else expect(k?.startsWith(`${t}:`)).toBe(true);
