@@ -14,6 +14,7 @@ import type {
   SummaryResponse,
 } from '@contracts/bookings';
 import type { LatLng, Place } from '@contracts/geo';
+import type { PopularRoute as PopularRouteBase, PopularRoutesResponse } from '@contracts/popular';
 import type {
   CreateRideBody,
   GeoLineString,
@@ -46,6 +47,10 @@ export type RoutePreview = PreviewResponse;
 export type RoutePreviewRequest = PreviewBody;
 export type PublishRideRequest = CreateRideBody;
 export type RouteLine = GeoLineString;
+
+// Popular routes: public, gazetteer places as returned.
+export type PopularRoute = PopularRouteBase;
+export type { PopularRoutesResponse };
 
 // Search and matching (E3).
 export type { MatchResponse, NotBookableReason, SearchResponse };

@@ -129,14 +129,16 @@ Search form. Visitors can use it without an account.
 | `find.window.60` | ±1 hour |
 | `find.cta` | Search rides |
 | `find.corridors` | Popular routes |
-| `find.corridor.south` | Cisnădie to Piața Mare |
-| `find.corridor.west` | Șelimbăr to Zona Industrială Vest |
-| `find.corridor.campus` | Hipodrom to the old town |
+| `find.popular.route` | {from} to {to} |
+| `find.popular.rides.one` | 1 ride lately |
+| `find.popular.rides.other` | {n} rides lately |
+| `find.popular.loading` | Loading popular routes |
+| `find.popular.err` | We couldn’t load popular routes. Check your connection and try again. |
+| `find.popular.empty` | No popular routes yet. Search for your own trip above. |
 | `find.visitorHint` | You can look around without an account. |
 | `find.err.missing` | Choose where you start and where you’re going. |
 | `find.err.same` | Start and destination are the same place. Choose two different places. |
 | `find.err.timeMissing` | Choose a time. |
-| `find.corridors.err` | We couldn’t load that route. Choose the places yourself. |
 
 ## 9. Place picker (E3-1, E2-1)
 
@@ -372,6 +374,23 @@ First name, photo, phone required before booking or publishing. Bio optional.
 | `profile.err.photo` | Add a photo so people can recognise you. |
 | `profile.err.photoSize` | This photo is over 5 MB. Choose a smaller JPEG or PNG. |
 | `profile.err.photoInvalid` | We couldn’t read this photo. Choose a JPEG or PNG. |
+| `profile.err.photoSmall` | This photo is too small. Choose one at least 200 px wide and tall. |
+| `profile.err.photoCrop` | We couldn’t prepare this photo. Try again or choose another. |
+| `profile.crop.title` | Adjust your photo |
+| `profile.crop.hint` | Drag to move the photo. Pinch or use the slider to zoom. |
+| `profile.crop.area` | Photo crop area. Arrow keys move the photo, plus and minus zoom. |
+| `profile.crop.zoom` | Zoom |
+| `profile.crop.zoomIn` | Zoom in |
+| `profile.crop.zoomOut` | Zoom out |
+| `profile.crop.confirm` | Use photo |
+| `profile.crop.cancel` | Cancel |
+| `profile.crop.busy` | Preparing photo |
+| `find.err.timePast` | That time has already passed. Choose a later time. |
+| `time.placeholder` | Choose |
+| `time.hour` | Hour |
+| `time.minute` | Minute |
+| `time.confirm` | Set time |
+| `time.cancel` | Cancel |
 | `profile.edit.title` | Edit profile |
 
 ## 18. Vehicle (E1-4)
@@ -459,7 +478,7 @@ Driver publishing flow with the price preview (E2-2). The driver can lower the p
 
 ## 20. My rides (E2-3, E4)
 
-Two levels of tabs: Riding or Driving, then Upcoming or Past.
+Two levels of tabs: Riding or Driving, then Upcoming, Past or Cancelled. Past no longer holds cancelled rides. No cancel reason is stored, so none is shown.
 
 | Key | English |
 |---|---|
@@ -468,8 +487,15 @@ Two levels of tabs: Riding or Driving, then Upcoming or Past.
 | `rides.driving` | Driving |
 | `rides.upcoming` | Upcoming |
 | `rides.past` | Past |
+| `rides.cancelled` | Cancelled |
+| `rides.empty.cancelled` | No cancelled rides. |
+| `rides.cancelledBy.you.driving` | You cancelled this ride |
+| `rides.cancelledBy.system` | Cancelled by Haide |
+| `rides.cancelledBy.driver` | Cancelled by the driver |
+| `rides.cancelledBy.you.riding` | You cancelled |
+| `rides.cancelledOn` | Cancelled {date} |
 | `rides.tabs.role` | Riding or driving |
-| `rides.tabs.when` | Upcoming or past |
+| `rides.tabs.when` | Upcoming, past or cancelled |
 | `rides.loading` | Loading your rides |
 | `rides.err` | We couldn’t load your rides. Check your connection and try again. |
 | `rides.more` | Show more |

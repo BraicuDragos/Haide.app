@@ -9,7 +9,7 @@ export const keys = {
   vehicle: ['me', 'vehicle'] as const,
   rides: {
     all: ['rides'] as const,
-    list: (scope: 'upcoming' | 'past') => ['rides', 'list', scope] as const,
+    list: (scope: 'upcoming' | 'past' | 'cancelled') => ['rides', 'list', scope] as const,
     mine: (id: string) => ['rides', 'mine', id] as const,
   },
   search: (body: unknown) => ['search', body] as const,
@@ -17,9 +17,10 @@ export const keys = {
   match: (id: string, body: unknown) => ['rides', 'match', id, body] as const,
   bookings: {
     all: ['bookings'] as const,
-    list: (scope: 'upcoming' | 'past') => ['bookings', 'list', scope] as const,
+    list: (scope: 'upcoming' | 'past' | 'cancelled') => ['bookings', 'list', scope] as const,
     one: (id: string) => ['bookings', 'one', id] as const,
   },
+  popularRoutes: ['popular-routes'] as const,
   summary: ['summary'] as const,
   alerts: ['alerts'] as const,
   pushConfig: ['push', 'config'] as const,

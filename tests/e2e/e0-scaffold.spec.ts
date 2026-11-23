@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page, type Route } from '@playwright/test';
+import { mockPopularApi } from './popular-helpers';
 
 const REAL_API = process.env.E2E_REAL_API === '1';
 
@@ -147,6 +148,7 @@ test('place picker: empty result, Esc closes and returns focus', async ({ page }
 
 test('place picker: API error shows a retry', async ({ page }) => {
   test.skip(REAL_API, 'error state needs the mocked API');
+  await mockPopularApi(page); // the popular routes list must not add a second alert
   await page.route('**/places?*', (route) =>
     route.fulfill({
       status: 503,
