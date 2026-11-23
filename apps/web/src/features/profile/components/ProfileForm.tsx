@@ -7,7 +7,7 @@ import { keys } from '@/api/keys';
 import type { Me } from '@/api/types';
 import { useAdvance } from '@/auth/hooks';
 import { t, tError } from '@/i18n';
-import { preparePhoto, PhotoError } from '@/lib/image';
+import { decodeForCrop, PhotoError, type PhotoProblem } from '@/lib/image';
 import { isValidFirstName, normalizeRoPhone } from '@/lib/validation';
 import { Avatar } from '@/ui/Avatar';
 import { Button } from '@/ui/Button';
@@ -15,6 +15,7 @@ import { TextArea, TextField } from '@/ui/Field';
 import { Icon } from '@/ui/Icon';
 import { Notice } from '@/ui/Notice';
 import { useToast } from '@/ui/Toast';
+import { PhotoCropper } from './PhotoCropper';
 
 type Errors = { photo?: string; firstName?: string; phone?: string; bio?: string };
 
@@ -35,6 +36,8 @@ export function ProfileForm({ me, mode }: { me: Me; mode: 'setup' | 'edit' }) {
   const [errors, setErrors] = useState<Errors>({});
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
+  const [cropBitmap, setCropBitmap] = useState<ImageBitmap | null>(null);
+  const [decoding, setDecoding] = useState(false);
 
   const fileRef = useRef<HTMLInputElement>(null);
   const photoBtn = useRef<HTMLButtonElement>(null);
@@ -47,20 +50,38 @@ export function ProfileForm({ me, mode }: { me: Me; mode: 'setup' | 'edit' }) {
 
   useEffect(() => () => void (photo && URL.revokeObjectURL(photo.url)), [photo]);
 
+  useEffect(() => () => cropBitmap?.close(), [cropBitmap]);
+
+  function photoError(problem: PhotoProblem) {
+    const key =
+      problem === 'size'
+        ? 'profile.err.photoSize'
+        : problem === 'small'
+          ? 'profile.err.photoSmall'
+          : 'profile.err.photoInvalid';
+    setErrors((x) => ({ ...x, photo: t(key) }));
+  }
+
+  /** A picked file is decoded (capped size, EXIF applied) and opens the crop dialog; the upload path is unchanged. */
   async function onFile(file: File | undefined) {
     if (!file) return;
+    setDecoding(true);
     try {
-      const blob = await preparePhoto(file);
-      setPhoto({ blob, url: URL.createObjectURL(blob) });
+      const bitmap = await decodeForCrop(file);
       setErrors((e) => ({ ...e, photo: undefined }));
+      setCropBitmap(bitmap);
     } catch (e) {
-      const problem = e instanceof PhotoError ? e.problem : 'invalid';
-      setErrors((x) => ({
-        ...x,
-        photo: problem === 'size' ? t('profile.err.photoSize') : t('profile.err.photoInvalid'),
-      }));
+      photoError(e instanceof PhotoError ? e.problem : 'invalid');
+    } finally {
+      setDecoding(false);
     }
     if (fileRef.current) fileRef.current.value = ''; // picking the same file again must still fire change
+  }
+
+  function closeCrop() {
+    setCropBitmap(null);
+    if (fileRef.current) fileRef.current.value = '';
+    photoBtn.current?.focus();
   }
 
   function focusFirst(e: Errors) {
@@ -121,6 +142,7 @@ export function ProfileForm({ me, mode }: { me: Me; mode: 'setup' | 'edit' }) {
             <Button
               ref={photoBtn}
               variant="secondary"
+              loading={decoding}
               icon={<Icon name="camera" />}
               onClick={() => fileRef.current?.click()}
               aria-describedby={['photo-hint', errors.photo ? 'photo-err' : ''].join(' ').trim()}
@@ -201,6 +223,23 @@ export function ProfileForm({ me, mode }: { me: Me; mode: 'setup' | 'edit' }) {
       <Button type="submit" block loading={busy}>
         {mode === 'setup' ? t('setup.profile.cta') : t('common.save')}
       </Button>
+
+      <PhotoCropper
+        bitmap={cropBitmap}
+        onCancel={closeCrop}
+        onConfirm={(blob) => {
+          setPhoto({ blob, url: URL.createObjectURL(blob) });
+          setErrors((e) => ({ ...e, photo: undefined }));
+          closeCrop();
+        }}
+        onError={(problem) => {
+          photoError(problem);
+          closeCrop();
+        }}
+      />
+      <span className="sr-only" role="status">
+        {decoding ? t('profile.crop.busy') : ''}
+      </span>
     </form>
   );
 }

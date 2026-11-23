@@ -1,5 +1,6 @@
 import { expect, test, type APIRequestContext } from '@playwright/test';
-import { expectNoAxeViolations, PNG_1X1 } from './accounts-helpers';
+import { expectNoAxeViolations } from './accounts-helpers';
+import { makeImage } from './photo-helpers';
 
 /**
  * E1 happy path against the REAL local stack: magic-link sign-up through the Mailpit mail catcher, then agreement,
@@ -99,11 +100,10 @@ test.describe('magic-link sign-up (real stack)', () => {
     await expect(
       page.getByRole('heading', { level: 1, name: 'Tell your neighbours who you are' }),
     ).toBeVisible();
-    await page.locator('input[type=file]').setInputFiles({
-      name: 'me.png',
-      mimeType: 'image/png',
-      buffer: PNG_1X1,
-    });
+    await page
+      .locator('input[type=file]')
+      .setInputFiles(await makeImage(page, 800, 600, 'image/png'));
+    await page.getByRole('button', { name: 'Use photo' }).click();
     await page.getByLabel('First name').fill('Ștefan');
     await page.getByLabel('Phone number').fill('0721 234 567');
     await page.getByRole('button', { name: 'Save and continue' }).click();
