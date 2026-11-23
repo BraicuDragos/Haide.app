@@ -2,6 +2,10 @@ import type { Db } from '../../_shared/db.ts';
 import type { LatLng, Place } from '../../_shared/contracts/geo.ts';
 import { groupStreetCandidates, type StreetCandidate } from '../../_shared/domain/address.ts';
 import { roundCoord } from '../../_shared/domain/privacy.ts';
+import { COVERAGE_ENVELOPE } from '../../_shared/domain/rules.ts';
+
+/** Coverage box bound as parameters (west, south, east, north): see COVERAGE_ENVELOPE. */
+const [COV_W, COV_S, COV_E, COV_N] = COVERAGE_ENVELOPE;
 
 export type PlaceRow = {
   id: string;
@@ -42,15 +46,19 @@ export async function searchPlaces(sql: Db, q: string, limit: number): Promise<P
       select t, replace(replace(replace(t, '\\', '\\\\'), '%', '\\%'), '_', '\\_') as esc,
              char_length(regexp_replace(t, '[^a-z0-9]', '', 'g')) >= 3 as fuzzy
       from q
+    ), cov as (
+      select ST_MakeEnvelope(${COV_W}::float8, ${COV_S}::float8, ${COV_E}::float8, ${COV_N}::float8, 4326) as g
     )
     select p.id::text as id, p.name, p.kind, p.locality, a.name as area_name,
            ST_Y(p.geom) as lat, ST_X(p.geom) as lng
     from app.places p
     left join app.areas a on a.id = p.area_id
     cross join qe
-    where p.search_text like qe.esc || '%'
-       or p.search_text like '% ' || qe.esc || '%'
-       or (qe.fuzzy and (p.search_text % qe.t or qe.t <% p.search_text))
+    cross join cov
+    where p.geom && cov.g
+      and (p.search_text like qe.esc || '%'
+        or p.search_text like '% ' || qe.esc || '%'
+        or (qe.fuzzy and (p.search_text % qe.t or qe.t <% p.search_text)))
     order by (p.search_text like qe.esc || '%') desc,
              word_similarity(qe.t, p.search_text) desc,
              p.rank asc,
@@ -100,13 +108,18 @@ export async function areaNameForPoint(sql: Db, point: LatLng): Promise<string |
 /** Nearest street, POI or address within 500 m, else the containing/nearest area. */
 export async function reversePlace(sql: Db, point: LatLng): Promise<Place | null> {
   const nearby = await sql<PlaceRow[]>`
-    with pt as (select ST_SetSRID(ST_MakePoint(${point.lng}::float8, ${point.lat}::float8), 4326) as g)
+    with pt as (select ST_SetSRID(ST_MakePoint(${point.lng}::float8, ${point.lat}::float8), 4326) as g),
+    cov as (
+      select ST_MakeEnvelope(${COV_W}::float8, ${COV_S}::float8, ${COV_E}::float8, ${COV_N}::float8, 4326) as g
+    )
     select p.id::text as id, p.name, p.kind, p.locality, a.name as area_name,
            ST_Y(p.geom) as lat, ST_X(p.geom) as lng
     from app.places p
     left join app.areas a on a.id = p.area_id
     cross join pt
+    cross join cov
     where p.kind <> 'area'
+      and p.geom && cov.g
       and ST_DWithin(p.geom::geography, pt.g::geography, 500)
     order by p.geom <-> pt.g asc
     limit 1`;
@@ -114,12 +127,17 @@ export async function reversePlace(sql: Db, point: LatLng): Promise<Place | null
   if (hit) return toPlace(hit);
 
   const areas = await sql<PlaceRow[]>`
-    with pt as (select ST_SetSRID(ST_MakePoint(${point.lng}::float8, ${point.lat}::float8), 4326) as g)
+    with pt as (select ST_SetSRID(ST_MakePoint(${point.lng}::float8, ${point.lat}::float8), 4326) as g),
+    cov as (
+      select ST_MakeEnvelope(${COV_W}::float8, ${COV_S}::float8, ${COV_E}::float8, ${COV_N}::float8, 4326) as g
+    )
     select a.id::text as id, a.name, 'area'::text as kind, a.locality, a.name as area_name,
            ST_Y(a.centroid) as lat, ST_X(a.centroid) as lng
     from app.areas a
     cross join pt
+    cross join cov
     where a.id = app.area_for(pt.g)
+      and a.centroid && cov.g
     limit 1`;
   const area = areas[0];
   return area ? toPlace(area) : null;

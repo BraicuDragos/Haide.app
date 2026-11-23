@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { errorEnvelopeSchema } from '../_shared/contracts/errors.ts';
 import { popularRoutesResponseSchema } from '../_shared/contracts/popular.ts';
 import { fixedClock } from '../_shared/domain/clock.ts';
+import { inCoverage } from '../_shared/domain/privacy.ts';
+import { COVERAGE_ENVELOPE } from '../_shared/domain/rules.ts';
 import { BASE, makeApp, type Handler, type Query } from './testing.ts';
 
 const NOW = '2026-11-16T05:00:00Z';
@@ -9,7 +11,7 @@ const A = '11111111-1111-4111-8111-111111111111';
 const B = '22222222-2222-4222-8222-222222222222';
 const C = '33333333-3333-4333-8333-333333333333';
 const PLACE_IDS: Record<string, string> = {
-  Cisnădie: 'aaaaaaaa-0000-4000-8000-000000000001',
+  Centru: 'aaaaaaaa-0000-4000-8000-000000000001',
   'Centrul Istoric': 'aaaaaaaa-0000-4000-8000-000000000002',
   Șelimbăr: 'aaaaaaaa-0000-4000-8000-000000000003',
   Turnișor: 'aaaaaaaa-0000-4000-8000-000000000004',
@@ -27,7 +29,12 @@ const areaRow = (areaId: string, name: string, lat: number, lng: number) => ({
   lng,
 });
 
-type Opts = { ranked?: Record<string, unknown>[]; unresolved?: string[] };
+type Opts = {
+  ranked?: Record<string, unknown>[];
+  unresolved?: string[];
+  /** Name whose row sits OUTSIDE coverage (as if SQL had not filtered it). */
+  outside?: string;
+};
 function popularDb(opts: Opts = {}): Handler {
   return (q: Query) => {
     if (q.text.includes('from app.popular_routes')) return opts.ranked ?? [];
@@ -42,6 +49,7 @@ function popularDb(opts: Opts = {}): Handler {
       const name = String(q.values[0]);
       if (opts.unresolved?.includes(name)) return [];
       const id = PLACE_IDS[name];
+      const centru = name === 'Centru';
       return id
         ? [
             {
@@ -49,10 +57,10 @@ function popularDb(opts: Opts = {}): Handler {
               id,
               name,
               kind: 'poi',
-              locality: 'Sibiu',
+              locality: centru ? 'Cisnădie' : 'Sibiu',
               area_name: name,
-              lat: 45.79,
-              lng: 24.15,
+              lat: opts.outside === name ? 45.639622 : centru ? 45.714466 : 45.79,
+              lng: opts.outside === name ? 24.088587 : centru ? 24.152046 : 24.15,
             },
           ]
         : [];
@@ -101,6 +109,53 @@ describe('GET /popular-routes', () => {
       from: { name: 'Cisnădie' },
       to: { name: 'Centrul Istoric' },
     });
+  });
+
+  it('route 1 shows the name Cisnădie but carries the point of its Centru (inside coverage)', async () => {
+    const { app, calls } = makeApp([popularDb()], {}, { clock: fixedClock(NOW) });
+    const out = popularRoutesResponseSchema.parse(await (await get(app)).json());
+    expect(out.items[0]?.from).toMatchObject({
+      id: PLACE_IDS.Centru,
+      name: 'Cisnădie',
+      secondary: 'Centru',
+      point: { lat: 45.71447, lng: 24.15205 },
+    });
+    // the lookup is by name AND locality, so an ambiguous "Centru" cannot pick another town
+    const centru = calls.find(
+      (c) => c.text.includes('immutable_unaccent(lower(p.name))') && c.values[0] === 'Centru',
+    );
+    expect(centru?.values[1]).toBe('Cisnădie');
+    // nothing offered lies outside coverage
+    for (const i of out.items) {
+      for (const pt of [i.from.point, i.to.point]) expect(inCoverage(pt)).toBe(true);
+    }
+  });
+
+  it('drops a curated route whose end is outside coverage, even if a lookup returns it', async () => {
+    const { app } = makeApp([popularDb({ outside: 'Centru' })], {}, { clock: fixedClock(NOW) });
+    const out = popularRoutesResponseSchema.parse(await (await get(app)).json());
+    expect(out.items.map((i) => i.from.name)).toEqual(['Șelimbăr', 'Hipodrom I']);
+    for (const i of out.items) {
+      for (const pt of [i.from.point, i.to.point]) expect(inCoverage(pt)).toBe(true);
+    }
+  });
+
+  it('binds the coverage box as parameters in every place lookup', async () => {
+    const ranked = [
+      { origin_area: A, destination_area: B, ride_count: 3, booking_count: 1, score: 4 },
+    ];
+    const { app, calls } = makeApp([popularDb({ ranked })], {}, { clock: fixedClock(NOW) });
+    await get(app);
+    const lookups = calls.filter(
+      (c) =>
+        c.text.includes('immutable_unaccent(lower(p.name))') ||
+        c.text.includes('from app.areas a left join lateral'),
+    );
+    expect(lookups.length).toBeGreaterThan(1);
+    for (const l of lookups) {
+      expect(l.text).toContain('ST_MakeEnvelope(');
+      for (const v of COVERAGE_ENVELOPE) expect(l.values).toContain(v);
+    }
   });
 
   it('with no data returns the three curated corridors, and skips one that cannot be resolved', async () => {

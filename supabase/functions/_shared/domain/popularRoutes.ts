@@ -1,3 +1,5 @@
+import { inCoverage } from './privacy.ts';
+
 /**
  * Popular routes, pure part (no I/O): merging real ranked routes with the curated pilot corridors.
  * The ranking itself (window, min 2 drivers, score, order) is SQL: app.popular_routes().
@@ -9,19 +11,49 @@
  * `source: 'curated'` and `rides: 0`. Names are resolved to gazetteer places server-side; a corridor
  * that cannot be resolved is skipped.
  */
-export const CURATED_PILOT_ROUTES: readonly { from: string; to: string }[] = [
-  // Every name must be an EXISTING gazetteer place of kind `area`: guarded by a test against
-  // supabase/seed/gazetteer/places.csv. (The first version used "Piața Mare", which exists only as
-  // street addresses, and "Zona Industrială Vest", which does not exist at all: those routes were skipped.)
-  { from: 'Cisnădie', to: 'Centrul Istoric' },
-  { from: 'Șelimbăr', to: 'Turnișor' },
-  { from: 'Hipodrom I', to: 'Centrul Istoric' },
+export type CuratedEnd = {
+  /** Gazetteer name to look up (exact, diacritics and case insensitive). */
+  name: string;
+  /** Narrows the lookup to this locality, for names that exist in several ("Centru"). */
+  locality?: string;
+  /** Name shown to the user instead of `name` (the place keeps its id and point). */
+  label?: string;
+};
+
+export const CURATED_PILOT_ROUTES: readonly { from: CuratedEnd; to: CuratedEnd }[] = [
+  // Every end must be an EXISTING gazetteer place of kind `area` INSIDE COVERAGE: guarded by a test
+  // against supabase/seed/gazetteer/places.csv. (The first version used "Piața Mare", which exists only
+  // as street addresses, and "Zona Industrială Vest", which does not exist at all; the second used the
+  // locality row "Cisnădie", whose point is outside coverage, so POST /search answered 400.)
+  // Route 1 starts from the centre of Cisnădie, shown as "Cisnădie".
+  {
+    from: { name: 'Centru', locality: 'Cisnădie', label: 'Cisnădie' },
+    to: { name: 'Centrul Istoric' },
+  },
+  { from: { name: 'Șelimbăr' }, to: { name: 'Turnișor' } },
+  { from: { name: 'Hipodrom I' }, to: { name: 'Centrul Istoric' } },
 ];
 
 /** Fewer real routes than this: fill up with curated ones (up to this many in total). */
 export const MIN_REAL_ROUTES = 3;
 
-export type PlaceRef = { id: string; name: string };
+export type PlaceRef = { id: string; name: string; point: { lat: number; lng: number } };
+
+/**
+ * Shows a resolved place under a curated label. Id and point stay (the app searches with them); the
+ * secondary line keeps the original name so the user still sees where the point is ("Centru").
+ */
+export function withLabel<P extends PlaceRef & { secondary: string }>(
+  place: P,
+  label: string | undefined,
+): P {
+  if (!label || label === place.name) return place;
+  const secondary = [place.name, ...place.secondary.split(', ')]
+    .filter((v) => v && nameKey(v) !== nameKey(label))
+    .filter((v, i, all) => all.indexOf(v) === i)
+    .join(', ');
+  return { ...place, name: label, secondary };
+}
 
 export type MergedRoute<P extends PlaceRef> = {
   from: P;
@@ -45,6 +77,8 @@ const routeKeys = (from: PlaceRef, to: PlaceRef): string[] => [
  * resolved curated corridors are appended in their fixed order until the list has
  * min(limit, MIN_REAL_ROUTES) items. A curated corridor is skipped when either end is unresolved,
  * both ends are the same place, or it duplicates a real route (same ids or same names).
+ * Any route (real or curated) with an end outside coverage is dropped, because the app could not
+ * search it. Real routes are filtered before counting, so the curated fill-up still reaches the target.
  * The result is never longer than `limit`.
  */
 export function mergePopularRoutes<P extends PlaceRef>(
@@ -52,16 +86,18 @@ export function mergePopularRoutes<P extends PlaceRef>(
   curated: readonly { from: P | null; to: P | null }[],
   limit: number,
 ): MergedRoute<P>[] {
-  const out: MergedRoute<P>[] = real
+  const usable = real.filter((r) => inCoverage(r.from.point) && inCoverage(r.to.point));
+  const out: MergedRoute<P>[] = usable
     .slice(0, limit)
     .map((r) => ({ from: r.from, to: r.to, rides: r.rides, source: 'data' as const }));
-  if (real.length >= MIN_REAL_ROUTES) return out;
+  if (usable.length >= MIN_REAL_ROUTES) return out;
 
   const target = Math.min(limit, MIN_REAL_ROUTES);
   const seen = new Set(out.flatMap((r) => routeKeys(r.from, r.to)));
   for (const c of curated) {
     if (out.length >= target) break;
     if (!c.from || !c.to) continue;
+    if (!inCoverage(c.from.point) || !inCoverage(c.to.point)) continue;
     if (c.from.id === c.to.id || nameKey(c.from.name) === nameKey(c.to.name)) continue;
     const keys = routeKeys(c.from, c.to);
     if (keys.some((k) => seen.has(k))) continue;

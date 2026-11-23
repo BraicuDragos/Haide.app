@@ -1,6 +1,10 @@
 import type { Place } from '../../_shared/contracts/geo.ts';
 import type { Db } from '../../_shared/db.ts';
+import { COVERAGE_ENVELOPE } from '../../_shared/domain/rules.ts';
 import { toPlace } from './places.ts';
+
+/** Coverage box bound as parameters (west, south, east, north): see COVERAGE_ENVELOPE. */
+const [COV_W, COV_S, COV_E, COV_N] = COVERAGE_ENVELOPE;
 
 export type PopularRow = {
   origin_area: string;
@@ -56,7 +60,9 @@ export async function areaPlaces(sql: Db, areaIds: string[]): Promise<Map<string
       order by pl.osm_id asc nulls last, pl.id asc
       limit 1
     ) p on true
-    where a.id = any(string_to_array(${areaIds.join(',')}::text, ',')::uuid[])`;
+    where a.id = any(string_to_array(${areaIds.join(',')}::text, ',')::uuid[])
+      and coalesce(p.geom, a.centroid)
+        && ST_MakeEnvelope(${COV_W}::float8, ${COV_S}::float8, ${COV_E}::float8, ${COV_N}::float8, 4326)`;
   for (const r of rows) out.set(r.area_id, toPlace(r));
   return out;
 }
@@ -65,13 +71,20 @@ export async function areaPlaces(sql: Db, areaIds: string[]): Promise<Map<string
  * Gazetteer place by exact (diacritics and case insensitive) name, best kind first (area, poi,
  * street, address). Null when nothing matches. Used to resolve the curated corridors.
  */
-export async function placeByName(sql: Db, name: string): Promise<Place | null> {
+export async function placeByName(
+  sql: Db,
+  name: string,
+  locality: string | null = null,
+): Promise<Place | null> {
   const rows = await sql<AreaPlaceRow[]>`
     select p.id::text as area_id, p.id::text as id, p.name, p.kind, p.locality, a.name as area_name,
            ST_Y(p.geom) as lat, ST_X(p.geom) as lng
     from app.places p
     left join app.areas a on a.id = p.area_id
     where app.immutable_unaccent(lower(p.name)) = app.immutable_unaccent(lower(${name}::text))
+      and (${locality}::text is null
+        or app.immutable_unaccent(lower(p.locality)) = app.immutable_unaccent(lower(${locality}::text)))
+      and p.geom && ST_MakeEnvelope(${COV_W}::float8, ${COV_S}::float8, ${COV_E}::float8, ${COV_N}::float8, 4326)
     order by p.rank asc, p.osm_id asc nulls last, p.id asc
     limit 1`;
   const hit = rows[0];
