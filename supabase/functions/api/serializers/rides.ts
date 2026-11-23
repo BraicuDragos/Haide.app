@@ -75,8 +75,16 @@ export function toOwnerView(
     id: row.id,
     status: row.status,
     departureAt: departureAt.toISOString(),
-    origin: { point: origin, label: row.origin_label },
-    destination: { point: destination, label: row.destination_label },
+    origin: {
+      point: origin,
+      label: row.origin_label,
+      approximate: row.origin_approximate === true,
+    },
+    destination: {
+      point: destination,
+      label: row.destination_label,
+      approximate: row.destination_approximate === true,
+    },
     route,
     distanceM: row.distance_m,
     durationS: row.duration_s,

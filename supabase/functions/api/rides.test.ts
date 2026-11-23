@@ -953,3 +953,95 @@ describe('GET /rides/{id} (public view)', () => {
     expect(out.priceTable.map((r) => r.priceBani)).toEqual([0, 0, 0]);
   });
 });
+
+// ---- Approximate addresses (ADR 0042) ------------------------------------------------------------------
+
+describe('approximate address flags', () => {
+  const previewBody = { origin: SHOPPING_CITY, destination: ZI_VEST };
+  const preview = async (b: unknown) => {
+    const { app, calls } = makeApp([rideDb().handler]);
+    const res = await app.request(`${BASE}/rides/preview`, {
+      ...post(b),
+      headers: { 'content-type': 'application/json', ...(await auth()) },
+    });
+    return { res, calls };
+  };
+
+  it('preview stores the flags next to the labels; the label sent is kept as is', async () => {
+    const { res, calls } = await preview({
+      ...previewBody,
+      originLabel: 'Strada Negoveanu 2A',
+      destinationLabel: 'Birou',
+      originApproximate: true,
+    });
+    expect(res.status).toBe(200);
+    const out = previewResponseSchema.parse(await res.json());
+    expect(out.originLabel).toBe('Strada Negoveanu 2A');
+    const insert = find(calls, 'insert into app.route_previews');
+    expect(insert?.text).toContain('origin_approximate, destination_approximate');
+    const vals = insert?.values ?? [];
+    const at = vals.indexOf('Strada Negoveanu 2A');
+    expect(vals.slice(at, at + 4)).toEqual(['Strada Negoveanu 2A', 'Birou', true, false]);
+    // a typed label means no reverse lookup that could replace it
+    expect(has(calls, 'ST_DWithin(pl.geom')).toBe(false);
+  });
+
+  it('the flags default to false and only a real true counts', async () => {
+    const plain = await preview(previewBody);
+    const vals = find(plain.calls, 'insert into app.route_previews')?.values ?? [];
+    expect(vals).toContain(false);
+    expect(vals).not.toContain(true);
+    const odd = await preview({
+      ...previewBody,
+      originApproximate: false,
+      destinationApproximate: true,
+    });
+    const v2 = find(odd.calls, 'insert into app.route_previews')?.values ?? [];
+    expect(v2.filter((v) => typeof v === 'boolean')).toEqual([false, true]);
+  });
+
+  it('rejects flags that are not booleans', async () => {
+    const { res } = await preview({ ...previewBody, originApproximate: 'yes' });
+    expect(res.status).toBe(400);
+  });
+
+  it('publish copies the flags from the stored preview (the client cannot send them)', async () => {
+    const { app, calls } = makeApp([rideDb().handler]);
+    const res = await app.request(`${BASE}/rides`, {
+      ...post({
+        previewId: PREVIEW_ID,
+        departureAt: '2026-11-16T07:00:00Z',
+        seats: 3,
+        originApproximate: true,
+      }),
+      headers: { 'content-type': 'application/json', ...(await auth()) },
+    });
+    expect(res.status).toBe(201);
+    const ins = find(calls, 'insert into app.rides');
+    expect(ins?.text).toContain('origin_approximate, destination_approximate');
+    expect(ins?.text).toContain('p.origin_approximate, p.destination_approximate');
+    expect(ins?.values).not.toContain(true);
+  });
+
+  it('the owner view carries approximate per place, false for old rows', async () => {
+    const flagged = makeApp([
+      rideDb({ ownerRide: ownerRow({ origin_approximate: true, destination_approximate: false }) })
+        .handler,
+    ]);
+    const res = await flagged.app.request(`${BASE}/me/rides/${RIDE_ID}`, {
+      headers: await auth(),
+    });
+    const out = rideOwnerViewSchema.parse(await res.json());
+    expect(out.origin.approximate).toBe(true);
+    expect(out.destination.approximate).toBe(false);
+    // the stored label is shown unchanged
+    expect(out.origin.label).toBe('Șelimbăr, Shopping City Sibiu');
+    expect(find(flagged.calls, 'from app.rides r')?.text).toContain('r.origin_approximate');
+
+    const old = makeApp([rideDb().handler]);
+    const res2 = await old.app.request(`${BASE}/me/rides/${RIDE_ID}`, { headers: await auth() });
+    const out2 = rideOwnerViewSchema.parse(await res2.json());
+    expect(out2.origin.approximate).toBe(false);
+    expect(out2.destination.approximate).toBe(false);
+  });
+});

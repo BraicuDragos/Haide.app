@@ -110,6 +110,8 @@ export async function previewRide(
     destination,
     originLabel,
     destinationLabel,
+    originApproximate: body.originApproximate === true,
+    destinationApproximate: body.destinationApproximate === true,
     routeGeoJson: JSON.stringify({ type: 'LineString', coordinates: route.coordinates }),
     distanceM: route.distanceM,
     durationS: route.durationS,

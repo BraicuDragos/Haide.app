@@ -105,4 +105,17 @@ describe('ride request contracts', () => {
     expect(editRideBodySchema.safeParse({ note: 'x'.repeat(201) }).success).toBe(false);
     expect(editRideBodySchema.safeParse({ seats: 2, price: 5 }).success).toBe(false);
   });
+
+  it('preview: approximate-address flags are optional booleans (ADR 0042)', () => {
+    const points = { origin: { lat: 45.7, lng: 24.1 }, destination: { lat: 45.8, lng: 24.1 } };
+    expect(previewBodySchema.parse(points)).not.toHaveProperty('originApproximate');
+    const ok = previewBodySchema.parse({
+      ...points,
+      originApproximate: true,
+      destinationApproximate: false,
+    });
+    expect(ok.originApproximate).toBe(true);
+    expect(ok.destinationApproximate).toBe(false);
+    expect(previewBodySchema.safeParse({ ...points, originApproximate: 1 }).success).toBe(false);
+  });
 });

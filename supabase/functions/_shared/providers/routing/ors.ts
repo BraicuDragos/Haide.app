@@ -61,6 +61,12 @@ export function createOrsProvider(opts: OrsOptions): RoutingProvider {
   const url = `${(opts.baseUrl ?? ORS_BASE_URL).replace(/\/+$/, '')}${ORS_PATH}`;
   const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
 
+  // Snapping (ADR 0042): the body sends no `radiuses`, so ORS applies its default of 350 m per
+  // coordinate and snaps each point to the nearest routable road inside that radius; with no road
+  // inside it answers error 2010 ("could not find routable point"), mapped to ROUTE_NOT_FOUND below.
+  // An approximate address is estimated from the neighbouring numbers of a street (interpolation is
+  // bounded to 300 m between two known numbers), so it sits on or next to that street and well inside
+  // 350 m of a road. The estimate is never extrapolated off the street. Nothing here adds an ORS call.
   async function call(origin: LatLng, destination: LatLng): Promise<Response> {
     return await doFetch(url, {
       method: 'POST',

@@ -79,6 +79,9 @@ export const previewBodySchema = z.object({
   destination: latLngSchema,
   originLabel: z.string().trim().max(RIDE_LIMITS.labelMax).optional(),
   destinationLabel: z.string().trim().max(RIDE_LIMITS.labelMax).optional(),
+  /** The picked place was a synthetic approximate address (GET /places `approximate: true`), ADR 0042. */
+  originApproximate: z.boolean().optional(),
+  destinationApproximate: z.boolean().optional(),
 });
 export type PreviewBody = z.infer<typeof previewBodySchema>;
 
@@ -152,7 +155,12 @@ export type RideSeries = z.infer<typeof rideSeriesSchema>;
 // E4: `requests` (open requests, never any point) and `passengers` are filled. E5: `passengers` holds
 // confirmed, completed and no_show bookings.
 
-const ownerPlaceSchema = z.object({ point: latLngSchema, label: z.string() });
+/** `approximate`: the point was estimated from neighbouring house numbers (ADR 0042). */
+const ownerPlaceSchema = z.object({
+  point: latLngSchema,
+  label: z.string(),
+  approximate: z.boolean(),
+});
 
 /**
  * A booking point: exact (5 decimals) only inside the reveal window of a confirmed booking
