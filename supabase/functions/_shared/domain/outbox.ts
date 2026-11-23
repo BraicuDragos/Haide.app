@@ -126,6 +126,20 @@ export type RideAlertMatchPayload = {
   moreCount: number;
 };
 
+/**
+ * ADR 0041: to each passenger with a requested or confirmed booking when the driver moved the
+ * departure. Ids, two times, the driver's first name and the passenger's own areas only.
+ */
+export type RideUpdatedPayload = {
+  bookingId: string;
+  rideId: string;
+  driverFirstName: string | null;
+  previousDepartureAt: string;
+  departureAt: string;
+  pickupArea: string;
+  dropoffArea: string;
+};
+
 export type OutboxPayloadMap = {
   booking_requested: BookingRequestedPayload;
   booking_confirmed: BookingConfirmedPayload;
@@ -143,6 +157,7 @@ export type OutboxPayloadMap = {
   account_reinstated: AccountReinstatedPayload;
   booking_auto_confirmed: BookingAutoConfirmedPayload;
   ride_alert_match: RideAlertMatchPayload;
+  ride_updated: RideUpdatedPayload;
 };
 
 export type OutboxTemplate = keyof OutboxPayloadMap;
@@ -164,6 +179,7 @@ export const OUTBOX_TEMPLATES = [
   'account_reinstated',
   'booking_auto_confirmed',
   'ride_alert_match',
+  'ride_updated',
 ] as const satisfies readonly OutboxTemplate[];
 
 /** One row to insert into app.outbox. Distributes over the template so payload and name stay paired. */
@@ -185,6 +201,52 @@ export const isAnyStatusTemplate = (template: string): boolean =>
 
 export const isOutboxTemplate = (v: string): v is OutboxTemplate =>
   (OUTBOX_TEMPLATES as readonly string[]).includes(v);
+
+// ---- dedupe key -------------------------------------------------------------------------------------
+
+/**
+ * The idempotency key of an outbox row (migration 20261126090000): template plus the natural id of
+ * the event, so the same event enqueued twice produces ONE row per (user, channel). `null` means
+ * "no natural id, never deduplicate": a suspension or a reinstatement can legitimately repeat.
+ * This is the ONLY place the key is derived (repo/outbox.ts calls it for every insert path).
+ */
+export function outboxDedupeKey(row: { template: string; payload: unknown }): string | null {
+  const p = (row.payload ?? {}) as Record<string, unknown>;
+  const id = (k: string): string | null => {
+    const v = p[k];
+    return typeof v === 'string' && v.length > 0 ? v : null;
+  };
+  const join = (...parts: (string | null)[]): string | null =>
+    parts.every((x) => x !== null) ? `${row.template}:${parts.join(':')}` : null;
+  switch (row.template) {
+    case 'booking_requested':
+    case 'booking_confirmed':
+    case 'booking_auto_confirmed':
+    case 'booking_rejected':
+    case 'booking_expired':
+    case 'ride_cancelled':
+    case 'booking_cancelled':
+    case 'rating_prompt':
+      return join(id('bookingId'));
+    case 'rating_prompt_driver':
+      return join(id('rideId'));
+    case 'ride_updated':
+      // One row per booking and new departure: a retry is one row, a second move is a new event.
+      return join(id('bookingId'), id('departureAt'));
+    case 'no_show_reported':
+      return join(id('bookingId'), id('reporterRole'));
+    case 'report_received':
+      return join(id('reportId'));
+    case 'data_export_requested':
+    case 'data_export_ack':
+      return join(id('requestId'));
+    case 'ride_alert_match':
+      return join(id('alertId'), id('rideId'));
+    default:
+      // account_suspended, account_reinstated and unknown templates: no natural id.
+      return null;
+  }
+}
 
 // ---- payload safety ---------------------------------------------------------------------------------
 

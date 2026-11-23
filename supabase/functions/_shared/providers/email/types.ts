@@ -12,7 +12,8 @@ export type EmailMessage = {
 };
 
 export type SendResult =
-  | { ok: true }
+  /** `messageId`: the provider's id (Brevo `messageId`), stored so a row can be traced in its logs. */
+  | { ok: true; messageId?: string }
   /** `permanent`: do not retry (a 4xx other than 429). Otherwise retry with backoff. */
   | { ok: false; permanent: boolean; error: string };
 

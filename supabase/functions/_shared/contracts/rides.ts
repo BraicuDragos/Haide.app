@@ -224,6 +224,8 @@ export const rideOwnerViewSchema = z.object({
   passengers: z.array(ridePassengerItemSchema),
   /** True while published and before departure. */
   canCancel: z.boolean(),
+  /** True while published and before departure (ADR 0041): PATCH /rides/{id} is allowed. */
+  canEdit: z.boolean(),
   /** Cancelling right now would count as a late cancellation (30 min or less before departure). */
   lateCancelIfNow: z.boolean(),
   /** Set once cancelled: true when it was a late cancellation. */
@@ -239,10 +241,18 @@ export const rideOwnerViewSchema = z.object({
 });
 export type RideOwnerView = z.infer<typeof rideOwnerViewSchema>;
 
-// ---- GET /me/rides?scope=upcoming|past&limit&cursor ------------------------------------------------
+// ---- GET /me/rides?scope=upcoming|past|cancelled&limit&cursor ---------------------------------------
+// upcoming: published, not departed, ascending. past: everything else EXCEPT cancelled rides, newest
+// first. cancelled: cancelled rides, newest departure first. Always the caller's own rides.
+
+export const rideScopeSchema = z.enum(['upcoming', 'past', 'cancelled']);
+
+/** Who cancelled a ride. Old rows hold NULL in the database and are read as `driver`. */
+export const rideCancelledBySchema = z.enum(['driver', 'system']);
+export type RideCancelledBy = z.infer<typeof rideCancelledBySchema>;
 
 export const ridesQuerySchema = z.object({
-  scope: z.enum(['upcoming', 'past']).default('upcoming'),
+  scope: rideScopeSchema.default('upcoming'),
   limit: z.coerce.number().int().min(1).max(50).default(20),
   cursor: z.string().max(200).optional(),
 });
@@ -262,6 +272,10 @@ export const rideListItemSchema = z.object({
   toRate: z.number().int().min(0),
   /** E8-1: the series the ride belongs to, or null. */
   seriesId: z.uuid().nullable(),
+  /** Set when `status` is `cancelled`, else null. */
+  cancelledAt: z.string().nullable(),
+  /** `driver` or `system` (the platform, e.g. a suspended driver); null unless cancelled. No reason is stored. */
+  cancelledBy: rideCancelledBySchema.nullable(),
 });
 export type RideListItem = z.infer<typeof rideListItemSchema>;
 
@@ -276,6 +290,27 @@ export type RideListResponse = z.infer<typeof rideListResponseSchema>;
 
 /** Body is `{}` (an empty body is accepted too). Response: the owner view. */
 export const cancelRideBodySchema = z.object({}).strict();
+
+// ---- PATCH /rides/{id} (ADR 0041) -------------------------------------------------------------------------
+// Editable: departureAt, seats, note, autoAccept. Send only what changes (at least one field). The route,
+// price and vehicle are fixed: to change them the driver cancels and publishes again (ROUTE_NOT_EDITABLE).
+// A new departureAt follows the publish rules (15 min to 14 days ahead, 4 rides per day) and notifies every
+// passenger with a requested or confirmed seat. Response: the updated owner view.
+
+export const editRideBodySchema = z
+  .object({
+    /** ISO 8601 UTC with Z. */
+    departureAt: z.iso.datetime().optional(),
+    seats: z.number().int().min(1).max(RIDE_LIMITS.maxSeats).optional(),
+    /** `null` or an empty string clears the note. */
+    note: z.string().trim().max(RIDE_LIMITS.noteMax).nullable().optional(),
+    autoAccept: z.boolean().optional(),
+  })
+  .strict()
+  .refine((b) => Object.values(b).some((v) => v !== undefined), {
+    message: 'Send at least one field to change.',
+  });
+export type EditRideBody = z.infer<typeof editRideBodySchema>;
 
 // ---- GET /rides/{id} (public) -------------------------------------------------------------------------
 // Approximate points (300 m grid), area labels, trimmed route. Never the plate or exact points.

@@ -48,7 +48,7 @@ export async function cancelRideTx(
   late: boolean,
 ): Promise<number> {
   const isLate = by === 'driver' && late;
-  await markRideCancelled(tx, ride.id, now, isLate);
+  await markRideCancelled(tx, ride.id, now, isLate, by);
   if (isLate) await insertLateCancelEvent(tx, ride.driverId, ride.id, now);
 
   // Every requested or confirmed booking is cancelled, each passenger is told (an outbox row per

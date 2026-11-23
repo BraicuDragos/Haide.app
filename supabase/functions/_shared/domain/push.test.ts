@@ -56,6 +56,7 @@ describe('templates and TTL', () => {
         'booking_requested',
         'ride_alert_match',
         'ride_cancelled',
+        'ride_updated',
       ].sort(),
     );
     expect([...PUSH_FIRST_TEMPLATES]).toEqual(['ride_alert_match']);
@@ -67,6 +68,7 @@ describe('templates and TTL', () => {
     expect(pushTtlS('booking_requested')).toBe(1800);
     expect(pushTtlS('ride_alert_match')).toBe(21600);
     expect(pushTtlS('booking_confirmed')).toBe(3600);
+    expect(pushTtlS('ride_updated')).toBe(3600);
   });
 });
 

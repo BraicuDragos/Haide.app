@@ -74,6 +74,18 @@ const INPUTS: TemplateInput[] = [
       moreCount: 2,
     },
   },
+  {
+    template: 'ride_updated',
+    payload: {
+      bookingId: 'b1',
+      rideId: 'r1',
+      driverFirstName: 'Ana',
+      previousDepartureAt: '2026-11-20T04:00:00.000Z',
+      departureAt: DEP,
+      pickupArea: 'Turnișor',
+      dropoffArea: 'Piața Mare',
+    },
+  },
 ];
 
 describe('renderPush', () => {
@@ -113,6 +125,14 @@ describe('renderPush', () => {
     expect(out.body).toContain('2 more');
     expect(out.path).toBe('/ride/r1?alert=a1');
     expect(out.tag).toBe('ride_alert_match:a1');
+  });
+
+  it('ride_updated: new and old local time, the passenger’s areas, the booking path, no driver name', () => {
+    const out = renderPush(INPUTS[8] as TemplateInput, ctx);
+    expect(out.title).toBe('Ride time changed');
+    expect(out.body).toBe('Now leaving Fri 07:40 (was Fri 06:00), Turnișor to Piața Mare.');
+    expect(out.path).toBe('/booking/b1');
+    expect(out.tag).toBe('ride_updated:b1');
   });
 
   it('refuses templates that have no push form', () => {

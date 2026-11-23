@@ -1,5 +1,6 @@
 import type {
   CreateRideRequest,
+  EditRideBody,
   PreviewBody,
   PreviewResponse,
   RideListResponse,
@@ -18,23 +19,30 @@ import {
   checkSeats,
   departureDayBounds,
   deriveLabel,
+  FIXED_RIDE_FIELDS,
   isLateRideCancel,
   normalizeLabel,
   normalizeNote,
+  planRideEdit,
   previewExpiresAt,
+  requestExpiryCap,
+  rideUpdatedRows,
 } from '../../_shared/domain/rides.ts';
 import { RELIABILITY_WINDOW_DAYS } from '../../_shared/domain/rules.ts';
 import { asDb } from '../../_shared/db.ts';
 import { AppError } from '../../_shared/errors.ts';
 import { getPublicProfile, getVehicle } from '../repo/accounts.ts';
-import { selectViewerBooking } from '../repo/bookings.ts';
+import { selectViewerBooking, touchBookingsOfMovedRide } from '../repo/bookings.ts';
+import { insertOutboxRows } from '../repo/outbox.ts';
 import {
   countDriverRidesBetween,
+  countOtherDriverRidesBetween,
   describePoint,
   energyPriceFor,
   insertPreview,
   insertRideFromPreview,
   insertRidePublishedEvent,
+  listCancelledRides,
   listPastRides,
   listUpcomingRides,
   lockDriverPublishing,
@@ -42,6 +50,7 @@ import {
   selectOwnerRide,
   selectPublicRide,
   setAutoAccept,
+  updateRideEditable,
 } from '../repo/rides.ts';
 import { publicRideVisible, toListItem, toPublicView } from '../serializers/rides.ts';
 import { toPublicUser } from '../serializers/users.ts';
@@ -208,6 +217,12 @@ export function decodeCursor(raw: string): Cursor {
   return { departureAt, id: id.toLowerCase() };
 }
 
+const RIDE_LISTS = {
+  upcoming: listUpcomingRides,
+  past: listPastRides,
+  cancelled: listCancelledRides,
+} as const;
+
 export type ListQuery = {
   scope: NonNullable<RidesQuery['scope']>;
   limit: number;
@@ -221,7 +236,7 @@ export async function listMyRides(
 ): Promise<RideListResponse> {
   const { sql, clock } = deps;
   const after = query.cursor ? decodeCursor(query.cursor) : null;
-  const list = query.scope === 'upcoming' ? listUpcomingRides : listPastRides;
+  const list = RIDE_LISTS[query.scope];
   const rows = await list(sql, account.id, clock.now(), after, query.limit + 1);
   const page = rows.slice(0, query.limit);
   const last = page[page.length - 1];
@@ -302,6 +317,126 @@ export async function setRideAutoAccept(
       );
     }
     await setAutoAccept(tx, rideId, autoAccept, now);
+    return await loadOwnerView(deps, tx, rideId, account.id);
+  });
+}
+
+// ---- PATCH /rides/{id} (ADR 0041) ----------------------------------------------------------------------------
+
+/**
+ * Fields that are fixed once a ride is published. Sending one is ROUTE_NOT_EDITABLE (not a generic
+ * validation error) so the client can tell the driver to cancel and publish again.
+ */
+export function assertNoFixedFields(raw: unknown): void {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return;
+  const fields: Record<string, string> = {};
+  for (const key of FIXED_RIDE_FIELDS) {
+    if (Object.hasOwn(raw, key)) fields[key] = 'not_editable';
+  }
+  if (Object.keys(fields).length > 0) {
+    throw new AppError(
+      'ROUTE_NOT_EDITABLE',
+      'The route, price and vehicle cannot be changed. Cancel the ride and publish a new one.',
+      { fields },
+    );
+  }
+}
+
+/**
+ * Edits the time, seats, note or auto-accept of a published ride. One transaction under the ride row
+ * lock (the lock POST /bookings, approve and cancel take): validate, update the ride and, when the
+ * DEPARTURE moved, clamp the open requests, flag every requested or confirmed booking for its
+ * passenger and enqueue one `ride_updated` outbox row each. Seats, note and auto-accept notify nobody.
+ * A body that changes nothing is a no-op (200, nothing written). Driver only (else 404).
+ */
+export async function editRide(
+  deps: Deps,
+  account: Account,
+  id: string,
+  body: EditRideBody,
+): Promise<RideOwnerView> {
+  const { sql, clock } = deps;
+  const rideId = asRideId(id);
+  const now = clock.now();
+  return await sql.begin(async (txn) => {
+    const tx = asDb(txn);
+    const ride = await selectOwnerRide(tx, rideId, account.id, true);
+    if (!ride) throw notFound();
+    const previousDepartureAt = new Date(ride.departure_at);
+    const plan = planRideEdit(
+      {
+        status: ride.status,
+        departureAt: previousDepartureAt,
+        seatsOffered: ride.seats_offered,
+        seatsBooked: ride.seats_booked,
+        note: ride.note,
+        autoAccept: ride.auto_accept === true,
+      },
+      {
+        departureAt: body.departureAt === undefined ? undefined : new Date(body.departureAt),
+        seats: body.seats,
+        note: body.note,
+        autoAccept: body.autoAccept,
+      },
+      clock,
+    );
+    const changed =
+      plan.timeChanged || plan.seatsChanged || plan.noteChanged || plan.autoAcceptChanged;
+    if (!changed) return await loadOwnerView(deps, tx, rideId, account.id);
+
+    // More seats than the car has is refused; fewer is always fine (the car may have changed since).
+    if (plan.seats > ride.seats_offered) {
+      const vehicle = await getVehicle(tx, account.id);
+      if (!vehicle) throw new AppError('VEHICLE_REQUIRED', 'Add your vehicle to continue.');
+      checkSeats(plan.seats, vehicle.seats);
+    }
+
+    if (plan.timeChanged) {
+      // The publish lock and count, minus this ride: the 4 rides a day still hold on the new day.
+      await lockDriverPublishing(tx, account.id);
+      if (!(await lockLiveDriver(tx, account.id))) {
+        throw new AppError('ACCOUNT_DELETED', 'Account deleted.');
+      }
+      const { startUtc, endUtc } = departureDayBounds(plan.departureAt);
+      assertDailyLimit(
+        await countOtherDriverRidesBetween(tx, account.id, rideId, startUtc, endUtc),
+      );
+    }
+
+    if (!(await updateRideEditable(tx, rideId, plan, now))) {
+      throw new AppError(
+        'RIDE_NOT_EDITABLE',
+        'Only a published ride that has not departed can be edited.',
+      );
+    }
+
+    if (plan.timeChanged) {
+      const moved = await touchBookingsOfMovedRide(
+        tx,
+        rideId,
+        requestExpiryCap(plan.departureAt),
+        now,
+      );
+      if (moved.length > 0) {
+        await insertOutboxRows(
+          tx,
+          rideUpdatedRows(
+            {
+              id: rideId,
+              driverFirstName: account.firstName,
+              previousDepartureAt,
+              departureAt: plan.departureAt,
+            },
+            moved.map((b) => ({
+              id: b.id,
+              passengerId: b.passenger_id,
+              pickupArea: b.pickup_label,
+              dropoffArea: b.dropoff_label,
+            })),
+          ),
+        );
+      }
+    }
     return await loadOwnerView(deps, tx, rideId, account.id);
   });
 }

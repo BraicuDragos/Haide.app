@@ -1,29 +1,22 @@
 import { useMemo, useRef, useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router';
-import { searchPlaces } from '@/api/places';
 import type { Place } from '@/api/types';
 import { useScreenHeading } from '@/app/useScreenHeading';
 import { t } from '@/i18n';
 import { dayOptions } from '@/lib/dates';
+import { minTimeFor, toMinutes } from '@/lib/timeSlots';
+import { TimePicker } from '@/ui/TimePicker';
 import { Button } from '@/ui/Button';
 import { Icon } from '@/ui/Icon';
-import { Notice } from '@/ui/Notice';
 import { RouteArt } from '@/ui/RouteArt';
 import { PlaceField } from '../components/PlaceField';
+import { PopularRoutes } from '../components/PopularRoutes';
 import { PlacePickerSheet, type PickerKind } from '../components/PlacePickerSheet';
 import { readSearch, saveSearch, type Window } from '../searchState';
 
 type Errors = { places?: string; time?: string };
 
 const WINDOWS: Window[] = ['15', '30', '60'];
-
-/** The three launch corridors (strategy section 2). Each end is looked up in the gazetteer by name on tap, so the
- * coordinates stay server-side data. */
-const CORRIDORS = [
-  { key: 'find.corridor.south', from: 'Cisnădie', to: 'Piața Mare' },
-  { key: 'find.corridor.west', from: 'Șelimbăr', to: 'Zona Industrială Vest' },
-  { key: 'find.corridor.campus', from: 'Hipodrom', to: 'Piața Mare' },
-] as const;
 
 /**
  * Find root (ia-and-flows 4, E3-1). E0 scope: the form, the place picker and validation. The results screen is E3,
@@ -43,14 +36,12 @@ export function FindScreen() {
   );
   const [time, setTime] = useState(saved?.time ?? '');
   const [win, setWin] = useState<Window>(saved?.win ?? '30');
-  const [corridorBusy, setCorridorBusy] = useState(false);
-  const [corridorErr, setCorridorErr] = useState(false);
   const [picker, setPicker] = useState<PickerKind | null>(null);
   const [errors, setErrors] = useState<Errors>({});
 
   const fromBtn = useRef<HTMLButtonElement>(null);
   const toBtn = useRef<HTMLButtonElement>(null);
-  const timeInput = useRef<HTMLInputElement>(null);
+  const timeInput = useRef<HTMLButtonElement>(null);
 
   function pick(place: Place) {
     if (picker === 'from') setFrom(place);
@@ -69,30 +60,15 @@ export function FindScreen() {
     const next: Errors = {};
     if (!from || !to) next.places = t('find.err.missing');
     else if (from.id === to.id) next.places = t('find.err.same');
+    const earliest = minTimeFor(day, 0);
     if (!time) next.time = t('find.err.timeMissing');
+    else if (earliest && toMinutes(time) < toMinutes(earliest)) next.time = t('find.err.timePast');
     setErrors(next);
     if (next.places) (!from ? fromBtn : !to ? toBtn : fromBtn).current?.focus();
     else if (next.time) timeInput.current?.focus();
     else if (from && to) {
       saveSearch({ from, to, day, time, win });
       void navigate('/results');
-    }
-  }
-
-  async function pickCorridor(c: (typeof CORRIDORS)[number]) {
-    setCorridorBusy(true);
-    setCorridorErr(false);
-    try {
-      const [a, b] = await Promise.all([searchPlaces(c.from), searchPlaces(c.to)]);
-      if (!a[0] || !b[0]) throw new Error('place not found');
-      setFrom(a[0]);
-      setTo(b[0]);
-      setErrors((e) => ({ ...e, places: undefined }));
-      timeInput.current?.focus();
-    } catch {
-      setCorridorErr(true);
-    } finally {
-      setCorridorBusy(false);
     }
   }
 
@@ -182,32 +158,19 @@ export function FindScreen() {
               ))}
             </select>
           </div>
-          <div className="flex flex-col gap-1">
-            <label htmlFor="find-time" className="type-label">
-              {t('find.time')}
-            </label>
-            <input
-              id="find-time"
-              ref={timeInput}
-              type="time"
-              value={time}
-              onChange={(e) => setTime(e.target.value)}
-              aria-invalid={errors.time ? true : undefined}
-              aria-describedby={errors.time ? 'time-err' : undefined}
-              className={`control min-h-12 ${errors.time ? 'border-2 border-error' : 'border border-border-strong'}`}
-            />
-          </div>
+          <TimePicker
+            id="find-time"
+            ref={timeInput}
+            label={t('find.time')}
+            value={time}
+            minTime={() => minTimeFor(day, 0)}
+            error={errors.time}
+            onChange={(v) => {
+              setTime(v);
+              setErrors((x) => ({ ...x, time: undefined }));
+            }}
+          />
         </div>
-        {errors.time && (
-          <p
-            id="time-err"
-            role="alert"
-            className="-mt-2 flex items-start gap-1.5 text-sm leading-5 font-semibold text-error"
-          >
-            <Icon name="alert" small className="mt-0.5" />
-            {errors.time}
-          </p>
-        )}
 
         <fieldset className="m-0 min-w-0 border-0 p-0">
           <legend className="type-label mb-1 p-0">{t('find.window')}</legend>
@@ -238,27 +201,7 @@ export function FindScreen() {
         <p className="text-center text-sm leading-5 text-text-muted">{t('find.visitorHint')}</p>
       </form>
 
-      <section aria-labelledby="corridors-h" className="flex flex-col gap-3 px-4 pb-6">
-        <h2 id="corridors-h" className="type-h3">
-          {t('find.corridors')}
-        </h2>
-        <ul className="m-0 flex list-none flex-col gap-2 p-0">
-          {CORRIDORS.map((c) => (
-            <li key={c.key}>
-              <button
-                type="button"
-                disabled={corridorBusy}
-                onClick={() => void pickCorridor(c)}
-                className="card flex min-h-12 w-full items-center gap-3 px-4 py-3 text-left font-semibold"
-              >
-                <Icon name="route" className="text-outline" />
-                <span className="min-w-0 flex-1">{t(c.key)}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-        {corridorErr && <Notice tone="error">{t('find.corridors.err')}</Notice>}
-      </section>
+      <PopularRoutes />
 
       <PlacePickerSheet
         open={picker !== null}

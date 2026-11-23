@@ -1,5 +1,6 @@
 import { Link } from 'react-router';
 import type { BookingListItem } from '@/api/types';
+import { CancelledNote, bookingCancelledWho } from '@/features/rides/components/CancelledNote';
 import { RideStops } from '@/features/rides/components/RideStops';
 import { t } from '@/i18n';
 import { dayLabel } from '@/lib/dates';
@@ -43,6 +44,9 @@ export function BookingCard({ booking }: { booking: BookingListItem }) {
           <span className="font-semibold text-price">{formatRon(booking.priceBani)}</span>
         </span>
       </div>
+      {booking.status === 'cancelled' && (
+        <CancelledNote role="riding" who={bookingCancelledWho(booking)} at={booking.cancelledAt} />
+      )}
       <div className="flex items-center gap-2 border-t border-(color:--hair) pt-3">
         <Avatar name={booking.driver.firstName} photoUrl={booking.driver.photoUrl} />
         <span className="min-w-0 truncate text-sm leading-5 text-text-muted">

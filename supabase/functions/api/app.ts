@@ -9,6 +9,7 @@ import { accountRoutes } from './routes/account.ts';
 import { bookingRoutes } from './routes/bookings.ts';
 import { liquidityRoutes } from './routes/liquidity.ts';
 import { placesRoutes } from './routes/places.ts';
+import { popularRoutes } from './routes/popular.ts';
 import { privacyRoutes } from './routes/privacy.ts';
 import { rideRoutes } from './routes/rides.ts';
 import { safetyRoutes } from './routes/safety.ts';
@@ -35,6 +36,7 @@ export function createApp(deps: Deps) {
 
   app.route('/', systemRoutes);
   app.route('/', placesRoutes);
+  app.route('/', popularRoutes);
   app.route('/', accountRoutes);
   app.route('/', rideRoutes);
   app.route('/', searchRoutes);

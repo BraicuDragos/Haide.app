@@ -980,6 +980,45 @@ describe('GET /me/bookings', () => {
     expect(bad.status).toBe(400);
   });
 
+  it('cancelled scope lists only cancelled bookings of the caller, newest first, with cancelledAt', async () => {
+    const rows = [
+      listRow(BOOKING, {
+        status: 'cancelled',
+        ride_status: 'cancelled',
+        cancelled_by: 'driver',
+        cancelled_at: new Date('2026-11-15T09:00:00Z'),
+      }),
+    ];
+    const { app, calls } = makeApp([listDb(rows), bookingDb()], {}, { clock: fixedClock(NOW) });
+    const res = await send(app, 'GET', '/me/bookings?scope=cancelled', PASSENGER);
+    expect(res.status).toBe(200);
+    const out = bookingListResponseSchema.parse(await res.json());
+    expect(out.items[0]).toMatchObject({
+      status: 'cancelled',
+      rideStatus: 'cancelled',
+      cancelledBy: 'driver',
+      cancelledAt: '2026-11-15T09:00:00.000Z',
+    });
+    const q = find(calls, "b.status = 'cancelled'");
+    expect(q?.text).toContain('b.passenger_id =');
+    expect(q?.text).toContain('order by r.departure_at desc');
+    expect(q?.values).toContain(PASSENGER);
+  });
+
+  it('past excludes cancelled bookings and other items have cancelledAt null', async () => {
+    const { app, calls } = makeApp(
+      [listDb([listRow(BOOKING)]), bookingDb()],
+      {},
+      { clock: fixedClock(NOW) },
+    );
+    const res = await send(app, 'GET', '/me/bookings?scope=past', PASSENGER);
+    const out = bookingListResponseSchema.parse(await res.json());
+    expect(out.items[0]?.cancelledAt).toBeNull();
+    const q = find(calls, 'order by r.departure_at desc');
+    expect(q?.text).toContain("b.status <> 'cancelled'");
+    expect(q?.text).toContain('b.passenger_id =');
+  });
+
   it('needs sign-in', async () => {
     const { app } = makeBookingApp();
     expect((await app.request(`${BASE}/me/bookings`)).status).toBe(401);
@@ -1139,7 +1178,7 @@ describe('POST /bookings on an auto-accept ride', () => {
   const auto = (extra: Handler[] = []) =>
     makeBookingApp({ ride: lockedRide({ auto_accept: true }) }, extra);
 
-  it('confirms an eligible requester under the same lock: seat +1, driver told once, passenger not emailed', async () => {
+  it('confirms an eligible requester under the same lock: seat +1, driver told, passenger emailed too', async () => {
     const { app, calls } = auto([ratedPassenger(4, 4.2)]);
     expect((await post(app)).status).toBe(201);
 
@@ -1154,9 +1193,23 @@ describe('POST /bookings on an auto-accept ride', () => {
     expect(calls[confirm]?.values).toContain(true);
 
     const outbox = calls.filter((c) => c.text.includes('insert into app.outbox'));
-    expect(outbox).toHaveLength(1);
-    expect(outbox[0]?.values[0]).toBe(DRIVER);
-    expect(outbox[0]?.values[1]).toBe('booking_auto_confirmed');
+    // item 7: the driver gets booking_auto_confirmed AND the passenger gets booking_confirmed
+    expect(outbox.map((o) => [o.values[0], o.values[1]])).toEqual([
+      [DRIVER, 'booking_auto_confirmed'],
+      [PASSENGER, 'booking_confirmed'],
+    ]);
+    const passengerPayload = JSON.parse(String(outbox[1]?.values[2]));
+    expect(passengerPayload).toMatchObject({
+      bookingId: expect.any(String),
+      driverFirstName: 'Radu',
+      departureAt: DEPARTURE.toISOString(),
+      pickupArea: expect.any(String),
+    });
+    expect(Date.parse(passengerPayload.pickupEtaAt)).toBeGreaterThanOrEqual(DEPARTURE.getTime());
+    // each row carries its idempotency key (template + booking id)
+    expect(String(outbox[0]?.values[3])).toMatch(/^booking_auto_confirmed:/);
+    expect(String(outbox[1]?.values[3])).toMatch(/^booking_confirmed:/);
+    expect(outbox.every((o) => o.text.includes('on conflict'))).toBe(true);
     const events = calls
       .filter((c) => c.text.startsWith('insert into app.analytics_events'))
       .map((c) => c.values[0]);

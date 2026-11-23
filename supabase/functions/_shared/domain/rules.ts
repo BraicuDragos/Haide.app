@@ -93,6 +93,8 @@ export const RATE_LIMITS = {
   // Rides (E2): previews call the router (2,000/day free). Publishes are also capped by the daily limit.
   ridePreview: { max: 20, windowS: 3600 },
   ridePublish: { max: 20, windowS: 3600 },
+  // Ride edits (ADR 0041): a time change emails every passenger, so edits are capped like publishes.
+  rideEdit: { max: 20, windowS: 3600 },
   // Bookings (E4). `GET /me/summary` reuses `account`.
   bookingRequest: { max: 10, windowS: 3600 },
   bookingAction: { max: 30, windowS: 60 },

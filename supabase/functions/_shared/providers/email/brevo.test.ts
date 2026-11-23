@@ -46,7 +46,7 @@ describe('Brevo provider', () => {
         return Promise.resolve(new Response('{"messageId":"x"}', { status: 201 }));
       }) as unknown as typeof fetch,
     });
-    expect(await provider.send(msg)).toEqual({ ok: true });
+    expect(await provider.send(msg)).toEqual({ ok: true, messageId: 'x' });
     const call = seen[0] as { url: string; init: RequestInit };
     expect(call.url).toBe(BREVO_URL);
     expect((call.init.headers as Record<string, string>)['api-key']).toBe('k-123');
@@ -58,6 +58,76 @@ describe('Brevo provider', () => {
       tags: ['booking_requested'],
     });
     expect(call.init.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  const capturing = (replyTo?: string, body = '{"messageId":"<m1>"}') => {
+    const bodies: Record<string, unknown>[] = [];
+    const provider = createBrevoProvider({
+      apiKey: 'k',
+      from: 'Haide <no-reply@haide.ro>',
+      replyTo,
+      fetchImpl: ((_u: string, init: RequestInit) => {
+        bodies.push(JSON.parse(String(init.body)) as Record<string, unknown>);
+        return Promise.resolve(new Response(body, { status: 201 }));
+      }) as unknown as typeof fetch,
+    });
+    return { provider, bodies };
+  };
+
+  it('sends no replyTo unless EMAIL_REPLY_TO is set', async () => {
+    const a = capturing();
+    await a.provider.send(msg);
+    expect(a.bodies[0]).not.toHaveProperty('replyTo');
+    const blank = capturing('   ');
+    await blank.provider.send(msg);
+    expect(blank.bodies[0]).not.toHaveProperty('replyTo');
+  });
+
+  it('sends replyTo with a name, or a bare address', async () => {
+    const named = capturing('Haide Support <support@haide.ro>');
+    await named.provider.send(msg);
+    expect(named.bodies[0]?.replyTo).toEqual({ name: 'Haide Support', email: 'support@haide.ro' });
+    const bare = capturing('support@haide.ro');
+    await bare.provider.send(msg);
+    expect(bare.bodies[0]?.replyTo).toEqual({ email: 'support@haide.ro' });
+    // the sender is untouched: EMAIL_FROM stays the single sender variable
+    expect(bare.bodies[0]?.sender).toEqual({ name: 'Haide', email: 'no-reply@haide.ro' });
+  });
+
+  it('returns the messageId, and still succeeds when the body is empty or not JSON', async () => {
+    expect(await capturing().provider.send(msg)).toEqual({ ok: true, messageId: '<m1>' });
+    expect(await capturing(undefined, '').provider.send(msg)).toEqual({ ok: true });
+    expect(await capturing(undefined, 'not json').provider.send(msg)).toEqual({ ok: true });
+  });
+
+  it('keeps a realistic Brevo message id intact (it looks like an address but is not one)', async () => {
+    const id = '<202611231234.12345678901@smtp-relay.mailin.fr>';
+    const r = await capturing(undefined, JSON.stringify({ messageId: id })).provider.send(msg);
+    expect(r).toEqual({ ok: true, messageId: id });
+  });
+
+  it('the factory passes EMAIL_REPLY_TO through to the Brevo provider', async () => {
+    const seen: Record<string, unknown>[] = [];
+    const real = globalThis.fetch;
+    globalThis.fetch = ((_u: string, init: RequestInit) => {
+      seen.push(JSON.parse(String(init.body)) as Record<string, unknown>);
+      return Promise.resolve(new Response('{}', { status: 201 }));
+    }) as unknown as typeof fetch;
+    try {
+      const p = createEmailProvider(
+        {
+          EMAIL_PROVIDER: 'brevo',
+          BREVO_API_KEY: 'k',
+          EMAIL_FROM: 'Haide <no-reply@haide.ro>',
+          EMAIL_REPLY_TO: 'help@haide.ro',
+        },
+        silentLogger,
+      );
+      await p.send(msg);
+    } finally {
+      globalThis.fetch = real;
+    }
+    expect(seen[0]?.replyTo).toEqual({ email: 'help@haide.ro' });
   });
 
   it('classifies HTTP failures and never puts the address in the error', async () => {

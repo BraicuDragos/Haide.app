@@ -129,14 +129,16 @@ Search form. Visitors can use it without an account.
 | `find.window.60` | ±1 hour |
 | `find.cta` | Search rides |
 | `find.corridors` | Popular routes |
-| `find.corridor.south` | Cisnădie to Piața Mare |
-| `find.corridor.west` | Șelimbăr to Zona Industrială Vest |
-| `find.corridor.campus` | Hipodrom to the old town |
+| `find.popular.route` | {from} to {to} |
+| `find.popular.rides.one` | 1 ride lately |
+| `find.popular.rides.other` | {n} rides lately |
+| `find.popular.loading` | Loading popular routes |
+| `find.popular.err` | We couldn’t load popular routes. Check your connection and try again. |
+| `find.popular.empty` | No popular routes yet. Search for your own trip above. |
 | `find.visitorHint` | You can look around without an account. |
 | `find.err.missing` | Choose where you start and where you’re going. |
 | `find.err.same` | Start and destination are the same place. Choose two different places. |
 | `find.err.timeMissing` | Choose a time. |
-| `find.corridors.err` | We couldn’t load that route. Choose the places yourself. |
 
 ## 9. Place picker (E3-1, E2-1)
 
@@ -372,6 +374,23 @@ First name, photo, phone required before booking or publishing. Bio optional.
 | `profile.err.photo` | Add a photo so people can recognise you. |
 | `profile.err.photoSize` | This photo is over 5 MB. Choose a smaller JPEG or PNG. |
 | `profile.err.photoInvalid` | We couldn’t read this photo. Choose a JPEG or PNG. |
+| `profile.err.photoSmall` | This photo is too small. Choose one at least 200 px wide and tall. |
+| `profile.err.photoCrop` | We couldn’t prepare this photo. Try again or choose another. |
+| `profile.crop.title` | Adjust your photo |
+| `profile.crop.hint` | Drag to move the photo. Pinch or use the slider to zoom. |
+| `profile.crop.area` | Photo crop area. Arrow keys move the photo, plus and minus zoom. |
+| `profile.crop.zoom` | Zoom |
+| `profile.crop.zoomIn` | Zoom in |
+| `profile.crop.zoomOut` | Zoom out |
+| `profile.crop.confirm` | Use photo |
+| `profile.crop.cancel` | Cancel |
+| `profile.crop.busy` | Preparing photo |
+| `find.err.timePast` | That time has already passed. Choose a later time. |
+| `time.placeholder` | Choose |
+| `time.hour` | Hour |
+| `time.minute` | Minute |
+| `time.confirm` | Set time |
+| `time.cancel` | Cancel |
 | `profile.edit.title` | Edit profile |
 
 ## 18. Vehicle (E1-4)
@@ -459,7 +478,7 @@ Driver publishing flow with the price preview (E2-2). The driver can lower the p
 
 ## 20. My rides (E2-3, E4)
 
-Two levels of tabs: Riding or Driving, then Upcoming or Past.
+Two levels of tabs: Riding or Driving, then Upcoming, Past or Cancelled. Past no longer holds cancelled rides. No cancel reason is stored, so none is shown.
 
 | Key | English |
 |---|---|
@@ -468,8 +487,15 @@ Two levels of tabs: Riding or Driving, then Upcoming or Past.
 | `rides.driving` | Driving |
 | `rides.upcoming` | Upcoming |
 | `rides.past` | Past |
+| `rides.cancelled` | Cancelled |
+| `rides.empty.cancelled` | No cancelled rides. |
+| `rides.cancelledBy.you.driving` | You cancelled this ride |
+| `rides.cancelledBy.system` | Cancelled by Haide |
+| `rides.cancelledBy.driver` | Cancelled by the driver |
+| `rides.cancelledBy.you.riding` | You cancelled |
+| `rides.cancelledOn` | Cancelled {date} |
 | `rides.tabs.role` | Riding or driving |
-| `rides.tabs.when` | Upcoming or past |
+| `rides.tabs.when` | Upcoming, past or cancelled |
 | `rides.loading` | Loading your rides |
 | `rides.err` | We couldn’t load your rides. Check your connection and try again. |
 | `rides.more` | Show more |
@@ -617,6 +643,32 @@ Requests, passengers, cancel and no-show.
 | `driverRide.cancelled` | You cancelled this ride |
 | `driverRide.rate` | Rate {name} |
 | `driverRide.fuelRule` | Prices are set by Haide and split fuel cost. Asking passengers for more is against the Terms of use. |
+
+### Edit ride (ADR 0041)
+
+A secondary "Edit ride" button next to "Cancel ride" opens a sheet with day, time, seats, note and auto-accept. The route and price are fixed, and the sheet says so. A changed time tells every passenger with a seat or a pending request; other changes tell nobody.
+
+| Key | Copy |
+|---|---|
+| `driverRide.edit` | Edit ride |
+| `editRide.title` | Edit ride |
+| `editRide.route` | The route and the price can’t be changed. To change them, cancel this ride and publish a new one. |
+| `editRide.seats.booked.one` | 1 seat is already taken, so you can’t offer fewer. |
+| `editRide.seats.booked.other` | {n} seats are already taken, so you can’t offer fewer. |
+| `editRide.notify.one` | 1 passenger will be told about the new time. |
+| `editRide.notify.other` | {n} passengers will be told about the new time. |
+| `editRide.save` | Save changes |
+| `editRide.discard` | Close without saving |
+| `editRide.toast` | Ride updated |
+| `editRide.toast.told` | Ride updated, passengers told |
+| `errors.RIDE_NOT_EDITABLE` | This ride can’t be edited any more. It may have left or been cancelled. |
+| `errors.SEATS_BELOW_BOOKED` | Some seats are already taken. Choose at least as many seats as you have passengers. |
+| `errors.ROUTE_NOT_EDITABLE` | The route and the price can’t be changed. Cancel this ride and publish a new one. |
+| `errors.DEPARTURE_TOO_SOON` | Choose a time at least 15 minutes from now. |
+| `errors.DEPARTURE_TOO_FAR` | You can set a time up to 14 days ahead. |
+| `errors.SEATS_EXCEED_VEHICLE` | That’s more seats than your car has. Choose fewer seats. |
+
+Errors land next to the field: time errors at the time field, `SEATS_BELOW_BOOKED` and `SEATS_EXCEED_VEHICLE` at the seats, `DAILY_RIDE_LIMIT` at the day. The passenger side reuses the existing "New update" dot; no separate "driver changed the time" note (the new time is shown on the booking).
 
 ## 25. Ratings (E5-3)
 

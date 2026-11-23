@@ -8,6 +8,7 @@ import {
   seedIntent,
   seedSession,
 } from './accounts-helpers';
+import { makeImage } from './photo-helpers';
 
 // E1 (accounts, profile, vehicle). The API and the Supabase auth endpoints are mocked, so these run anywhere; the
 // full magic-link round trip against the local stack is in e1-magic-link.spec.ts.
@@ -203,11 +204,10 @@ test.describe('signed in: onboarding', () => {
     ).toBeVisible();
     await expectNoAxeViolations(page);
 
-    await page.locator('input[type=file]').setInputFiles({
-      name: 'me.png',
-      mimeType: 'image/png',
-      buffer: PNG_1X1,
-    });
+    await page
+      .locator('input[type=file]')
+      .setInputFiles(await makeImage(page, 800, 600, 'image/png'));
+    await page.getByRole('button', { name: 'Use photo' }).click(); // the crop dialog (see e9-photo-crop.spec.ts)
     await expect(page.getByRole('button', { name: 'Change photo' })).toBeVisible();
     await page.getByLabel('First name').fill('Ștefan');
     await page.getByLabel('Phone number').fill('0269 123 456');

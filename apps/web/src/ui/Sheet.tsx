@@ -29,7 +29,10 @@ export function Sheet({ open, title, onClose, children }: Props) {
     <dialog
       ref={ref}
       aria-labelledby={titleId}
-      onClose={onClose}
+      onClose={(e) => {
+        // A sheet nested inside this one (the time picker) fires its own close; React bubbles it up here.
+        if (e.target === e.currentTarget) onClose();
+      }}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}

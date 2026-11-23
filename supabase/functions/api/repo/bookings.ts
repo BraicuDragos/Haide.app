@@ -559,6 +559,7 @@ export type BookingListRow = {
   final_price_bani: number | null;
   unseen: boolean;
   cancelled_by: 'passenger' | 'driver' | 'system' | null;
+  cancelled_at: Ts | null;
   /** The ride's completion time, and whether the passenger already rated (E5). */
   completed_at: Ts | null;
   rated: boolean;
@@ -580,7 +581,7 @@ export async function listUpcomingBookings(
   return await sql<BookingListRow[]>`
     select b.id, b.ride_id, b.status, r.status as ride_status, r.departure_at, r.duration_s,
            b.pickup_fraction, b.pickup_label, b.dropoff_label, r.driver_id, b.price_quoted_bani,
-           b.price_locked_bani, b.final_price_bani, b.cancelled_by, r.completed_at,
+           b.price_locked_bani, b.final_price_bani, b.cancelled_by, b.cancelled_at, r.completed_at,
            exists (select 1 from app.ratings x where x.booking_id = b.id and x.rater_id = b.passenger_id) as rated,
            (b.passenger_event_at is not null
              and b.passenger_event_at > coalesce(b.seen_by_passenger_at, '-infinity'::timestamptz)) as unseen
@@ -593,7 +594,10 @@ export async function listUpcomingBookings(
     limit ${limit}`;
 }
 
-/** Everything else (finished, cancelled, expired, rejected, departed), newest first. */
+/**
+ * Everything else (finished, expired, rejected, no-show, departed), newest first. Cancelled bookings
+ * are NOT here: they have their own scope (listCancelledBookings).
+ */
 export async function listPastBookings(
   sql: Db,
   passengerId: string,
@@ -607,14 +611,40 @@ export async function listPastBookings(
   return await sql<BookingListRow[]>`
     select b.id, b.ride_id, b.status, r.status as ride_status, r.departure_at, r.duration_s,
            b.pickup_fraction, b.pickup_label, b.dropoff_label, r.driver_id, b.price_quoted_bani,
-           b.price_locked_bani, b.final_price_bani, b.cancelled_by, r.completed_at,
+           b.price_locked_bani, b.final_price_bani, b.cancelled_by, b.cancelled_at, r.completed_at,
            exists (select 1 from app.ratings x where x.booking_id = b.id and x.rater_id = b.passenger_id) as rated,
            (b.passenger_event_at is not null
              and b.passenger_event_at > coalesce(b.seen_by_passenger_at, '-infinity'::timestamptz)) as unseen
     from app.bookings b
     join app.rides r on r.id = b.ride_id
-    where b.passenger_id = ${passengerId}
+    where b.passenger_id = ${passengerId} and b.status <> 'cancelled'
       and not (b.status in ('requested', 'confirmed') and r.departure_at > ${now})
+      and (not ${hasCursor}::boolean or (r.departure_at, b.id) < (${cursorAt}::timestamptz, ${cursorId}::uuid))
+    order by r.departure_at desc, b.id desc
+    limit ${limit}`;
+}
+
+/** The passenger's cancelled bookings (own, driver cancelled the ride, or system), newest departure first. */
+export async function listCancelledBookings(
+  sql: Db,
+  passengerId: string,
+  now: Date,
+  after: After,
+  limit: number,
+): Promise<BookingListRow[]> {
+  const hasCursor = after !== null;
+  const cursorAt = after?.departureAt ?? now;
+  const cursorId = after?.id ?? 'ffffffff-ffff-ffff-ffff-ffffffffffff';
+  return await sql<BookingListRow[]>`
+    select b.id, b.ride_id, b.status, r.status as ride_status, r.departure_at, r.duration_s,
+           b.pickup_fraction, b.pickup_label, b.dropoff_label, r.driver_id, b.price_quoted_bani,
+           b.price_locked_bani, b.final_price_bani, b.cancelled_by, b.cancelled_at, r.completed_at,
+           exists (select 1 from app.ratings x where x.booking_id = b.id and x.rater_id = b.passenger_id) as rated,
+           (b.passenger_event_at is not null
+             and b.passenger_event_at > coalesce(b.seen_by_passenger_at, '-infinity'::timestamptz)) as unseen
+    from app.bookings b
+    join app.rides r on r.id = b.ride_id
+    where b.passenger_id = ${passengerId} and b.status = 'cancelled'
       and (not ${hasCursor}::boolean or (r.departure_at, b.id) < (${cursorAt}::timestamptz, ${cursorId}::uuid))
     order by r.departure_at desc, b.id desc
     limit ${limit}`;
@@ -762,4 +792,35 @@ export async function markSeen(
     update app.bookings set seen_by_passenger_at = ${now}
     where passenger_id = ${passengerId}
       and id in ${sql([...bookingIds])}`;
+}
+
+// ---- the ride moved (ADR 0041) ---------------------------------------------------------------------------------
+
+export type MovedBooking = {
+  id: string;
+  passenger_id: string;
+  pickup_label: string;
+  dropoff_label: string;
+};
+
+/**
+ * The ride's departure changed: every requested or confirmed booking is flagged for its passenger (the
+ * unseen badge) and returned so each gets a `ride_updated` row. A requested booking must not outlive
+ * the new departure: `expires_at = least(expires_at, expiryCap)` where the cap is departure - 10 minutes
+ * (the same margin as bookingExpiresAt). A confirmed booking keeps its seat and its locked price.
+ * Runs in the edit transaction, which already holds the ride lock.
+ */
+export async function touchBookingsOfMovedRide(
+  sql: Db,
+  rideId: string,
+  expiryCap: Date,
+  now: Date,
+): Promise<MovedBooking[]> {
+  return await sql<MovedBooking[]>`
+    update app.bookings
+    set expires_at = case when status = 'requested' then least(expires_at, ${expiryCap}::timestamptz)
+                          else expires_at end,
+        passenger_event_at = ${now}::timestamptz, updated_at = ${now}::timestamptz
+    where ride_id = ${rideId} and status in ('requested', 'confirmed')
+    returning id, passenger_id, pickup_label, dropoff_label`;
 }

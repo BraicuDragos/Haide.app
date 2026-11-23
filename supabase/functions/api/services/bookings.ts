@@ -40,6 +40,7 @@ import {
   hasBlockBetween,
   insertBooking,
   insertLateCancelEventForBooking,
+  listCancelledBookings,
   listPastBookings,
   listUpcomingBookings,
   lockRide,
@@ -218,9 +219,13 @@ export async function createBooking(
     // E8-3 (ADR 0037): after every guard and the insert, under the same ride lock, an eligible
     // requester of an auto-accept ride is confirmed by the routine approve uses.
     let auto = false;
+    let driverFirstName: string | null = null;
     if (ride.auto_accept === true) {
       const since = new Date(now.getTime() - RELIABILITY_WINDOW_DAYS * 86_400_000);
-      const [profile] = await selectPublicProfiles(db, [account.id], since, now);
+      // The driver is read in the same query: the passenger's confirmation email names them.
+      const profiles = await selectPublicProfiles(db, [account.id, ride.driver_id], since, now);
+      const profile = profiles.find((p) => p.id === account.id);
+      driverFirstName = profiles.find((p) => p.id === ride.driver_id)?.first_name ?? null;
       auto = isAutoAcceptEligible({
         ratingCount: profile?.rating_count ?? 0,
         ratingAvg: profile?.rating_avg ?? null,
@@ -231,23 +236,35 @@ export async function createBooking(
     }
 
     await insertOutboxRows(db, [
-      auto
-        ? bookingAutoConfirmedOutbox(ride.driver_id, {
-            bookingId: created.id,
-            rideId,
-            departureAt: departureAt.toISOString(),
-            pickupArea: created.pickup_label,
-            dropoffArea: created.dropoff_label,
-          })
-        : bookingRequestedOutbox(ride.driver_id, {
-            bookingId: created.id,
-            rideId,
-            passengerFirstName: account.firstName,
-            departureAt: departureAt.toISOString(),
-            pickupArea: created.pickup_label,
-            dropoffArea: created.dropoff_label,
-            expiresAt: expiresAt.toISOString(),
-          }),
+      ...(auto
+        ? [
+            bookingAutoConfirmedOutbox(ride.driver_id, {
+              bookingId: created.id,
+              rideId,
+              departureAt: departureAt.toISOString(),
+              pickupArea: created.pickup_label,
+              dropoffArea: created.dropoff_label,
+            }),
+            // The passenger was confirmed too: same payload as the driver's approve (item 7).
+            bookingConfirmedOutbox(account.id, {
+              bookingId: created.id,
+              driverFirstName,
+              departureAt: departureAt.toISOString(),
+              pickupEtaAt: pickupEta(departureAt, ride.duration_s, match.f_pickup).toISOString(),
+              pickupArea: created.pickup_label,
+            }),
+          ]
+        : [
+            bookingRequestedOutbox(ride.driver_id, {
+              bookingId: created.id,
+              rideId,
+              passengerFirstName: account.firstName,
+              departureAt: departureAt.toISOString(),
+              pickupArea: created.pickup_label,
+              dropoffArea: created.dropoff_label,
+              expiresAt: expiresAt.toISOString(),
+            }),
+          ]),
     ]);
     await insertAnalyticsEvents(db, [
       bookingRequestedEvent(
@@ -280,11 +297,15 @@ export async function getBooking(deps: Deps, account: Account, id: string): Prom
 export async function listMyBookings(
   deps: Deps,
   account: Account,
-  query: { scope: 'upcoming' | 'past'; limit: number; cursor?: string | undefined },
+  query: { scope: 'upcoming' | 'past' | 'cancelled'; limit: number; cursor?: string | undefined },
 ): Promise<BookingListResponse> {
   const { sql, clock } = deps;
   const after = query.cursor ? decodeCursor(query.cursor) : null;
-  const list = query.scope === 'upcoming' ? listUpcomingBookings : listPastBookings;
+  const list = {
+    upcoming: listUpcomingBookings,
+    past: listPastBookings,
+    cancelled: listCancelledBookings,
+  }[query.scope];
   const rows = await list(sql, account.id, clock.now(), after, query.limit + 1);
   const page = rows.slice(0, query.limit);
   const users = await publicUsersById(

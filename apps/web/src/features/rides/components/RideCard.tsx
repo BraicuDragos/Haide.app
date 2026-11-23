@@ -3,6 +3,7 @@ import type { RideListItem } from '@/api/types';
 import { t, tp } from '@/i18n';
 import { dayLabel } from '@/lib/dates';
 import { formatTime } from '@/lib/format';
+import { CancelledNote, rideCancelledWho } from './CancelledNote';
 import { RideStops } from './RideStops';
 import { StatusPill } from './StatusPill';
 
@@ -31,6 +32,9 @@ export function RideCard({ ride }: { ride: RideListItem }) {
           {t('rides.seatsTaken', { booked: ride.seatsBooked, total: ride.seatsOffered })}
         </span>
       </div>
+      {ride.status === 'cancelled' && (
+        <CancelledNote role="driving" who={rideCancelledWho(ride)} at={ride.cancelledAt} />
+      )}
     </Link>
   );
 }

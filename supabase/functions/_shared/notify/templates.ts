@@ -2,6 +2,7 @@ import { dataRequestDueBy } from '../domain/privacy.ts';
 import { bucharestDayKey, bucharestTime, BUCHAREST_TZ } from '../domain/time.ts';
 import type { OutboxPayloadMap, OutboxTemplate } from '../domain/outbox.ts';
 import { t } from '../i18n/en.ts';
+import { renderLayout } from './emailLayout.ts';
 
 /**
  * Email templates (E4-6, e4-bookings-spec §6.1). Pure: payload in, subject, text, html and link out.
@@ -18,7 +19,24 @@ export type RenderContext = {
   baseUrl: string;
   /** Decides whether a time carries a date ("today" shows the clock time only). */
   now: Date;
+  /** Support contact shown in the footer. PLACEHOLDER until a real domain exists (see email-sender.md). */
+  supportEmail?: string;
+  /** Privacy contact in the controller line. PLACEHOLDER, same address as the legal text. */
+  privacyEmail?: string;
 };
+
+/**
+ * Fallbacks for local preview and tests only. In production the dispatcher passes the real support
+ * mailbox (EMAIL_SUPPORT_TO) for both the support and the privacy line, so these are never sent.
+ */
+export const DEFAULT_SUPPORT_EMAIL = 'support@haide.example';
+export const DEFAULT_PRIVACY_EMAIL = 'privacy@haide.example';
+
+/** Mails that must not carry an app button: the support mailbox and a suspended user. */
+const NO_CTA: ReadonlySet<OutboxTemplate> = new Set<OutboxTemplate>([
+  'data_export_requested',
+  'account_suspended',
+]);
 
 export type RenderedEmail = {
   subject: string;
@@ -41,14 +59,6 @@ export function whenLabel(at: Date, now: Date): string {
   if (bucharestDayKey(at) === bucharestDayKey(now)) return time;
   return `${dateFmt.format(at).replace(',', '')}, ${time}`;
 }
-
-const escapeHtml = (s: string): string =>
-  s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
 
 /** Untrusted jsonb: take a string or fall back. */
 const str = (v: unknown, fallback: string): string =>
@@ -273,6 +283,19 @@ function parts(input: TemplateInput, ctx: RenderContext): Parts {
         path: `/ride/${encodeURIComponent(str(p.rideId, ''))}?alert=${encodeURIComponent(str(p.alertId, ''))}`,
       };
     }
+    case 'ride_updated': {
+      const p = input.payload;
+      return {
+        subject: t('email.rideUpdated.subject', {
+          driver: str(p.driverFirstName, t('email.fallback.driver')),
+        }),
+        body: t('email.rideUpdated.body', {
+          time: whenLabel(date(p.departureAt), ctx.now),
+          previous: whenLabel(date(p.previousDepartureAt), ctx.now),
+        }),
+        path: `/booking/${encodeURIComponent(str(p.bookingId, ''))}`,
+      };
+    }
     case 'data_export_ack':
       return {
         subject: t('email.dataAck.subject'),
@@ -282,16 +305,39 @@ function parts(input: TemplateInput, ctx: RenderContext): Parts {
   }
 }
 
+/** Inbox preview line: whitespace collapsed, cut at a word boundary within 110 characters. */
+export function preheaderOf(body: string): string {
+  const flat = body.replace(/\s+/g, ' ').trim();
+  if (flat.length <= 110) return flat;
+  const cut = flat.slice(0, 110);
+  const space = cut.lastIndexOf(' ');
+  return `${(space > 40 ? cut.slice(0, space) : cut).replace(/[\s.,;:]+$/, '')}…`;
+}
+
 export function renderEmail(input: TemplateInput, ctx: RenderContext): RenderedEmail {
   const { subject, body, path } = parts(input, ctx);
   const link = `${ctx.baseUrl.replace(/\/+$/, '')}${path}`;
-  const openLine = t('email.open', { link });
-  const footer = t('email.footer');
-  const text = `${body}\n\n${openLine}\n\n--\n${footer}\n`;
-  const html =
-    `<!doctype html><html lang="en"><body style="font-family:system-ui,sans-serif;line-height:1.5">` +
-    `<p>${escapeHtml(body).replace(/\n/g, '<br>')}</p>` +
-    `<p><a href="${escapeHtml(link)}">${escapeHtml(t('email.openLabel'))}</a></p>` +
-    `<p style="color:#666;font-size:12px">${escapeHtml(footer)}</p></body></html>`;
+  const cta = !NO_CTA.has(input.template);
+  const footer = {
+    why: t('email.footer'),
+    support: t('email.support', { support: ctx.supportEmail ?? DEFAULT_SUPPORT_EMAIL }),
+    controller: t('email.controller', { privacy: ctx.privacyEmail ?? DEFAULT_PRIVACY_EMAIL }),
+  };
+  const text =
+    [
+      subject,
+      body,
+      ...(cta ? [t('email.open', { link })] : []),
+      ['--', footer.why, footer.support, footer.controller].join('\n'),
+    ].join('\n\n') + '\n';
+  const html = renderLayout({
+    title: subject,
+    body,
+    preheader: preheaderOf(body),
+    cta: cta ? { href: link, label: t('email.openLabel') } : null,
+    linkLine: cta ? t('email.linkLine', { link }) : null,
+    footer,
+    wordmark: 'haide',
+  });
   return { subject, text, html, link };
 }

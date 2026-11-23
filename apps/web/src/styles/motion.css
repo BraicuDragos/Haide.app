@@ -398,6 +398,12 @@
     color: var(--theme-on-action);
     box-shadow: var(--elev-seat);
   }
+  .seat input:disabled {
+    cursor: not-allowed;
+  }
+  .seat input:disabled + .mag .face:not(.on) {
+    opacity: 0.45;
+  }
   .seat input:focus-visible + .mag .face {
     outline: 3px solid var(--theme-focus-ring);
     outline-offset: 3px;
@@ -643,5 +649,73 @@ html[data-motion='reduced']::view-transition-new(*) {
   to {
     opacity: 1;
     transform: none;
+  }
+}
+
+/* ---- E10: a tap on a popular route. The base CSS is the calm picked state (accent edge and glow); the overlay and its
+   animations (RouteLaunch) only decorate it and are never rendered with reduced motion. Transform and opacity only. ---- */
+@layer components {
+  .pr-card {
+    position: relative;
+    transition:
+      opacity var(--tk-dur-base) var(--tk-ease-standard),
+      transform var(--tk-dur-base) var(--tk-ease-standard);
+  }
+  .pr-card::after {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    border: 1px solid var(--theme-accent);
+    box-shadow: var(--tk-shadow-glow-soft);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--tk-dur-base) var(--tk-ease-standard);
+  }
+  .pr-card.is-picked::after {
+    opacity: 1;
+  }
+  .pr-card.is-picked {
+    transform: scale(var(--tk-scale-pop));
+    transition-timing-function: var(--tk-ease-spring);
+  }
+  .pr-list[data-launching] .pr-card:not(.is-picked) {
+    opacity: 0.45;
+  }
+  .rl {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    border-radius: inherit;
+    pointer-events: none;
+  }
+  .rl-svg {
+    position: absolute;
+    inset: 0;
+  }
+  .rl-road {
+    fill: none;
+    stroke: var(--theme-accent);
+    stroke-width: 2px;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .rl-dot,
+  .rl-light {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+  .rl-dot {
+    background: var(--theme-surface);
+    border: 2px solid var(--theme-accent);
+    box-sizing: border-box;
+  }
+  .rl-light {
+    background: var(--theme-accent);
+    box-shadow: 0 0 10px 2px var(--theme-pulse-ring);
   }
 }

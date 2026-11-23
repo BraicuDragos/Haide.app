@@ -3,6 +3,7 @@ import {
   RIDE_LIMITS,
   cancelRideBodySchema,
   createRideBodySchema,
+  editRideBodySchema,
   previewBodySchema,
   priceRowSchema,
   ridesQuerySchema,
@@ -85,5 +86,23 @@ describe('ride request contracts', () => {
     expect(priceRowSchema.safeParse({ passengers: 2, priceBani: 200 }).success).toBe(true);
     expect(priceRowSchema.safeParse({ passengers: 2, priceBani: 2.5 }).success).toBe(false);
     expect(priceRowSchema.safeParse({ passengers: 5, priceBani: 100 }).success).toBe(false);
+  });
+
+  it('edit body: a partial strict object with at least one editable field', () => {
+    expect(editRideBodySchema.safeParse({ seats: 2 }).success).toBe(true);
+    expect(editRideBodySchema.safeParse({ departureAt: '2026-11-16T07:00:00Z' }).success).toBe(
+      true,
+    );
+    expect(editRideBodySchema.safeParse({ note: null }).success).toBe(true);
+    expect(editRideBodySchema.safeParse({ autoAccept: false }).success).toBe(true);
+    expect(editRideBodySchema.parse({ note: '  hi  ' }).note).toBe('hi');
+    expect(editRideBodySchema.safeParse({}).success).toBe(false);
+    expect(editRideBodySchema.safeParse({ note: undefined }).success).toBe(false);
+    expect(editRideBodySchema.safeParse({ seats: 0 }).success).toBe(false);
+    expect(editRideBodySchema.safeParse({ seats: 5 }).success).toBe(false);
+    expect(editRideBodySchema.safeParse({ seats: 2.5 }).success).toBe(false);
+    expect(editRideBodySchema.safeParse({ departureAt: 'tomorrow' }).success).toBe(false);
+    expect(editRideBodySchema.safeParse({ note: 'x'.repeat(201) }).success).toBe(false);
+    expect(editRideBodySchema.safeParse({ seats: 2, price: 5 }).success).toBe(false);
   });
 });

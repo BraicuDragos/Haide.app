@@ -31,11 +31,11 @@
 
 | HTTP | Codes |
 |---|---|
-| 400 | `VALIDATION_FAILED`, `SAME_PLACE`, `DEPARTURE_TOO_SOON` (< 15 min), `DEPARTURE_TOO_FAR` (> 14 days), `ROUTE_TOO_SHORT` (< 1 km), `ROUTE_TOO_LONG` (> 40 km), `SEATS_EXCEED_VEHICLE`, `PREVIEW_EXPIRED`, `PHOTO_INVALID`, `PHOTO_TOO_LARGE`, `CONFIRMATION_REQUIRED` |
+| 400 | `VALIDATION_FAILED`, `SAME_PLACE`, `DEPARTURE_TOO_SOON` (< 15 min), `DEPARTURE_TOO_FAR` (> 14 days), `ROUTE_TOO_SHORT` (< 1 km), `ROUTE_TOO_LONG` (> 40 km), `SEATS_EXCEED_VEHICLE`, `PREVIEW_EXPIRED`, `PHOTO_INVALID`, `PHOTO_TOO_LARGE`, `CONFIRMATION_REQUIRED`, `ROUTE_NOT_EDITABLE` (ride edit: route, price or vehicle field sent) |
 | 401 | `UNAUTHENTICATED` |
 | 403 | `ACCOUNT_SUSPENDED`, `ACCOUNT_DELETED`, `CONSENT_REQUIRED`, `PROFILE_INCOMPLETE`, `VEHICLE_REQUIRED`, `FORBIDDEN` (admin routes) |
 | 404 | `NOT_FOUND` (also used when the caller may not see the resource) |
-| 409 | `DAILY_RIDE_LIMIT` (4 per day), `RIDE_FULL`, `RIDE_NOT_BOOKABLE` (cancelled/completed/departing in < 10 min), `OWN_RIDE`, `BLOCKED`, `ALREADY_REQUESTED`, `NO_LONGER_MATCHES`, `INVALID_STATE` (transition not allowed), `REQUEST_EXPIRED`, `WINDOW_CLOSED` (rating/no-show window over), `ALREADY_RATED`, `ALERT_LIMIT` (E8), `LARGE_CHANGE` (admin energy price ±30 %) |
+| 409 | `DAILY_RIDE_LIMIT` (4 per day), `RIDE_FULL`, `RIDE_NOT_BOOKABLE` (cancelled/completed/departing in < 10 min), `OWN_RIDE`, `BLOCKED`, `ALREADY_REQUESTED`, `NO_LONGER_MATCHES`, `INVALID_STATE` (transition not allowed), `REQUEST_EXPIRED`, `WINDOW_CLOSED` (rating/no-show window over), `ALREADY_RATED`, `ALERT_LIMIT` (E8), `LARGE_CHANGE` (admin energy price ±30 %), `RIDE_NOT_EDITABLE` (ride edit: not published or already departed), `SEATS_BELOW_BOOKED` (ride edit: fewer seats than are booked) |
 | 422 | `ROUTE_NOT_FOUND` (router found no route) |
 | 429 | `RATE_LIMITED` |
 | 502/503 | `ROUTING_UNAVAILABLE`, `UPSTREAM_ERROR`, `TEMPORARILY_UNAVAILABLE` (E6: `DELETE /me` lost a lock race twice; retry) |
@@ -68,6 +68,23 @@ type FuelType = 'petrol'|'diesel'|'lpg'|'hybrid'|'electric';
 ### `GET /places?q=selimbar&limit=8`: Public. Rate limit 60/min
 Diacritics-insensitive autocomplete from the gazetteer, biased to Sibiu. `q` is 2–80 chars.
 `200 { "items": Place[] }`
+
+### `GET /popular-routes?limit=5`: Public. Rate limit 60/min (the public-read limit)
+Popular corridors for the Find screen. `limit` 1 to 10 (default 5). `Cache-Control: public, max-age=300`. No personal data.
+`200 { "items": [{ "from": Place, "to": Place, "rides": number, "source": "data" | "curated" }] }`
+
+**Definition of popular** (SQL `app.popular_routes(p_now, p_limit)`, STABLE, no EXECUTE for `PUBLIC`/`anon`/`authenticated`):
+- Rides with `departure_at` from 30 days before now to 14 days after now, status `published` or `completed` (cancelled and expired are excluded).
+- Grouped by (`origin_area_id`, `destination_area_id`); both must be known and different.
+- `score = rides + bookings in confirmed or completed` on those rides.
+- A route is returned only if at least **2 distinct drivers** published it (privacy: one person's pattern is never exposed).
+- Order: score desc, rides desc, origin area name, destination area name (deterministic). Limit 5 (default), max 10.
+
+`from` and `to` are ordinary `Place`s at area level: the gazetteer place of kind `area` for that area (rank 1), else the area centroid with the area id as a stable `id` (the same fallback `POST /places/reverse` uses). The web can pass `place.point` straight to `POST /search` as `from` and `to`; no name lookup is needed.
+
+**Fallback:** when fewer than 3 real routes qualify, the list is filled up to 3 with `CURATED_PILOT_ROUTES` (Cisnădie to Piața Mare, Șelimbăr to Zona Industrială Vest, Hipodrom to Piața Mare), resolved server-side by name to gazetteer places and skipped if a name cannot be resolved. Curated items have `source: "curated"` and `rides: 0` and **must not be shown as a popularity count**. A curated item never duplicates a real route (same ids or same names). Real items come first, `source: "data"`, `rides` is the number of rides in the window.
+
+Errors: `400 VALIDATION_FAILED` (`fields.limit`), `429 RATE_LIMITED`.
 
 ### `POST /places/reverse`: Public. Rate limit 60/min
 Body `{ "point": LatLng }` → `200 { "place": Place }` (nearest address/street + area). `404` outside the coverage bbox.
@@ -182,8 +199,8 @@ Body `{ "previewId": "…", "departureAt": "2026-11-16T05:30:00Z", "seats": 3, "
 `201` returns the owner ride view (below). Errors: `PREVIEW_EXPIRED` (unknown, expired or someone else's preview: indistinguishable on purpose), `DEPARTURE_TOO_SOON`, `DEPARTURE_TOO_FAR`, `SEATS_EXCEED_VEHICLE`, `DAILY_RIDE_LIMIT` (4 non-cancelled rides per driver per Europe/Bucharest day of departure). Logs `ride_published`. Rate limit 20/hour.
 There is no price field: unknown keys are ignored, the price comes from the stored route and the energy price version in effect at publish time (snapshotted on the ride). `isFree: true` makes every row of the table 0.
 
-### `GET /me/rides?scope=upcoming|past&limit&cursor`
-Driver list. `{ items: [{ id, departureAt, originLabel, destinationLabel, status, seatsOffered, seatsBooked, pendingRequests }], nextCursor: string | null }`. Upcoming (published, not departed) is sorted ascending by departure, past (departed or no longer published) descending. `limit` 1 to 50 (default 20). `cursor` is opaque (keyset on departure time and id): pass `nextCursor` back. `pendingRequests` is `0` until E4.
+### `GET /me/rides?scope=upcoming|past|cancelled&limit&cursor`
+Driver list. `{ items: [{ id, departureAt, originLabel, destinationLabel, status, seatsOffered, seatsBooked, pendingRequests, toRate, seriesId, cancelledAt: string | null, cancelledBy: "driver" | "system" | null }], nextCursor: string | null }`. Upcoming (published, not departed) is sorted ascending by departure. Past (departed, completed or expired) is descending and **no longer contains cancelled rides**. `cancelled` lists the driver's cancelled rides, newest departure first. `cancelledAt` and `cancelledBy` are set only when `status` is `cancelled` (`null` otherwise); `cancelledBy` is `driver` (the driver's own cancel) or `system` (the platform, e.g. a suspended driver); rows cancelled before the column existed read as `driver`. No cancel reason is stored or returned. Always scoped to the caller (`driver_id = me`): another user's rides never appear and `GET /me/rides/{id}` of someone else's ride is a 404. `limit` 1 to 50 (default 20). `cursor` is opaque (keyset on departure time and id): pass `nextCursor` back. `pendingRequests` is `0` until E4.
 
 ### `GET /me/rides/{id}`: driver only (else 404)
 ```json
@@ -196,10 +213,20 @@ Driver list. `{ items: [{ id, departureAt, originLabel, destinationLabel, status
                     "pickup": { "point": LatLng, "label": "…" }, "dropoff": {...},   // exact only within window
                     "phoneE164": "+40…" /* only within window */, "priceLockedBani": 200, "finalPriceBani": null,
                     "canMarkNoShow": false, "canRate": false } ],
-  "canCancel": true, "lateCancelIfNow": false,
+  "canCancel": true, "canEdit": true, "lateCancelIfNow": false,
   "fuelType": "diesel", "lateCancel": false, "cancelledAt": null, "createdAt": "…" }
 ```
 Additive fields added in E2: `fuelType` (from the vehicle snapshot), `lateCancel` (true once cancelled within 30 min of departure), `cancelledAt`, `createdAt`. Implemented in E4: `requests` holds the open requests (`requested`, `expires_at` in the future, soonest deadline first): public profile, **area labels** and `segmentM`, never a point. `priceIfAcceptedBani` is `seatPrice(segment, rate, confirmed + 1)`. `passengers` holds the `confirmed` bookings. `pickup.point`, `dropoff.point` and `phoneE164` go through `revealFor` (confirmed or completed, and now < departure + 24 h): outside it the points are 300 m grid centres (`approx: true`) and `phoneE164` is `null`. `label` is always an area name. `GET /me/rides` `pendingRequests` counts the open requests. For a coarsened ride (no stored route) `route` falls back to a straight line between the two points.
+
+### `PATCH /rides/{id}`: edit a published ride, driver only (ADR 0041)
+Body: a partial, strict object with **at least one** of `{ "departureAt"?: ISO UTC, "seats"?: 1..4, "note"?: string | null, "autoAccept"?: boolean }`. `note: null` (or an empty string) clears the note. Anything else is `400 VALIDATION_FAILED` (`fields` names the key). Sending the **origin, destination, labels, route, previewId, isFree, price, priceTable, vehicle, car, distanceM or durationS** is `400 ROUTE_NOT_EDITABLE` with `fields.<key> = "not_editable"`: changing the route would change the distance, the price and every passenger's pickup segment, so the driver cancels the ride and publishes a new one. A body that changes nothing (same values) is a `200` no-op that writes nothing.
+`200` returns the updated owner view (same shape as `GET /me/rides/{id}`, plus `canEdit`). Gates: signed in, active, consent (`CONSENT_REQUIRED`); rate limit 20/hour (`ride-edit`). The ride must belong to the caller (else `404`, never 403).
+Rules, in one transaction under the ride row lock (the same lock as booking, approve and cancel):
+- not `published` or already departed: `409 RIDE_NOT_EDITABLE` (`canEdit` in the owner view is the same test);
+- a changed `departureAt` follows the publish rules: `400 DEPARTURE_TOO_SOON` (< 15 min ahead) or `DEPARTURE_TOO_FAR` (> 14 days), and the daily limit of 4 non-cancelled rides on the Europe/Bucharest day of the NEW time (this ride is not counted): `409 DAILY_RIDE_LIMIT`. An unchanged `departureAt` is not re-checked, so seats and note can still be corrected minutes before departure;
+- `seats` 1..4 (`400 VALIDATION_FAILED`), not above the vehicle's seats when raised (`400 SEATS_EXCEED_VEHICLE`), not below the seats already confirmed: `409 SEATS_BELOW_BOOKED` (`fields.seats = "below_booked"`);
+- when the **departure time changed**: every open request is clamped (`expires_at = least(expires_at, newDeparture - 10 min)`), every requested or confirmed booking is flagged unseen for its passenger and one `ride_updated` outbox row per such booking is queued (email + push, dedupe `ride_updated:{bookingId}:{new departureAt}`). Confirmed seats and locked prices are untouched. Seats, note and auto-accept notify nobody (switching auto-accept on never confirms requests that are already pending).
+No new analytics event (the `analytics_events.props` check would need a migration). `PATCH /me/rides/{id}` (auto-accept only, below) keeps working.
 
 ### `POST /rides/{id}/cancel`: driver only
 Body `{}`. Ride → `cancelled`. All `requested` and `confirmed` bookings → `cancelled` (`cancelled_by='driver'`), passengers emailed. Within 30 min of departure: `late_cancel=true` + a reliability event. `200` returns the owner view. `INVALID_STATE` if not `published`.
@@ -217,7 +244,9 @@ Server re-runs the match for this ride and stores the snapped points, `segment_m
 `201` returns the booking view (below). Errors: `RIDE_FULL`, `RIDE_NOT_BOOKABLE`, `OWN_RIDE`, `BLOCKED`, `ALREADY_REQUESTED`, `NO_LONGER_MATCHES`. Logs `booking_requested`. Outbox: `booking_requested` → driver. With `autoAccept` (E8-3) and an eligible requester, the booking is confirmed in the same transaction (ADR 0037: after every E4 guard and the insert, under the ride lock; eligible = fewer than 3 visible ratings or a visible average ≥ 4.0; the response is then `201` with `status: 'confirmed'` and `autoConfirmed: true`; the driver gets `booking_auto_confirmed` instead of `booking_requested`).
 Implemented in E4: header `Idempotency-Key` (uuid) is required: missing or not a uuid → `400 VALIDATION_FAILED` (`fields.idempotencyKey = required | invalid`). A replay with the same key and ride returns `201` with the current view and writes nothing; the same key for another ride, or for this ride with other points (the route fractions differ, or the points no longer match) → `400` (`fields.idempotencyKey = reused`). Body points must be inside the Sibiu box (`fields.from|to = outside_coverage`); there is no price field. Under the ride row lock (ADR 0021) the guards run in this order: replay, `OWN_RIDE`, `BLOCKED` (either direction), driver not active (`404`), `ALREADY_REQUESTED` (a `requested`, `confirmed` or **`rejected`** booking exists: a declined passenger cannot ask again, after `cancelled` or `expired` they can), `RIDE_NOT_BOOKABLE` (not published, or departing in 10 minutes or less), `RIDE_FULL`, `NO_LONGER_MATCHES`. An unknown ride is `404`. `pickup.label` and `dropoff.label` are **area names**; the stored points are the exact snapped points on the route (`ST_LineInterpolatePoint` at the matched fractions) and are never returned before the reveal. `price_quoted_bani` = `quoteUpTo(segment)` (n = 1). Rate limit 10/hour. Analytics `booking_requested`.
 
-### `GET /me/bookings?scope=upcoming|past&limit&cursor`
+### `GET /me/bookings?scope=upcoming|past|cancelled&limit&cursor`
+Improvement 5: `scope=cancelled` lists the passenger's bookings with status `cancelled` (cancelled by the passenger, by the driver cancelling the ride, or by the system), newest departure first. `past` no longer contains cancelled bookings (rejected, expired, completed and no-show stay in Past). `BookingListItem` gains `cancelledAt: string | null` (set only for cancelled bookings); `cancelledBy` (`passenger | driver | system | null`) and `rideStatus` (`cancelled` when the ride itself was cancelled) already exist. Always scoped to the caller (`passenger_id = me`).
+
 `{ items: [{ id, rideId, status, departureAt, pickupLabel, dropoffLabel, driver: PublicUser, priceBani /* locked ?? quoted */, unseen: boolean }] }`
 Implemented in E4: `{ items: BookingListItem[], nextCursor }` with `BookingListItem = { id, rideId, status, rideStatus, departureAt, pickupEtaAt, pickupLabel, dropoffLabel, driver: PublicUser, priceBani /* final ?? locked ?? quoted */, unseen }`. Upcoming = `requested` or `confirmed` and departing after now, ascending. Past = everything else, descending. Keyset cursor on `(departure_at, id)` like `/me/rides`; `limit` 1 to 50 (default 20). Labels are area names.
 

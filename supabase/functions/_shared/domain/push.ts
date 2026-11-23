@@ -12,6 +12,7 @@ export const PUSH_TEMPLATES = [
   'ride_cancelled',
   'booking_cancelled',
   'ride_alert_match',
+  'ride_updated',
 ] as const satisfies readonly OutboxTemplate[];
 
 /** Push first, email only when there is no subscription or the push finally failed. */

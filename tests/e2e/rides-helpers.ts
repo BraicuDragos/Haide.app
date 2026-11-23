@@ -77,12 +77,19 @@ export interface FakeRides {
   published: Array<Record<string, unknown>>;
   previews: number;
   /** One-shot failures: the next call to that endpoint answers with this status and code. */
-  failNext: { preview?: [number, string]; publish?: [number, string]; cancel?: [number, string] };
+  failNext: {
+    preview?: [number, string];
+    publish?: [number, string];
+    cancel?: [number, string];
+    edit?: [number, string];
+  };
+  /** Bodies seen by PATCH /rides/{id}. */
+  edits: Array<Record<string, unknown>>;
   now: () => number;
 }
 
 export function newFakeRides(): FakeRides {
-  return { rides: [], published: [], previews: 0, failNext: {}, now: () => Date.now() };
+  return { rides: [], published: [], edits: [], previews: 0, failNext: {}, now: () => Date.now() };
 }
 
 export const TRIP_B = {
@@ -164,6 +171,7 @@ export async function mockRidesApi(page: Page, fake: FakeRides) {
           seats: number;
           note?: string;
           isFree: boolean;
+          autoAccept?: boolean;
         };
         fake.published.push(b);
         const p = previews.get(b.previewId);
@@ -196,6 +204,8 @@ export async function mockRidesApi(page: Page, fake: FakeRides) {
           requests: [],
           passengers: [],
           canCancel: true,
+          canEdit: true,
+          autoAccept: b.autoAccept ?? false,
           lateCancelIfNow: lead <= 30 * 60_000,
           lateCancel: false,
           cancelledAt: null,
@@ -207,19 +217,25 @@ export async function mockRidesApi(page: Page, fake: FakeRides) {
 
       if (method === 'GET' && path === '/me/rides') {
         const scope = url.searchParams.get('scope') ?? 'upcoming';
-        const past = (r: FakeRide) => r.status !== 'published';
-        const items = fake.rides
-          .filter((r) => (scope === 'past' ? past(r) : !past(r)))
-          .map((r) => ({
-            id: r.id,
-            departureAt: r.departureAt,
-            originLabel: (r.origin as { label: string }).label,
-            destinationLabel: (r.destination as { label: string }).label,
-            status: r.status,
-            seatsOffered: r.seatsOffered,
-            seatsBooked: r.seatsBooked,
-            pendingRequests: 0,
-          }));
+        // Contract: past holds everything except cancelled rides; cancelled has its own scope.
+        const inScope = (r: FakeRide) =>
+          scope === 'cancelled'
+            ? r.status === 'cancelled'
+            : scope === 'past'
+              ? r.status !== 'published' && r.status !== 'cancelled'
+              : r.status === 'published';
+        const items = fake.rides.filter(inScope).map((r) => ({
+          id: r.id,
+          departureAt: r.departureAt,
+          originLabel: (r.origin as { label: string }).label,
+          destinationLabel: (r.destination as { label: string }).label,
+          status: r.status,
+          seatsOffered: r.seatsOffered,
+          seatsBooked: r.seatsBooked,
+          pendingRequests: 0,
+          cancelledAt: r.status === 'cancelled' ? (r.cancelledAt ?? null) : null,
+          cancelledBy: r.status === 'cancelled' ? 'driver' : null,
+        }));
         return route.fulfill({ json: { items, nextCursor: null } });
       }
 
@@ -227,6 +243,39 @@ export async function mockRidesApi(page: Page, fake: FakeRides) {
       if (method === 'GET' && mine) {
         const r = fake.rides.find((x) => x.id === mine[1]);
         return r ? route.fulfill({ json: r }) : err(route, 404, 'NOT_FOUND');
+      }
+
+      const edit = /^\/rides\/([^/]+)$/.exec(path);
+      if (method === 'PATCH' && edit) {
+        const fail = fake.failNext.edit;
+        if (fail) {
+          fake.failNext.edit = undefined;
+          return err(route, fail[0], fail[1]);
+        }
+        const r = fake.rides.find((x) => x.id === edit[1]);
+        if (!r) return err(route, 404, 'NOT_FOUND');
+        if (r.status !== 'published') return err(route, 409, 'RIDE_NOT_EDITABLE');
+        const b = req.postDataJSON() as {
+          departureAt?: string;
+          seats?: number;
+          note?: string | null;
+          autoAccept?: boolean;
+        };
+        fake.edits.push(b);
+        if (b.departureAt) {
+          const lead = new Date(b.departureAt).getTime() - fake.now();
+          if (lead < 15 * 60_000) return err(route, 400, 'DEPARTURE_TOO_SOON');
+          if (lead > 14 * 86_400_000) return err(route, 400, 'DEPARTURE_TOO_FAR');
+          r.departureAt = b.departureAt;
+        }
+        if (b.seats !== undefined) {
+          if (b.seats < (r.seatsBooked as number))
+            return err(route, 409, 'SEATS_BELOW_BOOKED', { seats: 'below_booked' });
+          r.seatsOffered = b.seats;
+        }
+        if (b.note !== undefined) r.note = b.note === null || b.note === '' ? null : b.note;
+        if (b.autoAccept !== undefined) r.autoAccept = b.autoAccept;
+        return route.fulfill({ json: r });
       }
 
       const cancel = /^\/rides\/([^/]+)\/cancel$/.exec(path);

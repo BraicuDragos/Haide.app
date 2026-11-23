@@ -107,7 +107,7 @@ describe.skipIf(!BASE || !SECRET)('rides against the local stack', () => {
     expect(cancelled).toMatchObject({ status: 'cancelled', canCancel: false, lateCancel: false });
     expect(cancelled.cancelledAt).not.toBeNull();
 
-    // moved from Upcoming to Past
+    // moved from Upcoming to the Cancelled list (Past no longer holds cancelled rides)
     const after = rideListResponseSchema.parse(
       await (await driver.call('/me/rides?scope=upcoming')).json(),
     );
@@ -115,8 +115,13 @@ describe.skipIf(!BASE || !SECRET)('rides against the local stack', () => {
     const pastAfter = rideListResponseSchema.parse(
       await (await driver.call('/me/rides?scope=past')).json(),
     );
-    expect(pastAfter.items.map((i) => i.id)).toEqual([ride.id]);
-    expect(pastAfter.items[0]?.status).toBe('cancelled');
+    expect(pastAfter.items).toHaveLength(0);
+    const cancelledList = rideListResponseSchema.parse(
+      await (await driver.call('/me/rides?scope=cancelled')).json(),
+    );
+    expect(cancelledList.items.map((i) => i.id)).toEqual([ride.id]);
+    expect(cancelledList.items[0]?.status).toBe('cancelled');
+    expect(cancelledList.items[0]?.cancelledBy).toBe('driver');
 
     // cancelling twice is an invalid transition
     const again = await driver.send('POST', `/rides/${ride.id}/cancel`, {});

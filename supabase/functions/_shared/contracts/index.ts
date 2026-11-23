@@ -9,3 +9,4 @@ export * from './safety.ts';
 export * from './privacy.ts';
 export * from './admin.ts';
 export * from './liquidity.ts';
+export * from './popular.ts';

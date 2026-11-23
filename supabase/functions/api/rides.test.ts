@@ -8,8 +8,9 @@ import {
 } from '../_shared/contracts/rides.ts';
 import { AppError } from '../_shared/errors.ts';
 import type { RoutingProvider } from '../_shared/providers/routing/types.ts';
+import { markRideCancelled } from './repo/rides.ts';
 import { decodeCursor, encodeCursor } from './services/rides.ts';
-import { BASE, makeApp, signToken, type Handler, type Query } from './testing.ts';
+import { BASE, fakeSql, makeApp, signToken, type Handler, type Query } from './testing.ts';
 
 const USER = '3f0f4a2e-8d9c-4b1e-9a55-0c1d2e3f4a5b';
 const OTHER = '9a1b2c3d-4e5f-4a6b-8c7d-0e1f2a3b4c5d';
@@ -605,6 +606,73 @@ describe('GET /me/rides', () => {
   it('needs a token', async () => {
     const { app } = makeApp([rideDb().handler]);
     expect((await app.request(`${BASE}/me/rides`)).status).toBe(401);
+  });
+
+  const cancelledRow = (n: number, over: Record<string, unknown> = {}) => ({
+    ...row(n),
+    status: 'cancelled',
+    cancelled_at: new Date(Date.UTC(2026, 10, 15, 9)),
+    cancelled_by: 'driver',
+    ...over,
+  });
+
+  it('cancelled scope: own cancelled rides, newest first, with who and when (old rows read as driver)', async () => {
+    const { app, calls } = makeApp([
+      rideDb({
+        list: [
+          cancelledRow(3),
+          cancelledRow(2, { cancelled_by: 'system' }),
+          cancelledRow(1, { cancelled_by: null }),
+        ],
+      }).handler,
+    ]);
+    const res = await app.request(`${BASE}/me/rides?scope=cancelled`, { headers: await auth() });
+    expect(res.status).toBe(200);
+    const out = rideListResponseSchema.parse(await res.json());
+    expect(out.items.map((i) => i.cancelledBy)).toEqual(['driver', 'system', 'driver']);
+    expect(out.items[0]).toMatchObject({
+      status: 'cancelled',
+      cancelledAt: '2026-11-15T09:00:00.000Z',
+    });
+    const q = find(calls, "r.status = 'cancelled'");
+    expect(q?.text).toContain('r.driver_id =');
+    expect(q?.text).toContain('order by r.departure_at desc');
+    expect(q?.values).toContain(USER);
+  });
+
+  it('past excludes cancelled rides, upcoming is published only, other items carry null cancel fields', async () => {
+    const { app, calls } = makeApp([rideDb({ list: [row(1)] }).handler]);
+    const res = await app.request(`${BASE}/me/rides?scope=past`, { headers: await auth() });
+    const out = rideListResponseSchema.parse(await res.json());
+    expect(out.items[0]).toMatchObject({ cancelledAt: null, cancelledBy: null });
+    const q = find(calls, 'order by r.departure_at desc');
+    expect(q?.text).toContain("r.status <> 'cancelled'");
+    expect(q?.text).toContain('r.driver_id =');
+    await app.request(`${BASE}/me/rides?scope=upcoming`, { headers: await auth() });
+    expect(find(calls, 'order by r.departure_at asc')?.text).toContain("r.status = 'published'");
+  });
+
+  it('cancelled scope keeps cursor pagination', async () => {
+    const { app } = makeApp([
+      rideDb({ list: [cancelledRow(3), cancelledRow(2), cancelledRow(1)] }).handler,
+    ]);
+    const res = await app.request(`${BASE}/me/rides?scope=cancelled&limit=2`, {
+      headers: await auth(),
+    });
+    const out = rideListResponseSchema.parse(await res.json());
+    expect(out.items).toHaveLength(2);
+    expect(decodeCursor(out.nextCursor as string).id).toBe(row(2).id);
+  });
+
+  it('markRideCancelled records who cancelled (default driver)', async () => {
+    const { sql, calls } = fakeSql();
+    const at = new Date('2026-11-16T05:00:00Z');
+    await markRideCancelled(sql, RIDE_ID, at, false);
+    await markRideCancelled(sql, RIDE_ID, at, false, 'system');
+    const updates = calls.filter((c) => c.text.includes("set status = 'cancelled'"));
+    expect(updates[0]?.text).toContain('cancelled_by =');
+    expect(updates[0]?.values).toContain('driver');
+    expect(updates[1]?.values).toContain('system');
   });
 
   it('cursors round trip', () => {

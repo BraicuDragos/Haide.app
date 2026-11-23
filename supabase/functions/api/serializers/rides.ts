@@ -13,7 +13,7 @@ import {
 import type { Clock } from '../../_shared/domain/clock.ts';
 import { priceTable, tripCostBani } from '../../_shared/domain/pricing.ts';
 import { roundCoord } from '../../_shared/domain/privacy.ts';
-import { canCancelRide, isLateRideCancel } from '../../_shared/domain/rides.ts';
+import { canCancelRide, canEditRide, isLateRideCancel } from '../../_shared/domain/rides.ts';
 import { call112Window, call112WindowDto, show112 } from '../../_shared/domain/safety.ts';
 import type { OwnerRideRow, PublicRideRow, RideListRow } from '../repo/rides.ts';
 
@@ -98,6 +98,7 @@ export function toOwnerView(
     requests: extras.requests,
     passengers: extras.passengers,
     canCancel: canCancelRide(ctx, clock),
+    canEdit: canEditRide(ctx, clock),
     lateCancelIfNow: isLateRideCancel(ctx, clock),
     lateCancel: row.late_cancel,
     cancelledAt: row.cancelled_at ? iso(row.cancelled_at) : null,
@@ -120,6 +121,9 @@ export function toListItem(row: RideListRow): RideListItem {
     pendingRequests: Number(row.pending_requests ?? 0),
     toRate: Number(row.to_rate ?? 0),
     seriesId: row.series_id ?? null,
+    cancelledAt: row.status === 'cancelled' && row.cancelled_at ? iso(row.cancelled_at) : null,
+    // NULL on a cancelled ride is an old row: only the driver could cancel before the column existed.
+    cancelledBy: row.status === 'cancelled' ? (row.cancelled_by ?? 'driver') : null,
   };
 }
 

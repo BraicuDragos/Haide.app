@@ -93,6 +93,8 @@ export function listItem(over: Json = {}): Json {
     driver: DRIVER,
     priceBani: 310,
     unseen: false,
+    cancelledBy: null,
+    cancelledAt: null,
     ...over,
   };
 }
@@ -158,6 +160,8 @@ export interface FakeBookings {
   booking: Json | null;
   upcoming: Json[];
   past: Json[];
+  /** GET /me/bookings?scope=cancelled. */
+  cancelled: Json[];
   summary: { driverPendingRequests: number; passengerUnseenUpdates: number; nextRide: unknown };
   /** What POST /bookings received: body and the Idempotency-Key header. */
   created: Array<{ body: Json; key: string | undefined }>;
@@ -179,6 +183,7 @@ export function newFakeBookings(): FakeBookings {
     booking: null,
     upcoming: [],
     past: [],
+    cancelled: [],
     summary: { driverPendingRequests: 0, passengerUnseenUpdates: 0, nextRide: null },
     created: [],
     seen: [],
@@ -227,7 +232,11 @@ export async function mockBookingsApi(page: Page, fake: FakeBookings) {
       if (method === 'GET' && path === '/me/bookings') {
         const scope = url.searchParams.get('scope') ?? 'upcoming';
         return route.fulfill({
-          json: { items: scope === 'past' ? fake.past : fake.upcoming, nextCursor: null },
+          json: {
+            items:
+              scope === 'past' ? fake.past : scope === 'cancelled' ? fake.cancelled : fake.upcoming,
+            nextCursor: null,
+          },
         });
       }
 

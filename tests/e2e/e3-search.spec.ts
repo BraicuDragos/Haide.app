@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
+import { pickTime } from './time-helpers';
 import { expectNoAxeViolations, mockAccountApi, newAccount, seedSession } from './accounts-helpers';
+import { mockPopularApi } from './popular-helpers';
 import { mockPlaces } from './rides-helpers';
 import {
   mockSearchApi,
@@ -21,6 +23,7 @@ async function setup(page: Page, fake: FakeSearch = newFakeSearch()) {
   await page.route('**/telemetry/error', (r) => r.fulfill({ status: 204 }));
   await mockPlaces(page);
   await mockSearchApi(page, fake);
+  await mockPopularApi(page);
   return fake;
 }
 
@@ -40,22 +43,33 @@ async function searchTripB(page: Page) {
   await pickPlace(page, 'From', 'selimbar', 'Șelimbăr');
   await pickPlace(page, 'To', 'zona', 'Zona Industrială Vest');
   await page.getByLabel('Day', { exact: true }).selectOption({ label: 'Tomorrow' });
-  await page.getByLabel('Leave around').fill('07:30');
+  await pickTime(page, 'Leave around', '07:30');
   await page.getByRole('button', { name: 'Search rides' }).click();
 }
 
 test.describe('find', () => {
-  test('popular routes fill both places, flexibility defaults to ±30', async ({ page }) => {
-    await setup(page);
+  test('a popular route opens the results at ±1 hour; Edit search keeps the places', async ({
+    page,
+  }) => {
+    const fake = await setup(page);
     await page.goto('/find');
     await expect(heading(page, 'Popular routes', 2)).toBeVisible();
     await expect(page.getByRole('radio', { name: '±30 min' })).toBeChecked();
     await page.getByRole('button', { name: 'Șelimbăr to Zona Industrială Vest' }).click();
+    await expect(page).toHaveURL(/\/results$/);
+    await expect(heading(page, '1 ride found')).toBeVisible();
+    expect(fake.searches).toHaveLength(1);
+    expect(fake.searches[0]).toMatchObject({
+      windowMin: 60,
+      from: { lat: 45.7595, lng: 24.2128 },
+      to: { lat: 45.7926, lng: 24.0973 },
+    });
+    await expect(page.getByText('Șelimbăr to Zona Industrială Vest')).toBeVisible();
+    await page.getByRole('link', { name: 'Edit search' }).click();
     await expect(page.getByRole('button', { name: 'From Șelimbăr', exact: true })).toBeVisible();
     await expect(
       page.getByRole('button', { name: 'To Zona Industrială Vest', exact: true }),
     ).toBeVisible();
-    await expect(page.getByLabel('Leave around')).toBeFocused();
     await expectNoAxeViolations(page);
   });
 });
@@ -193,7 +207,7 @@ test.describe('results states', () => {
     // The form remembers the last search.
     await expect(page).toHaveURL(/\/find$/);
     await expect(page.getByRole('button', { name: 'From Șelimbăr', exact: true })).toBeVisible();
-    await expect(page.getByLabel('Leave around')).toHaveValue('07:30');
+    await expect(page.getByLabel('Leave around')).toContainText('07:30');
   });
 
   test('blocked drivers are hidden with a note', async ({ page }) => {
