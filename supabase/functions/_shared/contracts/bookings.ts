@@ -180,11 +180,13 @@ export const bookingViewSchema = z.object({
 });
 export type BookingView = z.infer<typeof bookingViewSchema>;
 
-// ---- GET /me/bookings?scope=upcoming|past&limit&cursor ---------------------------------------------------
-// Upcoming: requested or confirmed, departing after now, ascending. Past: everything else, descending.
+// ---- GET /me/bookings?scope=upcoming|past|cancelled&limit&cursor -------------------------------------------
+// Upcoming: requested or confirmed, departing after now, ascending. Cancelled: bookings with status
+// `cancelled` (by the passenger, by the driver cancelling the ride, or by the system), newest departure
+// first. Past: everything else (completed, no_show, rejected, expired, departed), newest first.
 
 export const bookingsQuerySchema = z.object({
-  scope: z.enum(['upcoming', 'past']).default('upcoming'),
+  scope: z.enum(['upcoming', 'past', 'cancelled']).default('upcoming'),
   limit: z.coerce.number().int().min(1).max(50).default(20),
   cursor: z.string().max(200).optional(),
 });
@@ -205,6 +207,8 @@ export const bookingListItemSchema = z.object({
   unseen: z.boolean(),
   /** With `rideStatus`: a cancelled ride not cancelled by the passenger reads "ride cancelled". */
   cancelledBy: cancelledBySchema.nullable(),
+  /** When the booking was cancelled; null unless `status` is `cancelled`. `rideStatus` says whether the ride itself is cancelled. */
+  cancelledAt: z.string().nullable(),
   /** The passenger can still rate the driver (the "Rate" chip). */
   canRate: z.boolean(),
 });

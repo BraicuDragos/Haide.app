@@ -239,10 +239,18 @@ export const rideOwnerViewSchema = z.object({
 });
 export type RideOwnerView = z.infer<typeof rideOwnerViewSchema>;
 
-// ---- GET /me/rides?scope=upcoming|past&limit&cursor ------------------------------------------------
+// ---- GET /me/rides?scope=upcoming|past|cancelled&limit&cursor ---------------------------------------
+// upcoming: published, not departed, ascending. past: everything else EXCEPT cancelled rides, newest
+// first. cancelled: cancelled rides, newest departure first. Always the caller's own rides.
+
+export const rideScopeSchema = z.enum(['upcoming', 'past', 'cancelled']);
+
+/** Who cancelled a ride. Old rows hold NULL in the database and are read as `driver`. */
+export const rideCancelledBySchema = z.enum(['driver', 'system']);
+export type RideCancelledBy = z.infer<typeof rideCancelledBySchema>;
 
 export const ridesQuerySchema = z.object({
-  scope: z.enum(['upcoming', 'past']).default('upcoming'),
+  scope: rideScopeSchema.default('upcoming'),
   limit: z.coerce.number().int().min(1).max(50).default(20),
   cursor: z.string().max(200).optional(),
 });
@@ -262,6 +270,10 @@ export const rideListItemSchema = z.object({
   toRate: z.number().int().min(0),
   /** E8-1: the series the ride belongs to, or null. */
   seriesId: z.uuid().nullable(),
+  /** Set when `status` is `cancelled`, else null. */
+  cancelledAt: z.string().nullable(),
+  /** `driver` or `system` (the platform, e.g. a suspended driver); null unless cancelled. No reason is stored. */
+  cancelledBy: rideCancelledBySchema.nullable(),
 });
 export type RideListItem = z.infer<typeof rideListItemSchema>;
 

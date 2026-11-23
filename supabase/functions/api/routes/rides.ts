@@ -48,7 +48,7 @@ rideRoutes.post(
   },
 );
 
-// GET /me/rides?scope=upcoming|past&limit&cursor: the driver's own rides
+// GET /me/rides?scope=upcoming|past|cancelled&limit&cursor: the driver's own rides
 rideRoutes.get(
   '/me/rides',
   requireActive,

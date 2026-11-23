@@ -293,6 +293,9 @@ export type RideListRow = {
   /** Completed passengers the driver can still rate (E5). */
   to_rate: number;
   series_id: string | null;
+  /** Set only for cancelled rides. NULL cancelled_by on a cancelled ride is an old row (read as driver). */
+  cancelled_at: Date | string | null;
+  cancelled_by: 'driver' | 'system' | null;
 };
 
 /**
@@ -312,7 +315,7 @@ export async function listUpcomingRides(
   const rateCutoff = ratingCutoff(now);
   return await sql<RideListRow[]>`
     select r.id, r.departure_at, r.origin_label, r.destination_label, r.status,
-           r.seats_offered, r.seats_booked, r.series_id,
+           r.seats_offered, r.seats_booked, r.series_id, r.cancelled_at, r.cancelled_by,
            (select count(*)::int from app.bookings b
              where b.ride_id = r.id and b.status = 'requested' and b.expires_at > ${now}) as pending_requests,
            (select count(*)::int from app.bookings b
@@ -326,7 +329,10 @@ export async function listUpcomingRides(
     limit ${limit}`;
 }
 
-/** Past: departed or no longer published (cancelled, completed, expired), newest first. */
+/**
+ * Past: departed or no longer published (completed, expired, or a departed published ride), newest
+ * first. Cancelled rides are NOT here: they have their own scope (listCancelledRides).
+ */
 export async function listPastRides(
   sql: Db,
   driverId: string,
@@ -340,7 +346,7 @@ export async function listPastRides(
   const rateCutoff = ratingCutoff(now);
   return await sql<RideListRow[]>`
     select r.id, r.departure_at, r.origin_label, r.destination_label, r.status,
-           r.seats_offered, r.seats_booked, r.series_id,
+           r.seats_offered, r.seats_booked, r.series_id, r.cancelled_at, r.cancelled_by,
            (select count(*)::int from app.bookings b
              where b.ride_id = r.id and b.status = 'requested' and b.expires_at > ${now}) as pending_requests,
            (select count(*)::int from app.bookings b
@@ -348,7 +354,36 @@ export async function listPastRides(
                and not exists (select 1 from app.ratings x
                  where x.booking_id = b.id and x.rater_id = r.driver_id)) as to_rate
     from app.rides r
-    where r.driver_id = ${driverId} and (r.status <> 'published' or r.departure_at < ${now})
+    where r.driver_id = ${driverId} and r.status <> 'cancelled'
+      and (r.status <> 'published' or r.departure_at < ${now})
+      and (not ${hasCursor}::boolean or (r.departure_at, r.id) < (${cursorAt}::timestamptz, ${cursorId}::uuid))
+    order by r.departure_at desc, r.id desc
+    limit ${limit}`;
+}
+
+/** Cancelled: the driver's cancelled rides, newest departure first. Keyset on (departure_at, id). */
+export async function listCancelledRides(
+  sql: Db,
+  driverId: string,
+  now: Date,
+  after: { departureAt: Date; id: string } | null,
+  limit: number,
+): Promise<RideListRow[]> {
+  const hasCursor = after !== null;
+  const cursorAt = after?.departureAt ?? now;
+  const cursorId = after?.id ?? 'ffffffff-ffff-ffff-ffff-ffffffffffff';
+  const rateCutoff = ratingCutoff(now);
+  return await sql<RideListRow[]>`
+    select r.id, r.departure_at, r.origin_label, r.destination_label, r.status,
+           r.seats_offered, r.seats_booked, r.series_id, r.cancelled_at, r.cancelled_by,
+           (select count(*)::int from app.bookings b
+             where b.ride_id = r.id and b.status = 'requested' and b.expires_at > ${now}) as pending_requests,
+           (select count(*)::int from app.bookings b
+             where b.ride_id = r.id and b.status = 'completed' and r.completed_at > ${rateCutoff}
+               and not exists (select 1 from app.ratings x
+                 where x.booking_id = b.id and x.rater_id = r.driver_id)) as to_rate
+    from app.rides r
+    where r.driver_id = ${driverId} and r.status = 'cancelled'
       and (not ${hasCursor}::boolean or (r.departure_at, r.id) < (${cursorAt}::timestamptz, ${cursorId}::uuid))
     order by r.departure_at desc, r.id desc
     limit ${limit}`;
@@ -356,15 +391,21 @@ export async function listPastRides(
 
 // ---- cancel -------------------------------------------------------------------------------------
 
+/**
+ * `by` is who cancelled: the driver (default, the E2 endpoint) or the system (the sweep for a
+ * suspended driver). Recorded in rides.cancelled_by for the "Canceled" list.
+ */
 export async function markRideCancelled(
   sql: Db,
   rideId: string,
   at: Date,
   lateCancel: boolean,
+  by: 'driver' | 'system' = 'driver',
 ): Promise<void> {
   await sql`
     update app.rides
-    set status = 'cancelled', cancelled_at = ${at}, late_cancel = ${lateCancel}, updated_at = ${at}
+    set status = 'cancelled', cancelled_at = ${at}, cancelled_by = ${by}, late_cancel = ${lateCancel},
+        updated_at = ${at}
     where id = ${rideId}`;
 }
 

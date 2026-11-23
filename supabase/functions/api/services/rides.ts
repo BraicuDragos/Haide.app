@@ -35,6 +35,7 @@ import {
   insertPreview,
   insertRideFromPreview,
   insertRidePublishedEvent,
+  listCancelledRides,
   listPastRides,
   listUpcomingRides,
   lockDriverPublishing,
@@ -208,6 +209,12 @@ export function decodeCursor(raw: string): Cursor {
   return { departureAt, id: id.toLowerCase() };
 }
 
+const RIDE_LISTS = {
+  upcoming: listUpcomingRides,
+  past: listPastRides,
+  cancelled: listCancelledRides,
+} as const;
+
 export type ListQuery = {
   scope: NonNullable<RidesQuery['scope']>;
   limit: number;
@@ -221,7 +228,7 @@ export async function listMyRides(
 ): Promise<RideListResponse> {
   const { sql, clock } = deps;
   const after = query.cursor ? decodeCursor(query.cursor) : null;
-  const list = query.scope === 'upcoming' ? listUpcomingRides : listPastRides;
+  const list = RIDE_LISTS[query.scope];
   const rows = await list(sql, account.id, clock.now(), after, query.limit + 1);
   const page = rows.slice(0, query.limit);
   const last = page[page.length - 1];

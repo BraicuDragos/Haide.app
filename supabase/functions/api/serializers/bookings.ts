@@ -206,6 +206,7 @@ export function toBookingListItem(
     priceBani: price.finalBani ?? price.lockedBani ?? price.quotedBani,
     unseen: row.unseen,
     cancelledBy: row.cancelled_by,
+    cancelledAt: row.cancelled_at ? new Date(row.cancelled_at).toISOString() : null,
     canRate: canRateNow(
       {
         status: row.status,

@@ -120,6 +120,9 @@ export function toListItem(row: RideListRow): RideListItem {
     pendingRequests: Number(row.pending_requests ?? 0),
     toRate: Number(row.to_rate ?? 0),
     seriesId: row.series_id ?? null,
+    cancelledAt: row.status === 'cancelled' && row.cancelled_at ? iso(row.cancelled_at) : null,
+    // NULL on a cancelled ride is an old row: only the driver could cancel before the column existed.
+    cancelledBy: row.status === 'cancelled' ? (row.cancelled_by ?? 'driver') : null,
   };
 }
 

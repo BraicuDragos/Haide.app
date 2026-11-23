@@ -58,7 +58,7 @@ bookingRoutes.post(
   },
 );
 
-// GET /me/bookings?scope=upcoming|past&limit&cursor: the passenger's own bookings
+// GET /me/bookings?scope=upcoming|past|cancelled&limit&cursor: the passenger's own bookings
 bookingRoutes.get(
   '/me/bookings',
   requireActive,
