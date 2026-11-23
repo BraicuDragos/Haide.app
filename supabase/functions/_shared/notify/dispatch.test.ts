@@ -183,6 +183,16 @@ describe('dispatchOutbox', () => {
     expect(p.maxInFlight()).toBeGreaterThan(1);
   });
 
+  it('shows the configured support mailbox in the footer, never the placeholder', async () => {
+    const { store } = fakeStore([row('a')]);
+    const { provider, sent } = fakeProvider();
+    await run(store, provider, { supportTo: 'help@example.org' });
+    expect(sent[0]?.html).toContain('help@example.org');
+    expect(sent[0]?.text).toContain('help@example.org');
+    expect(sent[0]?.html).not.toContain('haide.example');
+    expect(sent[0]?.html).toContain('Dragoș Braicu');
+  });
+
   it('a missing recipient fails the row without sending', async () => {
     const { store, calls } = fakeStore([row('a')], { missing: ['u-a'] });
     const { provider, sent } = fakeProvider();

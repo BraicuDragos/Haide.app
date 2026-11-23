@@ -25,7 +25,10 @@ export type RenderContext = {
   privacyEmail?: string;
 };
 
-/** PLACEHOLDER addresses: replace when the domain is bought (consistent with the legal text). */
+/**
+ * Fallbacks for local preview and tests only. In production the dispatcher passes the real support
+ * mailbox (EMAIL_SUPPORT_TO) for both the support and the privacy line, so these are never sent.
+ */
 export const DEFAULT_SUPPORT_EMAIL = 'support@haide.example';
 export const DEFAULT_PRIVACY_EMAIL = 'privacy@haide.example';
 

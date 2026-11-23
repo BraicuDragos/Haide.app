@@ -89,7 +89,7 @@ export const en = {
   'email.linkLine': 'Or copy this link: {link}',
   'email.support': 'Questions? Write to {support}.',
   'email.controller':
-    'Haide, data controller: [name and address to be added before launch]. Privacy: {privacy}.',
+    'Haide is a personal, non-commercial project run by Dragoș Braicu in Sibiu, Romania (data controller). Privacy questions: {privacy}.',
   'email.footer': 'You get this email because of activity on your Haide account.',
   'email.fallback.passenger': 'A passenger',
   'email.fallback.driver': 'Your driver',

@@ -30,8 +30,10 @@ and must be changed in the Supabase SMTP settings when a domain sender is set up
 - Display name "Haide" (already set: `Haide <address>`).
 - `Reply-To`: set `EMAIL_REPLY_TO` to an address the owner controls. The workflow sets it to `SUPPORT_EMAIL`,
   so a reply reaches the owner. The provider reads `EMAIL_REPLY_TO` and adds it as `replyTo`.
-- The footer support line uses `RenderContext.supportEmail`. It is a placeholder (`support@haide.example`)
-  until a real address exists.
+- The footer support and privacy lines show `EMAIL_SUPPORT_TO` (the owner's real mailbox, set by the deploy
+  workflow), and the controller line names the project owner (a personal, non-commercial project). The
+  `support@haide.example` / `privacy@haide.example` values remain only as fallbacks for the local preview and
+  tests; they are never sent in production.
 
 This improves replies and the displayed name. It does not fix deliverability.
 
@@ -50,5 +52,6 @@ This improves replies and the displayed name. It does not fix deliverability.
 9. Send a test mail and inspect the headers: expect `spf=pass`, `dkim=pass`, `dmarc=pass`.
 10. Update the Supabase Auth SMTP sender to the same address.
 11. After some weeks of clean reports, tighten DMARC (`p=quarantine`, later `p=reject`).
-12. Replace the placeholder support and privacy addresses (`support@haide.example`, `privacy@haide.example`)
-    in the email footer and the legal text with real ones on the domain.
+12. Set `EMAIL_SUPPORT_TO` to a mailbox on the domain (the email footer follows it). The in-app legal pages
+    (terms and privacy) still contain draft placeholders (`privacy@haide.example`, controller details): they
+    are versioned legal text, so they need a legal-version bump and re-acceptance, not a quiet edit.

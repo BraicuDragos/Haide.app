@@ -188,7 +188,7 @@ export async function dispatchOutbox(deps: DispatchDeps): Promise<DispatchResult
         baseUrl: deps.baseUrl,
         now: clock.now(),
         // The real support mailbox (EMAIL_SUPPORT_TO), not the placeholder, once it is configured.
-        ...(deps.supportTo ? { supportEmail: deps.supportTo } : {}),
+        ...(deps.supportTo ? { supportEmail: deps.supportTo, privacyEmail: deps.supportTo } : {}),
       });
     } catch (e) {
       // Rendering is deterministic: retrying cannot help. Keep a scrubbed message, not just the name.
