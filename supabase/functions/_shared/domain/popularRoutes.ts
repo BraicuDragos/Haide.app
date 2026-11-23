@@ -10,9 +10,12 @@
  * that cannot be resolved is skipped.
  */
 export const CURATED_PILOT_ROUTES: readonly { from: string; to: string }[] = [
-  { from: 'Cisnădie', to: 'Piața Mare' },
-  { from: 'Șelimbăr', to: 'Zona Industrială Vest' },
-  { from: 'Hipodrom', to: 'Piața Mare' },
+  // Every name must be an EXISTING gazetteer place of kind `area`: guarded by a test against
+  // supabase/seed/gazetteer/places.csv. (The first version used "Piața Mare", which exists only as
+  // street addresses, and "Zona Industrială Vest", which does not exist at all: those routes were skipped.)
+  { from: 'Cisnădie', to: 'Centrul Istoric' },
+  { from: 'Șelimbăr', to: 'Turnișor' },
+  { from: 'Hipodrom I', to: 'Centrul Istoric' },
 ];
 
 /** Fewer real routes than this: fill up with curated ones (up to this many in total). */

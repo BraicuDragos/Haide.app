@@ -82,13 +82,14 @@ describe.skipIf(!BASE || !SECRET || DB_SKIP)('notification recipients against th
     channel: string;
     template: string;
     status: string;
+    last_error: string | null;
     dedupe_key: string | null;
     payload: Record<string, unknown>;
   };
   /** Outbox rows of the given booking, email channel only, oldest first. */
   const rowsOf = async (bookingId: string): Promise<Row[]> =>
     await sql<Row[]>`
-      select user_id, channel, template, status, dedupe_key, payload from app.outbox
+      select user_id, channel, template, status, last_error, dedupe_key, payload from app.outbox
       where payload ->> 'bookingId' = ${bookingId} and channel = 'email'
       order by created_at, template`;
   const pairs = (rows: Row[]) => rows.map((r) => [r.user_id, r.template] as const).sort();
@@ -150,7 +151,7 @@ describe.skipIf(!BASE || !SECRET || DB_SKIP)('notification recipients against th
     const b2 = await book(p2, ride.id, l);
     expect((await driver.send('POST', `/rides/${ride.id}/cancel`, {})).status).toBe(200);
     const cancelled = await sql<Row[]>`
-      select user_id, channel, template, status, dedupe_key, payload from app.outbox
+      select user_id, channel, template, status, last_error, dedupe_key, payload from app.outbox
       where template = 'ride_cancelled' and payload ->> 'rideId' = ${ride.id} and channel = 'email'`;
     expect(cancelled.map((r) => r.user_id).sort()).toEqual([p1.id, p2.id].sort());
     expect(cancelled.map((r) => r.payload.bookingId).sort()).toEqual([b1.id, b2.id].sort());
@@ -185,7 +186,12 @@ describe.skipIf(!BASE || !SECRET || DB_SKIP)('notification recipients against th
     });
     expect(res.status).toBe(200);
     const rows = await rowsOf(booking.id);
-    // the console provider always succeeds; a row is sent, or still pending when the daily cap or a lease holds it
-    expect(rows.every((r) => ['sent', 'pending'].includes(r.status))).toBe(true);
+    // The console provider always succeeds. These test users have a profile but no auth email, so the
+    // dispatcher records the SPECIFIC reason instead of a bare failure. A row can also still be pending
+    // when the daily cap or a lease holds it.
+    for (const r of rows) {
+      expect(['sent', 'pending', 'failed']).toContain(r.status);
+      if (r.status === 'failed') expect(r.last_error).toBe('no_recipient:inactive_or_no_email');
+    }
   });
 });

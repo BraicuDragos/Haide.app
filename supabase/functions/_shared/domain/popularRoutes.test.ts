@@ -24,10 +24,11 @@ const curated = [
 describe('CURATED_PILOT_ROUTES', () => {
   it('is the three Sibiu pilot corridors', () => {
     expect(CURATED_PILOT_ROUTES).toEqual([
-      { from: 'Cisnădie', to: 'Piața Mare' },
-      { from: 'Șelimbăr', to: 'Zona Industrială Vest' },
-      { from: 'Hipodrom', to: 'Piața Mare' },
+      { from: 'Cisnădie', to: 'Centrul Istoric' },
+      { from: 'Șelimbăr', to: 'Turnișor' },
+      { from: 'Hipodrom I', to: 'Centrul Istoric' },
     ]);
+    // that every name exists in the gazetteer is checked in curatedRoutes.test.ts
   });
 });
 

@@ -444,11 +444,14 @@ describe.skipIf(!BASE || !SECRET)('auto-accept against the local stack', () => {
         );
         const driverRows = await sql<{ template: string }[]>`
           select template from app.outbox
-          where user_id = ${driver.id}::uuid and payload ->> 'bookingId' = ${view.id}`;
+          where user_id = ${driver.id}::uuid and channel = 'email' and payload ->> 'bookingId' = ${view.id}`;
         expect(driverRows.map((r) => r.template)).toEqual(['booking_auto_confirmed']);
-        const passengerRows = await sql`
-          select 1 from app.outbox where user_id = ${passenger.id}::uuid and payload ->> 'bookingId' = ${view.id}`;
-        expect(passengerRows).toHaveLength(0);
+        // Improvements item 7: the auto-accepted passenger is told too (booking_confirmed), the same
+        // mail as when a driver approves by hand.
+        const passengerRows = await sql<{ template: string }[]>`
+          select template from app.outbox
+          where user_id = ${passenger.id}::uuid and channel = 'email' and payload ->> 'bookingId' = ${view.id}`;
+        expect(passengerRows.map((r) => r.template)).toEqual(['booking_confirmed']);
         const events = await sql<{ name: string; props: Record<string, unknown> }[]>`
           select name, props from app.analytics_events
           where props ->> 'bookingId' = ${view.id} order by id`;
