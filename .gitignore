@@ -39,3 +39,4 @@ supabase/functions/.env
 # Local caches and generated test output
 .cache/
 .env.ci
+dist-*/

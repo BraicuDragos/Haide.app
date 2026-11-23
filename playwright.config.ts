@@ -3,7 +3,7 @@ import { defineConfig, devices } from '@playwright/test';
 // Conventions section 7: Chromium at 360x800, selectors by role/label, axe on every screen touched.
 // Lives at the repo root (conventions 1: tests/e2e/<epic>.spec.ts). The spec runs against the production build served by `vite preview` (CSP from public/_headers applied).
 // Set E2E_REAL_API=1 to hit a running local API instead of the mocked /places responses.
-const PORT = 4173;
+const PORT = Number(process.env.E2E_PORT ?? 4173); // parallel local runs use their own port and build folder
 
 export default defineConfig({
   testDir: './tests/e2e',
