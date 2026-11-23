@@ -50,7 +50,8 @@ export interface OutboxStore {
    * `includeSuspended` is true (ANY_STATUS_TEMPLATES only). Deleted users never. Missing ids have no recipient.
    */
   recipients(userIds: readonly string[], includeSuspended?: boolean): Promise<Map<string, string>>;
-  markSent(id: string, at: Date): Promise<void>;
+  /** Guarded by `status = 'pending'`. `messageId` is the provider's id, for tracing in its logs. */
+  markSent(id: string, at: Date, messageId?: string): Promise<void>;
   markFailed(id: string, error: string): Promise<void>;
   reschedule(id: string, sendAfter: Date, error: string): Promise<void>;
 }
@@ -88,6 +89,8 @@ export function backoffAfter(attempts: number, now: Date): Date | null {
 }
 
 const clean = (e: string): string => scrubText(e, LAST_ERROR_MAX);
+const describe = (e: unknown): string =>
+  e instanceof Error ? clean(`${e.name}: ${e.message}`) : 'unknown';
 
 export async function dispatchOutbox(deps: DispatchDeps): Promise<DispatchResult> {
   const { store, provider, clock, log } = deps;
@@ -130,33 +133,34 @@ export async function dispatchOutbox(deps: DispatchDeps): Promise<DispatchResult
         ? deps.supportTo
         : (isAnyStatusTemplate(row.template) ? anyEmails : activeEmails).get(row.userId);
     if (!to) {
-      await store.markFailed(row.id, 'no_recipient');
+      // The reason says WHY there is no address: staff mail without EMAIL_SUPPORT_TO, or a user who is
+      // inactive (suspended or deleted), has no profile or no auth email.
+      const reason =
+        row.template === 'data_export_requested'
+          ? 'no_recipient:support_address_unset'
+          : 'no_recipient:inactive_or_no_email';
+      await store.markFailed(row.id, reason);
       result.failed++;
+      log('warn', 'outbox_failed', {
+        template: row.template,
+        attempts: row.attempts,
+        error: reason,
+      });
       return;
     }
 
-    let outcome: SendResult;
-    try {
-      const rendered = renderEmail(toInput(row.template, row.payload), {
-        baseUrl: deps.baseUrl,
-        now: clock.now(),
-      });
-      outcome = await provider.send({
-        to,
-        subject: rendered.subject,
-        text: rendered.text,
-        html: rendered.html,
-        tag: row.template,
-        ref: (await sha256Hex(row.userId)).slice(0, 12),
-      });
-    } catch (e) {
-      // A provider that throws is treated as a transient failure.
-      outcome = { ok: false, permanent: false, error: e instanceof Error ? e.name : 'error' };
-    }
+    const ref = (await sha256Hex(row.userId)).slice(0, 12);
+    const outcome = await attempt(row, row.template, to, ref);
 
     if (outcome.ok) {
-      await store.markSent(row.id, clock.now());
+      await store.markSent(row.id, clock.now(), outcome.messageId);
       result.sent++;
+      // Never the address: the template, the hashed user ref and the provider's message id.
+      log('info', 'outbox_sent', {
+        template: row.template,
+        ref,
+        messageId: outcome.messageId ?? null,
+      });
       return;
     }
     const error = clean(outcome.error);
@@ -167,7 +171,39 @@ export async function dispatchOutbox(deps: DispatchDeps): Promise<DispatchResult
     } else {
       await store.markFailed(row.id, error);
       result.failed++;
-      log('warn', 'outbox_failed', { template: row.template, attempts: row.attempts });
+      log('warn', 'outbox_failed', { template: row.template, attempts: row.attempts, error });
+    }
+  };
+
+  /** Renders and sends one row. Never throws: every failure becomes a classified SendResult. */
+  const attempt = async (
+    row: OutboxRecord,
+    template: OutboxTemplate,
+    to: string,
+    ref: string,
+  ): Promise<SendResult> => {
+    let rendered: ReturnType<typeof renderEmail>;
+    try {
+      rendered = renderEmail(toInput(template, row.payload), {
+        baseUrl: deps.baseUrl,
+        now: clock.now(),
+      });
+    } catch (e) {
+      // Rendering is deterministic: retrying cannot help. Keep a scrubbed message, not just the name.
+      return { ok: false, permanent: true, error: `render_failed:${describe(e)}` } as SendResult;
+    }
+    try {
+      return await provider.send({
+        to,
+        subject: rendered.subject,
+        text: rendered.text,
+        html: rendered.html,
+        tag: template,
+        ref,
+      });
+    } catch (e) {
+      // A provider that throws is treated as a transient failure.
+      return { ok: false, permanent: false, error: `provider_threw:${describe(e)}` } as SendResult;
     }
   };
 

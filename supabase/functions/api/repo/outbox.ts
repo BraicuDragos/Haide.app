@@ -1,6 +1,6 @@
 import type { Db } from '../../_shared/db.ts';
 import type { AnalyticsEvent } from '../../_shared/domain/events.ts';
-import type { OutboxRow } from '../../_shared/domain/outbox.ts';
+import { outboxDedupeKey, type OutboxRow } from '../../_shared/domain/outbox.ts';
 import { isPushFirstTemplate, isPushTemplate } from '../../_shared/domain/push.ts';
 import type { OutboxRecord, OutboxStore } from '../../_shared/notify/dispatch.ts';
 import type { PushStore } from '../../_shared/notify/dispatchPush.ts';
@@ -19,18 +19,27 @@ import { runRetention } from './privacy.ts';
 export async function insertOutboxRows(sql: Db, rows: readonly OutboxRow[]): Promise<void> {
   for (const row of rows) {
     const payload = JSON.stringify(row.payload);
+    const key = outboxDedupeKey(row);
     if (isPushTemplate(row.template) && !isPushFirstTemplate(row.template)) {
       // One statement, two channels: the email row, and the push row when a subscription exists.
+      // `on conflict do nothing` on the partial unique index: the same event twice gives one row per channel.
       await sql`
-        insert into app.outbox (user_id, channel, template, payload)
-        select ${row.userId}::uuid, 'email'::app.notify_channel, ${row.template}::text, ${payload}::text::jsonb
-        union all
-        select ${row.userId}::uuid, 'push'::app.notify_channel, ${row.template}::text, ${payload}::text::jsonb
-        where exists (select 1 from app.push_subscriptions s where s.user_id = ${row.userId}::uuid)`;
+        insert into app.outbox (user_id, channel, template, payload, dedupe_key)
+        select r.u, c.ch, r.t, r.p, r.k
+        from (select ${row.userId}::uuid as u, ${row.template}::text as t,
+                     ${payload}::text::jsonb as p, ${key}::text as k) r
+        cross join lateral (
+          select 'email'::app.notify_channel as ch
+          union all
+          select 'push'::app.notify_channel
+          where exists (select 1 from app.push_subscriptions s where s.user_id = r.u)
+        ) c
+        on conflict (user_id, channel, dedupe_key) where dedupe_key is not null do nothing`;
     } else {
       await sql`
-        insert into app.outbox (user_id, template, payload)
-        values (${row.userId}, ${row.template}, ${payload}::text::jsonb)`;
+        insert into app.outbox (user_id, template, payload, dedupe_key)
+        values (${row.userId}, ${row.template}, ${payload}::text::jsonb, ${key}::text)
+        on conflict (user_id, channel, dedupe_key) where dedupe_key is not null do nothing`;
     }
   }
 }
@@ -42,11 +51,12 @@ export async function insertOutboxRows(sql: Db, rows: readonly OutboxRow[]): Pro
 export async function insertPushFirstOutbox(sql: Db, row: OutboxRow): Promise<void> {
   const payload = JSON.stringify(row.payload);
   await sql`
-    insert into app.outbox (user_id, channel, template, payload)
+    insert into app.outbox (user_id, channel, template, payload, dedupe_key)
     select ${row.userId}::uuid,
            case when exists (select 1 from app.push_subscriptions s where s.user_id = ${row.userId}::uuid)
                 then 'push'::app.notify_channel else 'email'::app.notify_channel end,
-           ${row.template}, ${payload}::text::jsonb`;
+           ${row.template}, ${payload}::text::jsonb, ${outboxDedupeKey(row)}::text
+    on conflict (user_id, channel, dedupe_key) where dedupe_key is not null do nothing`;
 }
 
 /** Analytics rows: ids, counts and booleans only (conventions §6). */
@@ -111,8 +121,13 @@ export function createOutboxStore(sql: Db): OutboxStore {
       return out;
     },
 
-    async markSent(id, at) {
-      await sql`update app.outbox set status = 'sent', sent_at = ${at}, last_error = null where id = ${id}`;
+    async markSent(id, at, messageId) {
+      // Guarded: a row already failed or sent by another run is left alone.
+      await sql`
+        update app.outbox
+           set status = 'sent', sent_at = ${at}, last_error = null,
+               provider_message_id = ${messageId ?? null}::text
+         where id = ${id} and status = 'pending'`;
     },
 
     async markFailed(id, error) {
@@ -201,8 +216,10 @@ export function createPushStore(sql: Db): PushStore {
     async insertEmailFallback(row) {
       // Email only: going through insertOutboxRows would add a push row again.
       await sql`
-        insert into app.outbox (user_id, channel, template, payload)
-        values (${row.userId}::uuid, 'email', ${row.template}, ${JSON.stringify(row.payload)}::text::jsonb)`;
+        insert into app.outbox (user_id, channel, template, payload, dedupe_key)
+        values (${row.userId}::uuid, 'email', ${row.template}, ${JSON.stringify(row.payload)}::text::jsonb,
+                ${outboxDedupeKey(row)}::text)
+        on conflict (user_id, channel, dedupe_key) where dedupe_key is not null do nothing`;
     },
   };
 }

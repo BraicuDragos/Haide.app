@@ -38,6 +38,7 @@ function fakeStore(
   const calls = {
     claim: [] as { now: Date; leaseUntil: Date; limit: number }[],
     sent: [] as string[],
+    messageIds: [] as (string | undefined)[],
     failed: [] as { id: string; error: string }[],
     rescheduled: [] as { id: string; at: Date; error: string }[],
     countSince: [] as Date[],
@@ -61,8 +62,9 @@ function fakeStore(
       }
       return Promise.resolve(m);
     },
-    markSent(id) {
+    markSent(id, _at, messageId) {
       calls.sent.push(id);
+      calls.messageIds.push(messageId);
       return Promise.resolve();
     },
     markFailed(id, error) {
@@ -183,7 +185,7 @@ describe('dispatchOutbox', () => {
     const { store, calls } = fakeStore([row('a')], { missing: ['u-a'] });
     const { provider, sent } = fakeProvider();
     expect(await run(store, provider)).toEqual({ sent: 0, failed: 1, retried: 0 });
-    expect(calls.failed).toEqual([{ id: 'a', error: 'no_recipient' }]);
+    expect(calls.failed).toEqual([{ id: 'a', error: 'no_recipient:inactive_or_no_email' }]);
     expect(sent).toHaveLength(0);
   });
 
@@ -223,7 +225,7 @@ describe('dispatchOutbox', () => {
       throw new Error('boom');
     });
     expect((await run(store, provider)).retried).toBe(1);
-    expect((calls.rescheduled[0] as { error: string }).error).toBe('Error');
+    expect((calls.rescheduled[0] as { error: string }).error).toBe('provider_threw:Error: boom');
 
     const long = fakeStore([row('b', { attempts: 5 })]);
     const p2 = fakeProvider(() => ({
@@ -271,7 +273,7 @@ describe('dispatchOutbox', () => {
     const { provider, sent } = fakeProvider();
     expect(await run(store, provider)).toEqual({ sent: 0, failed: 1, retried: 0 });
     expect(sent).toHaveLength(0);
-    expect(calls.failed).toEqual([{ id: 'a', error: 'no_recipient' }]);
+    expect(calls.failed).toEqual([{ id: 'a', error: 'no_recipient:support_address_unset' }]);
   });
 
   it('sends the data request acknowledgement to the user (E6)', async () => {
@@ -326,7 +328,7 @@ describe('E7: recipients of templates that must reach a suspended user', () => {
     const result = await run(store, provider);
     expect(sent).toHaveLength(0);
     expect(result.failed).toBe(1);
-    expect(calls.failed[0]?.error).toBe('no_recipient');
+    expect(calls.failed[0]?.error).toBe('no_recipient:inactive_or_no_email');
   });
 
   it('skips the second lookup when no row needs it', async () => {
@@ -334,5 +336,98 @@ describe('E7: recipients of templates that must reach a suspended user', () => {
     await run(store, fakeProvider().provider);
     expect(calls.recipients).toHaveLength(1);
     expect(calls.recipients[0]?.includeSuspended).toBeUndefined();
+  });
+});
+
+describe('item 7: traceability and failure logging', () => {
+  type Line = { level: string; event: string; fields: Record<string, unknown> };
+  const capture = () => {
+    const lines: Line[] = [];
+    const log = (level: string, event: string, fields: Record<string, unknown> = {}) => {
+      lines.push({ level, event, fields });
+    };
+    return { lines, log: log as Parameters<typeof dispatchOutbox>[0]['log'] };
+  };
+
+  it('stores the provider message id and logs outbox_sent without the address', async () => {
+    const { store, calls } = fakeStore([row('a')]);
+    const { provider } = fakeProvider(() => ({ ok: true, messageId: '<202611@smtp-relay.brevo>' }));
+    const { lines, log } = capture();
+    await run(store, provider, { log });
+    expect(calls.messageIds).toEqual(['<202611@smtp-relay.brevo>']);
+    const sentLine = lines.find((l) => l.event === 'outbox_sent');
+    expect(sentLine?.fields).toMatchObject({
+      template: 'booking_rejected',
+      messageId: '<202611@smtp-relay.brevo>',
+    });
+    expect(String(sentLine?.fields.ref)).toMatch(/^[0-9a-f]{12}$/);
+    expect(JSON.stringify(lines)).not.toContain('@example.com');
+  });
+
+  it('a provider without a message id still marks the row sent', async () => {
+    const { store, calls } = fakeStore([row('a')]);
+    await run(store, fakeProvider().provider);
+    expect(calls.sent).toEqual(['a']);
+    expect(calls.messageIds).toEqual([undefined]);
+  });
+
+  it('a permanent 4xx fails the row with the reason, no message id, and logs the error', async () => {
+    const { store, calls } = fakeStore([row('a')]);
+    const { provider } = fakeProvider(() => ({
+      ok: false,
+      permanent: true,
+      error: 'brevo:400 sender not valid',
+    }));
+    const { lines, log } = capture();
+    expect(await run(store, provider, { log })).toEqual({ sent: 0, failed: 1, retried: 0 });
+    expect(calls.failed).toEqual([{ id: 'a', error: 'brevo:400 sender not valid' }]);
+    expect(calls.messageIds).toEqual([]);
+    expect(lines.find((l) => l.event === 'outbox_failed')?.fields).toEqual({
+      template: 'booking_rejected',
+      attempts: 1,
+      error: 'brevo:400 sender not valid',
+    });
+  });
+
+  it('a transient failure is retried, not failed, and not logged as outbox_failed', async () => {
+    const { store, calls } = fakeStore([row('a', { attempts: 1 })]);
+    const { provider } = fakeProvider(() => ({ ok: false, permanent: false, error: 'brevo:503' }));
+    const { lines, log } = capture();
+    expect(await run(store, provider, { log })).toEqual({ sent: 0, failed: 0, retried: 1 });
+    expect(calls.rescheduled[0]?.error).toBe('brevo:503');
+    expect(lines.some((l) => l.event === 'outbox_failed')).toBe(false);
+  });
+
+  it('a recipient miss is logged with the reason and never sends', async () => {
+    const { store } = fakeStore([row('a')], { missing: ['u-a'] });
+    const { provider, sent } = fakeProvider();
+    const { lines, log } = capture();
+    await run(store, provider, { log });
+    expect(sent).toHaveLength(0);
+    expect(lines.find((l) => l.event === 'outbox_failed')?.fields.error).toBe(
+      'no_recipient:inactive_or_no_email',
+    );
+  });
+
+  it('dispatching twice sends once: the second run claims nothing', async () => {
+    const pending = new Map<string, OutboxRecord>([['a', row('a')]]);
+    const store: OutboxStore = {
+      countSentSince: () => Promise.resolve(0),
+      claim: (_n, _l, limit) => Promise.resolve([...pending.values()].slice(0, limit)),
+      recipients: (ids) => Promise.resolve(new Map(ids.map((i) => [i, `${i}@example.com`]))),
+      markSent: (id) => {
+        pending.delete(id);
+        return Promise.resolve();
+      },
+      markFailed: (id) => {
+        pending.delete(id);
+        return Promise.resolve();
+      },
+      reschedule: () => Promise.resolve(),
+    };
+    const { provider, sent } = fakeProvider();
+    await run(store, provider);
+    await run(store, provider);
+    expect(sent).toHaveLength(1);
   });
 });

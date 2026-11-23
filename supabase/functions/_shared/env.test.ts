@@ -18,6 +18,19 @@ describe('parseEnv', () => {
     expect(env.CORS_ORIGINS).toEqual(['http://localhost:5173']);
   });
 
+  it('EMAIL_REPLY_TO is optional, accepts a name or a bare address, and rejects junk', () => {
+    expect(parseEnv(base).EMAIL_REPLY_TO).toBeUndefined();
+    // an empty value (a blank deploy variable) counts as unset
+    expect(parseEnv({ ...base, EMAIL_REPLY_TO: '' }).EMAIL_REPLY_TO).toBeFalsy();
+    expect(parseEnv({ ...base, EMAIL_REPLY_TO: 'Haide <help@haide.ro>' }).EMAIL_REPLY_TO).toBe(
+      'Haide <help@haide.ro>',
+    );
+    expect(parseEnv({ ...base, EMAIL_REPLY_TO: 'help@haide.ro' }).EMAIL_REPLY_TO).toBe(
+      'help@haide.ro',
+    );
+    expect(() => parseEnv({ ...base, EMAIL_REPLY_TO: 'not an address' })).toThrow(/EMAIL_REPLY_TO/);
+  });
+
   it('splits CORS_ORIGINS and coerces numbers', () => {
     const env = parseEnv({
       ...base,

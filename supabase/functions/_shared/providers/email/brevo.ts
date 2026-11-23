@@ -24,6 +24,8 @@ export function classifyStatus(status: number): 'ok' | 'transient' | 'permanent'
 type Options = {
   apiKey: string;
   from: string;
+  /** Optional Reply-To (`EMAIL_REPLY_TO`), same `Name <address>` or bare address format as `from`. */
+  replyTo?: string | undefined;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
 };
@@ -32,6 +34,7 @@ type Options = {
 export function createBrevoProvider(opts: Options): EmailProvider {
   const doFetch = opts.fetchImpl ?? fetch;
   const sender = parseSender(opts.from);
+  const replyTo = opts.replyTo?.trim() ? parseSender(opts.replyTo) : undefined;
   return {
     name: 'brevo',
     async send(message): Promise<SendResult> {
@@ -46,6 +49,7 @@ export function createBrevoProvider(opts: Options): EmailProvider {
           },
           body: JSON.stringify({
             sender,
+            ...(replyTo ? { replyTo } : {}),
             to: [{ email: message.to }],
             subject: message.subject,
             textContent: message.text,
@@ -60,7 +64,18 @@ export function createBrevoProvider(opts: Options): EmailProvider {
         return { ok: false, permanent: false, error: `network:${name}` };
       }
       const kind = classifyStatus(res.status);
-      if (kind === 'ok') return { ok: true };
+      if (kind === 'ok') {
+        // Brevo answers 201 {"messageId":"<...>"}. An unreadable body is not a failure: the mail was accepted.
+        try {
+          const body = (await res.json()) as { messageId?: unknown };
+          if (typeof body.messageId === 'string' && body.messageId) {
+            return { ok: true, messageId: scrubText(body.messageId, 120) };
+          }
+        } catch {
+          // no JSON body
+        }
+        return { ok: true };
+      }
       let detail = '';
       try {
         detail = scrubText(await res.text(), 120);

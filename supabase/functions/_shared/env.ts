@@ -23,6 +23,13 @@ export const envSchema = z
     EMAIL_PROVIDER: z.enum(['console', 'brevo']).default('console'),
     BREVO_API_KEY: z.string().optional(),
     EMAIL_FROM: z.string().default('Haide <no-reply@haide.ro>'),
+    // Optional Reply-To header, `Name <address>` or a bare address. Unset: replies go to EMAIL_FROM.
+    EMAIL_REPLY_TO: z
+      .string()
+      .trim()
+      .regex(/^(?:[^<>]*<[^<>\s@]+@[^<>\s@]+>|[^<>\s@]+@[^<>\s@]+)$/)
+      .or(z.literal(''))
+      .optional(),
     EMAIL_SUPPORT_TO: z.string().default('dragosbraicu9@gmail.com'),
     EMAIL_DAILY_CAP: z.coerce.number().int().positive().default(280),
     APP_BASE_URL: z.url().default('http://localhost:5173'),
