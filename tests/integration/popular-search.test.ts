@@ -42,7 +42,7 @@ describe.skipIf(!BASE)('popular routes and autocomplete only offer places the ap
   });
 
   it('GET /places?q=cisnadie returns only points inside coverage (its sub-areas, not the whole locality)', async () => {
-    const res = await fetch(`${BASE}/places?q=cisnadie&limit=20`);
+    const res = await fetch(`${BASE}/places?q=cisnadie&limit=8`); // 8 is the API maximum
     expect(res.status).toBe(200);
     const { items } = placesResponseSchema.parse(await res.json());
     expect(items.length).toBeGreaterThan(0);
