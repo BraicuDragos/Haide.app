@@ -207,7 +207,7 @@ test.describe('results states', () => {
     // The form remembers the last search.
     await expect(page).toHaveURL(/\/find$/);
     await expect(page.getByRole('button', { name: 'From Șelimbăr', exact: true })).toBeVisible();
-    await expect(page.getByLabel('Leave around')).toContainText('07:30');
+    await expect(page.getByRole('button', { name: /^Leave around/ })).toContainText('07:30');
   });
 
   test('blocked drivers are hidden with a note', async ({ page }) => {

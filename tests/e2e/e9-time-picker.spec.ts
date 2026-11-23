@@ -31,7 +31,7 @@ test.describe('time picker on Find', () => {
   test('opens a sheet, greys out the past today, returns HH:MM, axe clean', async ({ page }) => {
     await setup(page);
     await page.goto('/find');
-    const field = page.getByLabel('Leave around');
+    const field = page.getByRole('button', { name: /^Leave around/ });
     await expect(field).toContainText('Choose');
     await field.click();
     const sheet = page.getByRole('dialog');
@@ -57,7 +57,7 @@ test.describe('time picker on Find', () => {
   test('keyboard: arrows move inside a group, Esc closes and focus returns', async ({ page }) => {
     await setup(page);
     await page.goto('/find');
-    const field = page.getByLabel('Leave around');
+    const field = page.getByRole('button', { name: /^Leave around/ });
     await field.focus();
     await page.keyboard.press('Enter');
     const hours = page.getByRole('dialog').getByRole('radiogroup', { name: 'Hour' });
@@ -83,13 +83,16 @@ test.describe('time picker on Find', () => {
     await page.getByLabel('Day', { exact: true }).selectOption({ label: 'Tomorrow' });
     await pickTime(page, 'Leave around', '07:30');
     await page.getByLabel('Day', { exact: true }).selectOption({ label: 'Today' });
-    await expect(page.getByLabel('Leave around')).toContainText('07:30'); // not changed behind the user's back
+    await expect(page.getByRole('button', { name: /^Leave around/ })).toContainText('07:30'); // not changed behind the user's back
     await page.getByRole('button', { name: 'Search rides' }).click();
     await expect(
       page.getByText('That time has already passed. Choose a later time.'),
     ).toBeVisible();
-    await expect(page.getByLabel('Leave around')).toBeFocused();
-    await expect(page.getByLabel('Leave around')).toHaveAttribute('aria-invalid', 'true');
+    await expect(page.getByRole('button', { name: /^Leave around/ })).toBeFocused();
+    await expect(page.getByRole('button', { name: /^Leave around/ })).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    );
     await expectNoAxeViolations(page);
   });
 });

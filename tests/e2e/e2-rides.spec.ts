@@ -130,15 +130,15 @@ for (const theme of ['dark', 'light'] as const) {
       await page.clock.setFixedTime(new Date(`${todayRo}T19:30:00Z`));
       await page.getByRole('button', { name: 'Publish ride' }).click();
       await expect(page.getByText('Choose a time at least 15 minutes from now.')).toBeVisible();
-      await expect(page.getByLabel('Leaving at')).toBeFocused();
+      await expect(page.getByRole('button', { name: /^Leaving at/ })).toBeFocused();
       // The picker greys out the past: nothing before 22:15 is selectable today.
-      await page.getByLabel('Leaving at').click();
+      await page.getByRole('button', { name: /^Leaving at/ }).click();
       const hourGroup = page.getByRole('dialog').getByRole('radiogroup', { name: 'Hour' });
       await expect(hourGroup.getByRole('radio', { name: '07', exact: true })).toBeDisabled();
       await expect(hourGroup.getByRole('radio', { name: '23', exact: true })).toBeEnabled();
       await page.keyboard.press('Escape');
       await expect(page.getByRole('dialog')).toBeHidden();
-      await expect(page.getByLabel('Leaving at')).toBeFocused();
+      await expect(page.getByRole('button', { name: /^Leaving at/ })).toBeFocused();
       expect(fake.published).toHaveLength(0);
 
       await whenTomorrow(page);
@@ -279,7 +279,10 @@ test.describe('publish form states', () => {
     fake.failNext.publish = [400, 'DEPARTURE_TOO_FAR'];
     await page.getByRole('button', { name: 'Publish ride' }).click();
     await expect(page.getByText('You can publish up to 14 days ahead.')).toBeVisible();
-    await expect(page.getByLabel('Leaving at')).toHaveAttribute('aria-invalid', 'true');
+    await expect(page.getByRole('button', { name: /^Leaving at/ })).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    );
   });
 
   test('expired preview re-prices and asks to publish again', async ({ page }) => {

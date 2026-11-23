@@ -48,7 +48,7 @@ jobs:
   integration:
     name: integration
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
     needs: checks
     env:
       API_BASE_URL: http://127.0.0.1:54321/functions/v1/api/v1
@@ -162,7 +162,7 @@ jobs:
           SEARCH_P95_MS: '1000'
         run: pnpm test:int
       - name: Playwright smoke (360x800, axe) and the real magic-link flow
-        timeout-minutes: 10
+        timeout-minutes: 25
         env:
           # e1-magic-link reads the confirmation email from Mailpit. The web build talks to the local
           # stack (VITE_SUPABASE_PUBLISHABLE_KEY comes from the serve step through GITHUB_ENV).
@@ -171,7 +171,7 @@ jobs:
           VITE_API_BASE_URL: http://127.0.0.1:54321/functions/v1/api/v1
         run: |
           if [ -f playwright.config.ts ]; then
-            pnpm exec playwright install --with-deps chromium
+            pnpm exec playwright install --with-deps chromium webkit
             pnpm test:e2e
           else
             echo "No playwright.config.ts yet, skipping"
