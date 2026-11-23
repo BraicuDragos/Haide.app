@@ -207,19 +207,25 @@ export async function mockRidesApi(page: Page, fake: FakeRides) {
 
       if (method === 'GET' && path === '/me/rides') {
         const scope = url.searchParams.get('scope') ?? 'upcoming';
-        const past = (r: FakeRide) => r.status !== 'published';
-        const items = fake.rides
-          .filter((r) => (scope === 'past' ? past(r) : !past(r)))
-          .map((r) => ({
-            id: r.id,
-            departureAt: r.departureAt,
-            originLabel: (r.origin as { label: string }).label,
-            destinationLabel: (r.destination as { label: string }).label,
-            status: r.status,
-            seatsOffered: r.seatsOffered,
-            seatsBooked: r.seatsBooked,
-            pendingRequests: 0,
-          }));
+        // Contract: past holds everything except cancelled rides; cancelled has its own scope.
+        const inScope = (r: FakeRide) =>
+          scope === 'cancelled'
+            ? r.status === 'cancelled'
+            : scope === 'past'
+              ? r.status !== 'published' && r.status !== 'cancelled'
+              : r.status === 'published';
+        const items = fake.rides.filter(inScope).map((r) => ({
+          id: r.id,
+          departureAt: r.departureAt,
+          originLabel: (r.origin as { label: string }).label,
+          destinationLabel: (r.destination as { label: string }).label,
+          status: r.status,
+          seatsOffered: r.seatsOffered,
+          seatsBooked: r.seatsBooked,
+          pendingRequests: 0,
+          cancelledAt: r.status === 'cancelled' ? (r.cancelledAt ?? null) : null,
+          cancelledBy: r.status === 'cancelled' ? 'driver' : null,
+        }));
         return route.fulfill({ json: { items, nextCursor: null } });
       }
 

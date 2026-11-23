@@ -14,7 +14,7 @@ export const postBooking = (
   });
 
 export const getMyBookings = (
-  scope: 'upcoming' | 'past',
+  scope: 'upcoming' | 'past' | 'cancelled',
   cursor: string | undefined,
   signal?: AbortSignal,
 ) =>

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { pickTime } from './time-helpers';
 import { expectNoAxeViolations, mockAccountApi, newAccount, seedSession } from './accounts-helpers';
 import {
   mockPlaces,
@@ -50,7 +51,7 @@ async function chooseTripB(page: Page) {
 
 async function whenTomorrow(page: Page) {
   await page.getByLabel('Day', { exact: true }).selectOption({ label: 'Tomorrow' });
-  await page.getByLabel('Leaving at').fill('07:30');
+  await pickTime(page, 'Leaving at', '07:30');
 }
 
 const bucharestClock = (iso: string) =>
@@ -122,10 +123,21 @@ for (const theme of ['dark', 'light'] as const) {
 
       await expectNoAxeViolations(page);
 
-      // Time rule, inline: today at 00:00 is always in the past.
-      await page.getByLabel('Leaving at').fill('00:00');
+      // Time rule, inline: the clock is fixed at about 22:00 in Bucharest, so today's default 07:30 is in the past.
+      const todayRo = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Bucharest' }).format(
+        new Date(),
+      );
+      await page.clock.setFixedTime(new Date(`${todayRo}T19:30:00Z`));
       await page.getByRole('button', { name: 'Publish ride' }).click();
       await expect(page.getByText('Choose a time at least 15 minutes from now.')).toBeVisible();
+      await expect(page.getByLabel('Leaving at')).toBeFocused();
+      // The picker greys out the past: nothing before 22:15 is selectable today.
+      await page.getByLabel('Leaving at').click();
+      const hourGroup = page.getByRole('dialog').getByRole('radiogroup', { name: 'Hour' });
+      await expect(hourGroup.getByRole('radio', { name: '07', exact: true })).toBeDisabled();
+      await expect(hourGroup.getByRole('radio', { name: '23', exact: true })).toBeEnabled();
+      await page.keyboard.press('Escape');
+      await expect(page.getByRole('dialog')).toBeHidden();
       await expect(page.getByLabel('Leaving at')).toBeFocused();
       expect(fake.published).toHaveLength(0);
 
@@ -181,10 +193,12 @@ for (const theme of ['dark', 'light'] as const) {
       await expect(page.getByText('You cancelled this ride')).toBeVisible();
       await expect(page.getByRole('button', { name: 'Cancel ride' })).toHaveCount(0);
 
-      // Past tab now holds it, Upcoming shows the empty state.
+      // The Cancelled tab holds it (Past does not), Upcoming shows the empty state.
       await page.goto('/rides?role=driving');
       await expect(heading(page, 'You haven’t offered a ride yet', 2)).toBeVisible();
       await page.getByRole('tab', { name: 'Past' }).click();
+      await expect(page.getByRole('link', { name: /07:30/ })).toHaveCount(0);
+      await page.getByRole('tab', { name: 'Cancelled' }).click();
       await expect(page.getByRole('link', { name: /07:30/ })).toContainText('Ride cancelled');
       await expectNoAxeViolations(page);
     });

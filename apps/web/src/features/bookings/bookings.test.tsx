@@ -169,6 +169,7 @@ describe('BookingCard', () => {
     priceBani: 310,
     unseen: true,
     cancelledBy: null,
+    cancelledAt: null,
     canRate: false,
     ...over,
   });

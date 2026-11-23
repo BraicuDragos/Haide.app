@@ -15,7 +15,7 @@ export const postRide = (body: PublishRideRequest) =>
   apiRequest<OwnerRide>('/rides', { method: 'POST', body });
 
 export const getMyRides = (
-  scope: 'upcoming' | 'past',
+  scope: 'upcoming' | 'past' | 'cancelled',
   cursor: string | undefined,
   signal?: AbortSignal,
 ) => apiRequest<RideListResponse>('/me/rides', { query: { scope, limit: 20, cursor }, signal });

@@ -18,7 +18,7 @@ import { RideCard } from '../components/RideCard';
 import { SegTabs, tabId } from '../components/SegTabs';
 
 type Role = 'riding' | 'driving';
-type When = 'upcoming' | 'past';
+type When = 'upcoming' | 'past' | 'cancelled';
 
 /**
  * My rides. Signed out: sign-in prompt in place (ia-and-flows 2.1). Signed in: Riding or Driving, then Upcoming or
@@ -30,7 +30,8 @@ export default function RidesScreen() {
   const startAuth = useStartAuth();
   const [sp, setSp] = useSearchParams();
   const role: Role = sp.get('role') === 'driving' ? 'driving' : 'riding';
-  const when: When = sp.get('when') === 'past' ? 'past' : 'upcoming';
+  const whenParam = sp.get('when');
+  const when: When = whenParam === 'past' || whenParam === 'cancelled' ? whenParam : 'upcoming';
   const set = (next: Partial<Record<'role' | 'when', string>>) => {
     const p = new URLSearchParams(sp);
     for (const [k, v] of Object.entries(next)) p.set(k, v);
@@ -72,6 +73,7 @@ export default function RidesScreen() {
           tabs={[
             { value: 'upcoming', label: t('rides.upcoming') },
             { value: 'past', label: t('rides.past') },
+            { value: 'cancelled', label: t('rides.cancelled') },
           ]}
         />
         <div role="tabpanel" aria-labelledby={tabId('role', role)}>
@@ -112,8 +114,10 @@ function DrivingList({ when }: { when: When }) {
 
   const items = q.data.pages.flatMap((p) => p.items);
   if (items.length === 0)
-    return when === 'past' ? (
-      <p className="py-8 text-center text-text-muted">{t('rides.empty.past')}</p>
+    return when !== 'upcoming' ? (
+      <p className="py-8 text-center text-text-muted">
+        {t(when === 'past' ? 'rides.empty.past' : 'rides.empty.cancelled')}
+      </p>
     ) : (
       <EmptyState title={t('rides.empty.driving.title')} body={t('rides.empty.driving.body')}>
         <Link to="/offer" className="btn btn-primary">
@@ -174,8 +178,10 @@ function RidingList({ when }: { when: When }) {
 
   const items = q.data.pages.flatMap((p) => p.items);
   if (items.length === 0)
-    return when === 'past' ? (
-      <p className="py-8 text-center text-text-muted">{t('rides.empty.riding.past')}</p>
+    return when !== 'upcoming' ? (
+      <p className="py-8 text-center text-text-muted">
+        {t(when === 'past' ? 'rides.empty.riding.past' : 'rides.empty.cancelled')}
+      </p>
     ) : (
       <EmptyState title={t('rides.empty.riding.title')} body={t('rides.empty.riding.body')}>
         <Link to="/find" className="btn btn-primary">

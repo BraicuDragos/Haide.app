@@ -1,4 +1,4 @@
-import { useRef, type KeyboardEvent } from 'react';
+import { useEffect, useRef, type KeyboardEvent } from 'react';
 
 export interface SegTab<T extends string> {
   value: T;
@@ -26,6 +26,13 @@ export function SegTabs<T extends string>({
   onChange: (v: T) => void;
 }) {
   const refs = useRef<Array<HTMLButtonElement | null>>([]);
+  // Set by a key press. URL-backed tabs navigate, and a screen moves focus to its heading after a navigation, so the
+  // tab takes focus back in an effect of the same commit (this component's effects run after the heading's).
+  const keep = useRef<number | null>(null);
+  useEffect(() => {
+    if (keep.current !== null) refs.current[keep.current]?.focus();
+    keep.current = null;
+  }, [value]);
   function key(e: KeyboardEvent, i: number) {
     const last = tabs.length - 1;
     const next =
@@ -41,6 +48,7 @@ export function SegTabs<T extends string>({
     if (next < 0) return;
     e.preventDefault();
     onChange(tabs[next]!.value);
+    keep.current = next;
     refs.current[next]?.focus();
   }
   return (
