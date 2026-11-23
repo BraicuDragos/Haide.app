@@ -69,7 +69,9 @@ export function createBrevoProvider(opts: Options): EmailProvider {
         try {
           const body = (await res.json()) as { messageId?: unknown };
           if (typeof body.messageId === 'string' && body.messageId) {
-            return { ok: true, messageId: scrubText(body.messageId, 120) };
+            // Not scrubText: a real id looks like `<2025...@smtp-relay.mailin.fr>` and the scrubber would
+            // turn it into `<[email]>`, losing the only handle for Brevo's logs. It is Brevo's id, not a user address.
+            return { ok: true, messageId: body.messageId.slice(0, 120) };
           }
         } catch {
           // no JSON body

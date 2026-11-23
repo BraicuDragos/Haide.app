@@ -289,6 +289,15 @@ function parts(input: TemplateInput, ctx: RenderContext): Parts {
   }
 }
 
+/** Inbox preview line: whitespace collapsed, cut at a word boundary within 110 characters. */
+export function preheaderOf(body: string): string {
+  const flat = body.replace(/\s+/g, ' ').trim();
+  if (flat.length <= 110) return flat;
+  const cut = flat.slice(0, 110);
+  const space = cut.lastIndexOf(' ');
+  return `${(space > 40 ? cut.slice(0, space) : cut).replace(/[\s.,;:]+$/, '')}…`;
+}
+
 export function renderEmail(input: TemplateInput, ctx: RenderContext): RenderedEmail {
   const { subject, body, path } = parts(input, ctx);
   const link = `${ctx.baseUrl.replace(/\/+$/, '')}${path}`;
@@ -308,7 +317,7 @@ export function renderEmail(input: TemplateInput, ctx: RenderContext): RenderedE
   const html = renderLayout({
     title: subject,
     body,
-    preheader: body.replace(/\s+/g, ' ').slice(0, 110),
+    preheader: preheaderOf(body),
     cta: cta ? { href: link, label: t('email.openLabel') } : null,
     linkLine: cta ? t('email.linkLine', { link }) : null,
     footer,

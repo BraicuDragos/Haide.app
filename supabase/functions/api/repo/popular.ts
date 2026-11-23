@@ -56,7 +56,7 @@ export async function areaPlaces(sql: Db, areaIds: string[]): Promise<Map<string
       order by pl.osm_id asc nulls last, pl.id asc
       limit 1
     ) p on true
-    where a.id = any(${areaIds}::uuid[])`;
+    where a.id = any(string_to_array(${areaIds.join(',')}::text, ',')::uuid[])`;
   for (const r of rows) out.set(r.area_id, toPlace(r));
   return out;
 }

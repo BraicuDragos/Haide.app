@@ -118,7 +118,7 @@ export function renderLayout(i: LayoutInput): string {
     `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="container" style="width:100%;max-width:600px;">` +
     `<tr><td class="t-link" style="padding:0 0 16px 4px;font-family:${FONT_HEADING};font-size:28px;line-height:32px;font-weight:700;letter-spacing:-0.5px;color:${C.light.action};">` +
     `${escapeHtml(i.wordmark)}<span style="color:${C.light.accent};">.</span></td></tr>` +
-    `<tr><td class="bg-card pad" bgcolor="${C.light.card}" style="padding:32px 28px;background-color:${C.light.card};border:1px solid ${C.light.border};border-radius:12px;">` +
+    `<tr><td class="bg-card pad b-line" bgcolor="${C.light.card}" style="padding:32px 28px;background-color:${C.light.card};border:1px solid ${C.light.border};border-radius:12px;">` +
     `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">` +
     `<tr><td style="padding:0 0 16px 0;"><h1 class="h1 t-main" style="margin:0;font-family:${FONT_HEADING};font-size:24px;line-height:30px;font-weight:700;color:${C.light.text};">${escapeHtml(i.title)}</h1></td></tr>` +
     `<tr><td style="padding:0 0 24px 0;"><p class="t-main" style="margin:0;font-family:${FONT_BODY};font-size:16px;line-height:1.5;color:${C.light.text};">${bodyHtml}</p></td></tr>` +

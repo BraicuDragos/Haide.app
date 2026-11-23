@@ -100,6 +100,12 @@ describe('Brevo provider', () => {
     expect(await capturing(undefined, 'not json').provider.send(msg)).toEqual({ ok: true });
   });
 
+  it('keeps a realistic Brevo message id intact (it looks like an address but is not one)', async () => {
+    const id = '<202611231234.12345678901@smtp-relay.mailin.fr>';
+    const r = await capturing(undefined, JSON.stringify({ messageId: id })).provider.send(msg);
+    expect(r).toEqual({ ok: true, messageId: id });
+  });
+
   it('the factory passes EMAIL_REPLY_TO through to the Brevo provider', async () => {
     const seen: Record<string, unknown>[] = [];
     const real = globalThis.fetch;

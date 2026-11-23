@@ -94,8 +94,9 @@ function Stage({
     if (!prev || !view) return;
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (pointers.current.size === 2 && pinch.current && pinch.current.dist > 0) {
-      const k = dist() / pinch.current.dist;
-      setState((s) => zoomTo(s, pinch.current!.zoom * k, iw, ih));
+      // Read the ref now: `up()` may clear it before React runs the updater.
+      const z = pinch.current.zoom * (dist() / pinch.current.dist);
+      setState((s) => zoomTo(s, z, iw, ih));
     } else if (pointers.current.size === 1) {
       const dx = e.clientX - prev.x;
       const dy = e.clientY - prev.y;
@@ -123,11 +124,23 @@ function Stage({
     e.preventDefault();
   }
 
+  // False once the dialog is gone (Esc or backdrop while cropping): a late result must not apply, and the
+  // bitmap closed by the parent must not surface as a false "couldn't read photo" error.
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
+
   async function confirm() {
     setBusy(true);
     try {
-      onConfirm(await cropToBlob(bitmap, cropRect(state, iw, ih)));
+      const blob = await cropToBlob(bitmap, cropRect(state, iw, ih));
+      if (alive.current) onConfirm(blob);
     } catch (err) {
+      if (!alive.current) return;
       setBusy(false);
       onError(err instanceof PhotoError ? err.problem : 'invalid');
     }
