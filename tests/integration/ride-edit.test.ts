@@ -175,7 +175,10 @@ describe.skipIf(!BASE || !SECRET || DB_SKIP)('editing a ride against the databas
 
     // a second passenger fills seat 1; going below 2 booked is refused
     const second = await createUser({ firstName: 'Mihai' });
-    await driver.send('PATCH', `/rides/${ride.id}`, { seats: 2 });
+    // auto-accept was switched on above: turn it off so the request stays pending for the manual approve
+    expect(
+      (await driver.send('PATCH', `/rides/${ride.id}`, { seats: 2, autoAccept: false })).status,
+    ).toBe(200);
     const b2 = await book(second, ride.id, l);
     expect((await driver.send('POST', `/bookings/${b2.id}/approve`, {})).status).toBe(200);
     const refused = await driver.send('PATCH', `/rides/${ride.id}`, { seats: 1 });
