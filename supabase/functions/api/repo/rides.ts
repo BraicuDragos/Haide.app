@@ -59,6 +59,9 @@ export type NewPreview = {
   destination: LatLng;
   originLabel: string;
   destinationLabel: string;
+  /** The picked places were synthetic approximate addresses (ADR 0042). */
+  originApproximate: boolean;
+  destinationApproximate: boolean;
   /** GeoJSON LineString text. Simplified at 10 m in SQL on insert. */
   routeGeoJson: string;
   distanceM: number;
@@ -74,13 +77,15 @@ export async function insertPreview(
 ): Promise<{ id: string; routeGeoJson: string }> {
   const rows = await sql<{ id: string; route_geojson: string }[]>`
     insert into app.route_previews
-      (driver_id, origin, destination, origin_label, destination_label, route,
+      (driver_id, origin, destination, origin_label, destination_label,
+       origin_approximate, destination_approximate, route,
        distance_m, duration_s, provider, created_at, expires_at)
     values (
       ${v.driverId},
       ST_SetSRID(ST_MakePoint(${v.origin.lng}::float8, ${v.origin.lat}::float8), 4326),
       ST_SetSRID(ST_MakePoint(${v.destination.lng}::float8, ${v.destination.lat}::float8), 4326),
       ${v.originLabel}, ${v.destinationLabel},
+      ${v.originApproximate}::boolean, ${v.destinationApproximate}::boolean,
       app.simplify_route(ST_SetSRID(ST_GeomFromGeoJSON(${v.routeGeoJson}::text), 4326), 10),
       ${v.distanceM}, ${v.durationS}, ${v.provider}, ${v.createdAt}, ${v.expiresAt})
     returning id, ST_AsGeoJSON(route, 5) as route_geojson`;
@@ -151,11 +156,13 @@ export type NewRide = {
 export async function insertRideFromPreview(sql: Db, v: NewRide): Promise<string | null> {
   const rows = await sql<{ id: string }[]>`
     insert into app.rides
-      (driver_id, origin, destination, origin_label, destination_label, origin_area_id,
+      (driver_id, origin, destination, origin_label, destination_label,
+       origin_approximate, destination_approximate, origin_area_id,
        destination_area_id, route, distance_m, duration_s, departure_at, seats_offered, note,
        is_free, auto_accept, series_id, energy_price_id, rate_micro_per_km, vehicle_snapshot,
        created_at, updated_at)
     select p.driver_id, p.origin, p.destination, p.origin_label, p.destination_label,
+           p.origin_approximate, p.destination_approximate,
            app.area_for(p.origin), app.area_for(p.destination), p.route, p.distance_m, p.duration_s,
            ${v.departureAt}::timestamptz, ${v.seats}::smallint, ${v.note}::text,
            ${v.isFree}::boolean, ${v.autoAccept ?? false}::boolean, ${v.seriesId ?? null}::uuid,
@@ -220,6 +227,8 @@ export type OwnerRideRow = {
   destination_label: string;
   origin_lat: number;
   origin_lng: number;
+  origin_approximate: boolean;
+  destination_approximate: boolean;
   destination_lat: number;
   destination_lng: number;
   route_geojson: string | null;
@@ -255,7 +264,7 @@ export async function selectOwnerRide(
           round(ST_X(r.destination)::numeric, 5)::float8 as destination_lng,
           ST_AsGeoJSON(r.route, 5) as route_geojson,
           r.distance_m, r.duration_s, r.seats_offered, r.seats_booked, r.note, r.is_free,
-          r.auto_accept, r.series_id,
+          r.auto_accept, r.series_id, r.origin_approximate, r.destination_approximate,
           r.rate_micro_per_km, r.vehicle_snapshot, r.late_cancel, r.cancelled_at, r.created_at,
           r.completed_at
         from app.rides r
@@ -269,7 +278,7 @@ export async function selectOwnerRide(
           round(ST_X(r.destination)::numeric, 5)::float8 as destination_lng,
           ST_AsGeoJSON(r.route, 5) as route_geojson,
           r.distance_m, r.duration_s, r.seats_offered, r.seats_booked, r.note, r.is_free,
-          r.auto_accept, r.series_id,
+          r.auto_accept, r.series_id, r.origin_approximate, r.destination_approximate,
           r.rate_micro_per_km, r.vehicle_snapshot, r.late_cancel, r.cancelled_at, r.created_at,
           r.completed_at
         from app.rides r

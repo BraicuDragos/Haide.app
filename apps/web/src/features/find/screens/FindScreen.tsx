@@ -9,6 +9,8 @@ import { TimePicker } from '@/ui/TimePicker';
 import { Button } from '@/ui/Button';
 import { Icon } from '@/ui/Icon';
 import { RouteArt } from '@/ui/RouteArt';
+import { ApproxHint } from '../components/ApproxBadge';
+import { joinIds } from '../placeApprox';
 import { PlaceField } from '../components/PlaceField';
 import { PopularRoutes } from '../components/PopularRoutes';
 import { PlacePickerSheet, type PickerKind } from '../components/PlacePickerSheet';
@@ -108,7 +110,10 @@ export function FindScreen() {
               kind="from"
               place={from}
               invalid={Boolean(errors.places) && !from}
-              describedBy={errors.places ? 'places-err' : undefined}
+              describedBy={joinIds(
+                errors.places && 'places-err',
+                from?.approximate === true && 'find-from-approx',
+              )}
               onOpen={() => setPicker('from')}
             />
             <PlaceField
@@ -116,7 +121,10 @@ export function FindScreen() {
               kind="to"
               place={to}
               invalid={Boolean(errors.places) && (!to || from?.id === to.id)}
-              describedBy={errors.places ? 'places-err' : undefined}
+              describedBy={joinIds(
+                errors.places && 'places-err',
+                to?.approximate === true && 'find-to-approx',
+              )}
               onOpen={() => setPicker('to')}
             />
             <button
@@ -128,6 +136,8 @@ export function FindScreen() {
               <Icon name="swap" />
             </button>
           </div>
+          {from?.approximate === true && <ApproxHint id="find-from-approx" kind="from" />}
+          {to?.approximate === true && <ApproxHint id="find-to-approx" kind="to" />}
           {errors.places && (
             <p
               id="places-err"
@@ -140,8 +150,8 @@ export function FindScreen() {
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div className="flex flex-col gap-1">
+        <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3">
+          <div className="flex min-w-0 flex-col gap-1">
             <label htmlFor="find-day" className="type-label">
               {t('find.day')}
             </label>
@@ -174,7 +184,7 @@ export function FindScreen() {
 
         <fieldset className="m-0 min-w-0 border-0 p-0">
           <legend className="type-label mb-1 p-0">{t('find.window')}</legend>
-          <div className="grid grid-cols-3 gap-1.5">
+          <div className="grid grid-cols-[repeat(3,minmax(0,1fr))] gap-1.5">
             {WINDOWS.map((w) => (
               <label
                 key={w}

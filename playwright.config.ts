@@ -20,6 +20,15 @@ export default defineConfig({
     {
       name: 'chromium-360',
       use: { ...devices['Desktop Chrome'], viewport: { width: 360, height: 800 }, hasTouch: true },
+      testIgnore: /e12-.*-webkit\.spec\.ts/,
+    },
+    {
+      // iOS layout checks: the WebKit engine (the engine behind every iOS browser) at iPhone sizes.
+      // Only specs named e12-*-webkit.spec.ts run here. Playwright's WebKit is not a real iPhone: no native
+      // iOS pickers, no safe-area insets, no dynamic toolbar. It does reproduce WebKit's layout rules.
+      name: 'webkit-iphone',
+      use: { ...devices['iPhone 13'] },
+      testMatch: /e12-.*-webkit\.spec\.ts/,
     },
   ],
   webServer: {

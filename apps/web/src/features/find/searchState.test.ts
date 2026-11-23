@@ -34,6 +34,32 @@ describe('search state', () => {
     expect(readSearch()).toEqual(criteria);
   });
 
+  it('keeps the approximate flag through the storage round trip', () => {
+    const c: SearchCriteria = {
+      ...criteria,
+      from: { ...place('approx:x', 'Strada Negoveanu 2', 45.7856, 24.1747), approximate: true },
+    };
+    saveSearch(c);
+    expect(sessionStorage.getItem('haide.search')).toContain('"approximate":true');
+    expect(readSearch()?.from.approximate).toBe(true);
+    expect(readSearch()?.from.name).toBe('Strada Negoveanu 2');
+    expect(readSearch()?.to.approximate).toBeUndefined();
+  });
+
+  it('still loads a stored value written before the flag existed', () => {
+    sessionStorage.setItem('haide.search', JSON.stringify(criteria));
+    expect(readSearch()).toEqual(criteria);
+  });
+
+  it('POST /search stays coordinates only for an approximate place', () => {
+    const body = toRequest({
+      ...criteria,
+      from: { ...criteria.from, approximate: true },
+    });
+    expect(JSON.stringify(body)).not.toContain('approximate');
+    expect(body.from).toEqual({ lat: 45.75951, lng: 24.21281 });
+  });
+
   it('builds the POST /search body: 5-decimal points, numeric window, no place names', () => {
     const body = toRequest(criteria);
     expect(body).toEqual({

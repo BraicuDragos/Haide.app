@@ -1,8 +1,9 @@
 import type { Db } from '../../_shared/db.ts';
 import type { LatLng, Place } from '../../_shared/contracts/geo.ts';
+import { groupStreetCandidates, type StreetCandidate } from '../../_shared/domain/address.ts';
 import { roundCoord } from '../../_shared/domain/privacy.ts';
 
-type PlaceRow = {
+export type PlaceRow = {
   id: string;
   name: string;
   kind: Place['kind'];
@@ -57,6 +58,43 @@ export async function searchPlaces(sql: Db, q: string, limit: number): Promise<P
              p.name asc
     limit ${limit}`;
   return rows.map(toPlace);
+}
+
+/** Upper bound of gazetteer rows read for one street key (streets first, then addresses). */
+export const STREET_ROWS_LIMIT = 1200;
+
+type StreetRow = { name: string; kind: string; locality: string | null; lat: number; lng: number };
+
+/**
+ * Candidate streets for a typed street key (ADR 0042): per locality (at most 2) the street row, if
+ * the data has one, and the known address points of that street. Matching is on the unaccented name
+ * at word boundaries, served by the trigram index on `search_text`; LIKE wildcards are escaped. At
+ * most STREET_ROWS_LIMIT rows are read (street rows first), so the cost is bounded for any key.
+ */
+export async function findStreetCandidates(sql: Db, streetKey: string): Promise<StreetCandidate[]> {
+  const rows = await sql<StreetRow[]>`
+    with street_key as (
+      select replace(replace(replace(app.immutable_unaccent(lower(${streetKey}::text)), '\\', '\\\\'), '%', '\\%'), '_', '\\_') as esc
+    )
+    select p.name, p.kind, p.locality, ST_Y(p.geom) as lat, ST_X(p.geom) as lng
+    from app.places p
+    cross join street_key k
+    where p.kind in ('street', 'address')
+      and (p.search_text like k.esc || '%' or p.search_text like '% ' || k.esc || '%')
+      and app.immutable_unaccent(lower(p.name)) like '%' || k.esc || '%'
+    order by (p.kind = 'street') desc, p.locality asc, p.name asc
+    limit ${STREET_ROWS_LIMIT}`;
+  return groupStreetCandidates(rows, streetKey, 2);
+}
+
+/** Name of the area that contains (or is nearest to) the point, null when there are no areas. */
+export async function areaNameForPoint(sql: Db, point: LatLng): Promise<string | null> {
+  const rows = await sql<{ name: string }[]>`
+    select a.name
+    from app.areas a
+    where a.id = app.area_for(ST_SetSRID(ST_MakePoint(${point.lng}::float8, ${point.lat}::float8), 4326))
+    limit 1`;
+  return rows[0]?.name ?? null;
 }
 
 /** Nearest street, POI or address within 500 m, else the containing/nearest area. */

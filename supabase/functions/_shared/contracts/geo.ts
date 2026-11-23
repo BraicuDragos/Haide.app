@@ -16,6 +16,12 @@ export const placeSchema = z.object({
   kind: placeKindSchema,
   point: latLngSchema,
   areaName: z.string(),
+  /**
+   * Present and `true` only on a synthetic address (ADR 0042): the street is in the data but this
+   * house number is not, so the point is estimated from the known numbers. The `name` carries the
+   * number exactly as typed; keep it as the label and send the flag back on preview/publish.
+   */
+  approximate: z.boolean().optional(),
 });
 export type Place = z.infer<typeof placeSchema>;
 

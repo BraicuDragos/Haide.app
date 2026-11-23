@@ -46,3 +46,4 @@ Every significant decision (business, brand, UX, architecture) gets a file
 | [0039](0039-ride-series-materialised-up-front-skip-dates-over-daily-limit.md) | Ride series: every instance created up front, dates over the daily limit skipped and reported | Architecture | Proposed | software-architect |
 | [0040](0040-zero-cost-personal-deploy-no-domain.md) | Zero-cost personal deploy: no custom domain, single-sender mail, OAuth in Testing mode | Architecture | Accepted | Orchestrator |
 | [0041](0041-rides-are-editable-time-seats-note-auto-accept.md) | Rides are editable (time, seats, note, auto-accept); route fixed; a time change notifies each passenger | Architecture | Accepted | backend-dev |
+| [0042](0042-approximate-address-positions.md) | Any house number in address search: own gazetteer plus synthetic, flagged approximate addresses (300 m interpolation bound) | Architecture | Proposed | backend-dev |

@@ -109,7 +109,10 @@ test.describe('magic-link sign-up (real stack)', () => {
     await page.getByRole('button', { name: 'Save and continue' }).click();
 
     // Step 4: car
-    await expect(page.getByRole('heading', { level: 1, name: 'Your car' })).toBeVisible();
+    // The real stack resizes and stores the photo first (cold function on a slow runner): allow it time.
+    await expect(page.getByRole('heading', { level: 1, name: 'Your car' })).toBeVisible({
+      timeout: 30_000,
+    });
     await expect(page.getByText('Step 4 of 4')).toBeVisible();
     await page.getByLabel('Make').fill('Dacia');
     await page.getByLabel('Model').fill('Logan');

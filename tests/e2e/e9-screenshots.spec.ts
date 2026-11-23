@@ -22,7 +22,7 @@ test('hero road at phone and desktop width', async ({ page }) => {
 test('time picker sheet', async ({ page }) => {
   await mockPlaces(page);
   await page.goto('/find');
-  await page.getByLabel('Leave around').click();
+  await page.getByRole('button', { name: /^Leave around/ }).click();
   await page.getByRole('dialog').locator('[role=radio]:not([disabled])').first().click();
   await page.waitForTimeout(600);
   await page.screenshot({ path: `${OUT}/time-picker.jpg`, type: 'jpeg', quality: 82 });

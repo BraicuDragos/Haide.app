@@ -46,7 +46,7 @@ export function TimePicker({
   const describedBy =
     [hint ? hintId : '', error ? errId : ''].filter(Boolean).join(' ') || undefined;
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex min-w-0 flex-col gap-1">
       <span id={`${id}-label`} className="type-label">
         {label}
       </span>
@@ -61,7 +61,10 @@ export function TimePicker({
         onClick={() => setOpen(true)}
         className={`control flex min-h-12 items-center justify-between gap-2 text-left ${error ? 'border-2 border-error' : 'border border-border-strong'}`}
       >
-        <span id={`${id}-value`} className={value ? 'tabular-nums' : 'text-text-muted'}>
+        <span
+          id={`${id}-value`}
+          className={`min-w-0 truncate ${value ? 'tabular-nums' : 'text-text-muted'}`}
+        >
           {value || t('time.placeholder')}
         </span>
         <Icon name="clock" small />

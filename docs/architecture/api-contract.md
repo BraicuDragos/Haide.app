@@ -46,7 +46,8 @@
 ```ts
 type LatLng = { lat: number; lng: number };
 type ApproxPoint = LatLng & { approx: true; radiusM: 300 };
-type Place = { id: string; name: string; secondary: string; kind: 'street'|'poi'|'address'|'area'; point: LatLng; areaName: string };
+type Place = { id: string; name: string; secondary: string; kind: 'street'|'poi'|'address'|'area'; point: LatLng; areaName: string;
+  approximate?: true /* only on a synthetic address, ADR 0042 */ };
 type PublicUser = { id: string; firstName: string | null /* null = "Deleted user" */; photoUrl: string | null;
   memberSince: string /* YYYY-MM */; rating: { average: number; count: number } | null /* null = "New" (< 3) */;
   ridesCompleted: number; lateCancellations90d: number; noShows90d: number; bio: string | null };
@@ -69,6 +70,12 @@ type FuelType = 'petrol'|'diesel'|'lpg'|'hybrid'|'electric';
 Diacritics-insensitive autocomplete from the gazetteer, biased to Sibiu. `q` is 2–80 chars.
 `200 { "items": Place[] }`
 
+**House numbers (ADR 0042).** When `q` carries a number (`Negoveanu 2`, `2 negoveanu`, `str. negoveanu nr. 2a`, `Strada X 2/B bl. 5 sc. 2`) and a street name of at least 3 letters, the server puts up to 2 synthetic suggestions (one per locality) **first**, followed by the normal results (total still at most `limit`). A synthetic `Place` looks like:
+```json
+{ "id": "approx:U2liaXV8c3RyYWRhIG5lZ292ZWFudXwy", "name": "Strada Negoveanu 2", "secondary": "Sibiu, Terezian",
+  "kind": "address", "point": { "lat": 45.78559, "lng": 24.17466 }, "areaName": "Terezian", "approximate": true }
+```
+`name` is the street as spelled in the data plus the number exactly as typed (letter case of a suffix aside) and the typed `bl.`/`sc.`/`ap.` parts, at most 80 characters; keep it as the label. `id` is deterministic (`approx:` + base64url) and never a uuid. It appears only when the street has data and no address with exactly that number and suffix exists; with no data for the street nothing is invented. The point is the same number with another suffix, else an interpolation between the nearest lower and higher known numbers of the same parity when they are at most 300 m apart, else the nearest known number (never extrapolated), else the street's own point. Normal results never carry `approximate`. Extras never move the point. `POST /places/reverse` is unchanged.
 ### `GET /popular-routes?limit=5`: Public. Rate limit 60/min (the public-read limit)
 Popular corridors for the Find screen. `limit` 1 to 10 (default 5). `Cache-Control: public, max-age=300`. No personal data.
 `200 { "items": [{ "from": Place, "to": Place, "rides": number, "source": "data" | "curated" }] }`
@@ -183,7 +190,8 @@ Implemented in E6 (ADR 0031, `services/dataRequests.ts`): authenticated, `active
 
 ### `POST /rides/preview`
 Requires consent + complete profile + vehicle. Rate limit 20/hour.
-Body `{ "origin": LatLng, "destination": LatLng, "originLabel"?: string, "destinationLabel"?: string }`
+Body `{ "origin": LatLng, "destination": LatLng, "originLabel"?: string, "destinationLabel"?: string, "originApproximate"?: boolean, "destinationApproximate"?: boolean }`
+`originApproximate` / `destinationApproximate` (ADR 0042): send `true` when the picked place had `approximate: true` in `GET /places`. Default `false`, a non-boolean is `400`. They are stored on the preview and copied to the ride on publish (`POST /rides` takes no such field, the ride cannot differ from its preview). The label is the one the client sends (`place.name`) and is never replaced by the server; the reverse-lookup fallback runs only when no label is sent. **Routing:** an approximate point adds no ORS call. The request sends no `radiuses`, so ORS uses its default 350 m snapping radius per coordinate and answers error 2010 (mapped to `ROUTE_NOT_FOUND`) only if no road lies within it; an estimate sits on or next to its street (interpolation is limited to 300 m between known numbers, never extrapolated off the street), so this is not expected.
 ```json
 { "previewId": "…", "expiresAt": "…", "distanceM": 9588, "durationS": 1020,
   "route": { "type": "LineString", "coordinates": [...] } /* full, owner view */,
@@ -204,7 +212,7 @@ Driver list. `{ items: [{ id, departureAt, originLabel, destinationLabel, status
 
 ### `GET /me/rides/{id}`: driver only (else 404)
 ```json
-{ "id": "…", "status": "published", "departureAt": "…", "origin": { "point": LatLng, "label": "…" }, "destination": {...},
+{ "id": "…", "status": "published", "departureAt": "…", "origin": { "point": LatLng, "label": "…", "approximate": false }, "destination": {...},
   "route": LineString, "distanceM": 9588, "durationS": 1020, "seatsOffered": 3, "seatsBooked": 1, "note": "…", "isFree": false,
   "priceTable": PriceRow[], "tripCostBani": 624, "car": { "make","model","colour","plate" },
   "requests": [ { "bookingId": "…", "passenger": PublicUser, "pickupLabel": "…", "dropoffLabel": "…",
@@ -216,6 +224,7 @@ Driver list. `{ items: [{ id, departureAt, originLabel, destinationLabel, status
   "canCancel": true, "canEdit": true, "lateCancelIfNow": false,
   "fuelType": "diesel", "lateCancel": false, "cancelledAt": null, "createdAt": "…" }
 ```
+`origin.approximate` and `destination.approximate` (ADR 0042) are `true` when the driver picked a synthetic address: the point is estimated from neighbouring house numbers, `label` is the number as typed. Old rides read `false`. The public view and bookings are unchanged (they only show 300 m grid points and area labels).
 Additive fields added in E2: `fuelType` (from the vehicle snapshot), `lateCancel` (true once cancelled within 30 min of departure), `cancelledAt`, `createdAt`. Implemented in E4: `requests` holds the open requests (`requested`, `expires_at` in the future, soonest deadline first): public profile, **area labels** and `segmentM`, never a point. `priceIfAcceptedBani` is `seatPrice(segment, rate, confirmed + 1)`. `passengers` holds the `confirmed` bookings. `pickup.point`, `dropoff.point` and `phoneE164` go through `revealFor` (confirmed or completed, and now < departure + 24 h): outside it the points are 300 m grid centres (`approx: true`) and `phoneE164` is `null`. `label` is always an area name. `GET /me/rides` `pendingRequests` counts the open requests. For a coarsened ride (no stored route) `route` falls back to a straight line between the two points.
 
 ### `PATCH /rides/{id}`: edit a published ride, driver only (ADR 0041)

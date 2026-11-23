@@ -182,7 +182,7 @@ Seed v1 (effective 2026-11-15, from pricing.md §3): petrol 9810/700 l · diesel
 
 ### 4.3 Rides (E2)
 
-**`route_previews`** (TTL 30 min): `id`, `driver_id`, `origin geometry(Point)`, `destination geometry(Point)`, `origin_label text`, `destination_label text` (1 to 80 chars, NOT NULL: the labels shown to the driver, copied to the ride on publish), `route geometry(LineString)` (simplified at 10 m on insert), `distance_m`, `duration_s`, `provider text` (`ors` or `fixture`), `created_at`, `expires_at` (`CHECK (expires_at > created_at)`). Indexes `(expires_at)` and `(driver_id)`.
+**`route_previews`** (TTL 30 min): `id`, `driver_id`, `origin geometry(Point)`, `destination geometry(Point)`, `origin_label text`, `destination_label text` (1 to 80 chars, NOT NULL: the labels shown to the driver, copied to the ride on publish), `origin_approximate`, `destination_approximate boolean NOT NULL DEFAULT false` (ADR 0042: the picked place was a synthetic address, copied to the ride on publish), `route geometry(LineString)` (simplified at 10 m on insert), `distance_m`, `duration_s`, `provider text` (`ors` or `fixture`), `created_at`, `expires_at` (`CHECK (expires_at > created_at)`). Indexes `(expires_at)` and `(driver_id)`.
 
 **`energy_prices`** (immutable config, seeded with v1 in the E2 migration, not in `seed.sql`): `id`, `fuel_type`, `price_milli` (milli-RON per l or kWh), `consumption_centi` (per 100 km, x100), `unit` (`l` or `kWh`, `CHECK ((fuel_type = 'electric') = (unit = 'kWh'))`), `effective_from`, `source_note`, `created_by`, `created_at`. `UNIQUE (fuel_type, effective_from)`. `haide_api` has no UPDATE or DELETE: a new price is a new row.
 
@@ -195,6 +195,7 @@ Seed v1 (effective 2026-11-15, from pricing.md §3): petrol 9810/700 l · diesel
 | series_id | uuid FK → ride_series NULL | E8-1 |
 | origin, destination | geometry(Point,4326) | exact, coarsened after 90 days |
 | origin_label, destination_label | text | short label, e.g. "Cisnădie, Str. Măgurii". Becomes the area name when coarsened |
+| origin_approximate, destination_approximate | boolean NOT NULL DEFAULT false | ADR 0042: the point was estimated from neighbouring house numbers (the label is the number as typed) |
 | origin_area_id, destination_area_id | uuid FK → areas | |
 | route | geometry(LineString,4326) NULL | simplified 10 m. NULL after coarsening |
 | route_utm | geometry(LineString,32635) | `GENERATED ALWAYS AS (ST_Transform(route, 32635)) STORED` |
