@@ -4,10 +4,15 @@ import {
   MIN_REAL_ROUTES,
   mergePopularRoutes,
   nameKey,
+  withLabel,
   type PlaceRef,
 } from './popularRoutes.ts';
+import { inCoverage } from './privacy.ts';
+import { COVERAGE_BBOX, COVERAGE_ENVELOPE } from './rules.ts';
 
-const p = (id: string, name: string): PlaceRef => ({ id, name });
+const IN = { lat: 45.79, lng: 24.15 };
+const OUT = { lat: 45.639622, lng: 24.088587 }; // the whole-locality "Cisnădie" row
+const p = (id: string, name: string, point = IN): PlaceRef => ({ id, name, point });
 const real = (a: PlaceRef, b: PlaceRef, rides = 3) => ({ from: a, to: b, rides });
 
 const CIS = p('c', 'Cisnădie');
@@ -22,13 +27,53 @@ const curated = [
 ];
 
 describe('CURATED_PILOT_ROUTES', () => {
-  it('is the three Sibiu pilot corridors', () => {
+  it('is the three Sibiu pilot corridors; route 1 starts at the centre of Cisnădie, labelled Cisnădie', () => {
     expect(CURATED_PILOT_ROUTES).toEqual([
-      { from: 'Cisnădie', to: 'Centrul Istoric' },
-      { from: 'Șelimbăr', to: 'Turnișor' },
-      { from: 'Hipodrom I', to: 'Centrul Istoric' },
+      {
+        from: { name: 'Centru', locality: 'Cisnădie', label: 'Cisnădie' },
+        to: { name: 'Centrul Istoric' },
+      },
+      { from: { name: 'Șelimbăr' }, to: { name: 'Turnișor' } },
+      { from: { name: 'Hipodrom I' }, to: { name: 'Centrul Istoric' } },
     ]);
-    // that every name exists in the gazetteer is checked in curatedRoutes.test.ts
+    // that every end exists in the gazetteer, inside coverage, is checked in curatedRoutes.test.ts
+  });
+});
+
+describe('inCoverage on the bbox edges', () => {
+  const { south, north, west, east } = COVERAGE_BBOX;
+  it('is inclusive on each edge and false just outside each side', () => {
+    expect(inCoverage({ lat: south, lng: 24.1 })).toBe(true);
+    expect(inCoverage({ lat: north, lng: 24.1 })).toBe(true);
+    expect(inCoverage({ lat: 45.7, lng: west })).toBe(true);
+    expect(inCoverage({ lat: 45.7, lng: east })).toBe(true);
+    expect(inCoverage({ lat: south - 0.0001, lng: 24.1 })).toBe(false);
+    expect(inCoverage({ lat: north + 0.0001, lng: 24.1 })).toBe(false);
+    expect(inCoverage({ lat: 45.7, lng: west - 0.0001 })).toBe(false);
+    expect(inCoverage({ lat: 45.7, lng: east + 0.0001 })).toBe(false);
+  });
+  it('the SQL envelope is the same box (west, south, east, north)', () => {
+    expect([...COVERAGE_ENVELOPE]).toEqual([west, south, east, north]);
+  });
+  it('the whole-locality Cisnădie row is outside, its Centru is inside', () => {
+    expect(inCoverage(OUT)).toBe(false);
+    expect(inCoverage({ lat: 45.714466, lng: 24.152046 })).toBe(true);
+  });
+});
+
+describe('withLabel', () => {
+  const centru = { ...p('x', 'Centru'), secondary: 'Cisnădie' };
+  it('shows the label, keeps id and point, and keeps the old name as secondary', () => {
+    expect(withLabel(centru, 'Cisnădie')).toMatchObject({
+      id: 'x',
+      name: 'Cisnădie',
+      secondary: 'Centru',
+      point: IN,
+    });
+  });
+  it('is a no-op without a label or with the same name', () => {
+    expect(withLabel(centru, undefined)).toBe(centru);
+    expect(withLabel(centru, 'Centru')).toBe(centru);
   });
 });
 
@@ -79,6 +124,21 @@ describe('mergePopularRoutes', () => {
       5,
     );
     expect(out.map((x) => x.from.name)).toEqual(['Hipodrom']);
+  });
+
+  it('drops routes (real or curated) with an end outside coverage and still fills up', () => {
+    const outside = p('o', 'Cisnădie', OUT);
+    const out = mergePopularRoutes(
+      [real(outside, PM, 9), real(SEL, ZI, 5)],
+      [{ from: outside, to: PM }, ...curated],
+      5,
+    );
+    expect(out.every((x) => inCoverage(x.from.point) && inCoverage(x.to.point))).toBe(true);
+    expect(out.map((x) => x.source)).toEqual(['data', 'curated', 'curated']);
+    expect(out).toHaveLength(MIN_REAL_ROUTES);
+    // a "real" route to an outside end must not count toward the minimum of 3
+    const three = mergePopularRoutes([real(outside, PM), real(SEL, ZI), real(HIP, PM)], curated, 5);
+    expect(three.map((x) => x.source)).toEqual(['data', 'data', 'curated']);
   });
 
   it('respects the limit', () => {

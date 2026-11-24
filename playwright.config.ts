@@ -3,7 +3,13 @@ import { defineConfig, devices } from '@playwright/test';
 // Conventions section 7: Chromium at 360x800, selectors by role/label, axe on every screen touched.
 // Lives at the repo root (conventions 1: tests/e2e/<epic>.spec.ts). The spec runs against the production build served by `vite preview` (CSP from public/_headers applied).
 // Set E2E_REAL_API=1 to hit a running local API instead of the mocked /places responses.
-const PORT = 4173;
+// Default: port 4173 and the normal build (what CI uses). E2E_PORT=<n> gives a local run its OWN port AND its own
+// build folder (apps/web/dist-<n>), so several runs can happen at once without overwriting each other's build.
+const PORT = Number(process.env.E2E_PORT ?? 4173);
+const OWN_BUILD = PORT !== 4173;
+const SERVER_COMMAND = OWN_BUILD
+  ? `pnpm --filter ./apps/web exec vite build --outDir dist-${PORT} && pnpm --filter ./apps/web exec vite preview --outDir dist-${PORT} --port ${PORT} --strictPort`
+  : 'pnpm --filter ./apps/web build && pnpm --filter ./apps/web preview';
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -32,7 +38,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'pnpm --filter ./apps/web build && pnpm --filter ./apps/web preview',
+    command: SERVER_COMMAND,
     url: `http://localhost:${PORT}/find`,
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,

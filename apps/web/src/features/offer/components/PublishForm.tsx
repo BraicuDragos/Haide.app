@@ -18,7 +18,8 @@ import { PlaceField } from '@/features/find/components/PlaceField';
 import { PlacePickerSheet, type PickerKind } from '@/features/find/components/PlacePickerSheet';
 import { PriceTable } from '@/features/rides/components/PriceTable';
 import { Button } from '@/ui/Button';
-import { SelectField, TextArea } from '@/ui/Field';
+import { TextArea } from '@/ui/Field';
+import { DayPicker } from '@/ui/DayPicker';
 import { TimePicker } from '@/ui/TimePicker';
 import { minTimeFor } from '@/lib/timeSlots';
 import { Icon } from '@/ui/Icon';
@@ -295,22 +296,17 @@ export function PublishForm() {
       )}
 
       <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3">
-        <SelectField
+        <DayPicker
           id="offer-day"
           label={t('offer.day')}
           value={day}
-          onChange={(e) => {
-            setDay(e.target.value);
+          options={days}
+          onChange={(v) => {
+            setDay(v);
             setErrors((x) => ({ ...x, time: undefined }));
             setBanner(null);
           }}
-        >
-          {days.map((d) => (
-            <option key={d.value} value={d.value}>
-              {d.label}
-            </option>
-          ))}
-        </SelectField>
+        />
         <TimePicker
           id="offer-time"
           ref={timeInput}
@@ -471,6 +467,8 @@ export function PublishForm() {
       <PlacePickerSheet
         open={picker !== null}
         kind={picker ?? 'from'}
+        // "Choose on map" starts where the current value for this field is, if there is one.
+        initial={(picker === 'to' ? to : from)?.point}
         onSelect={pick}
         onClose={() => setPicker(null)}
       />

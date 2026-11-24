@@ -10,11 +10,14 @@ import { PushHost } from '@/features/push/PushHost';
 import { ErrorBoundary } from './ErrorBoundary';
 import { TabBar, TABS } from './TabBar';
 import { useNavigationCounter } from './useScreenHeading';
+import { useTabSwipe } from './useTabSwipe';
 
 /** Known route templates only: raw URLs never go to telemetry (conventions section 6). */
 export function routeTemplate(pathname: string): string {
   return TABS.some((tab) => tab.to === pathname) ? pathname : '/:other';
 }
+
+const TABS_PATHS = TABS.map((tab) => tab.to);
 
 const SuspendedScreen = lazy(() => import('@/features/common/screens/SuspendedScreen'));
 
@@ -47,7 +50,9 @@ export function Shell() {
   const loc = useLocation();
   const online = useOnline();
   useNavigationCounter();
-  const isRoot = TABS.some((tab) => tab.to === loc.pathname);
+  const tabIndex = TABS.findIndex((tab) => tab.to === loc.pathname);
+  const isRoot = tabIndex >= 0;
+  const [surface, setSurface] = useState<HTMLDivElement | null>(null);
   const { status, signOut } = useAuth();
   const toast = useToast();
   const me = useMe();
@@ -69,6 +74,9 @@ export function Shell() {
     me.error.code === 'ACCOUNT_SUSPENDED' &&
     !OPEN_TO_SUSPENDED.some((p) => loc.pathname === p || loc.pathname.startsWith(p));
 
+  // Swipe left/right between the four root tabs (only on those screens; see useTabSwipe).
+  useTabSwipe(surface, { paths: TABS_PATHS, index: tabIndex, enabled: isRoot && !suspended });
+
   // Terms or privacy changed since the person accepted: every screen but the legal pages asks for re-acceptance first.
   const reaccept =
     status === 'signedIn' &&
@@ -81,6 +89,8 @@ export function Shell() {
 
   return (
     <div
+      ref={setSurface}
+      style={{ touchAction: isRoot ? 'pan-y pinch-zoom' : undefined }}
       className={`mx-auto flex min-h-dvh w-full flex-col bg-bg ${wide ? 'max-w-7xl' : 'max-w-xl md:border-x md:border-(color:--hair)'}`}
     >
       <a

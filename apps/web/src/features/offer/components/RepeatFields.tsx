@@ -1,7 +1,9 @@
+import { useMemo } from 'react';
 import type { Weekday } from '@/api/liquidity';
 import { t, tp } from '@/i18n';
-import { WEEKDAYS } from '@/lib/seriesDates';
-import { TextField } from '@/ui/Field';
+import { dateLabel, type DayOption } from '@/lib/dates';
+import { addDays, WEEKDAYS } from '@/lib/seriesDates';
+import { DayPicker } from '@/ui/DayPicker';
 import { Icon } from '@/ui/Icon';
 
 export interface RepeatValue {
@@ -42,6 +44,15 @@ export function RepeatFields({
         ? value.weekdays.filter((x) => x !== d)
         : [...value.weekdays, d].sort((a, b) => a - b),
     });
+
+  // One wheel row per allowed end date: the first day itself up to today + 28 days.
+  const untilOptions = useMemo(() => {
+    const list: DayOption[] = [];
+    for (let d = minUntil; d <= maxUntil && list.length < 60; d = addDays(d, 1)) {
+      list.push({ value: d, label: dateLabel(d) });
+    }
+    return list;
+  }, [minUntil, maxUntil]);
 
   return (
     <section aria-labelledby="offer-repeat-h" className="flex flex-col gap-3">
@@ -85,15 +96,13 @@ export function RepeatFields({
               ))}
             </div>
           </fieldset>
-          <TextField
+          <DayPicker
             id="offer-until"
-            type="date"
             label={t('offer.repeat.until')}
             hint={t('offer.repeat.until.hint')}
-            min={minUntil}
-            max={maxUntil}
+            options={untilOptions}
             value={value.until}
-            onChange={(e) => onChange({ ...value, until: e.target.value })}
+            onChange={(until) => onChange({ ...value, until })}
           />
           <p aria-live="polite" className="font-semibold text-savings">
             {count > 0 ? tp('offer.repeat.count', count) : ''}

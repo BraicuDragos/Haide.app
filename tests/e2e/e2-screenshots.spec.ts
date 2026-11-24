@@ -1,5 +1,5 @@
 import { test, type Page } from '@playwright/test';
-import { pickTime } from './time-helpers';
+import { pickDay, pickTime } from './time-helpers';
 import { mockAccountApi, seedSession } from './accounts-helpers';
 import { mockPlaces, mockRidesApi, newFakeRides, readyDriver } from './rides-helpers';
 
@@ -47,7 +47,7 @@ for (const theme of ['dark', 'light'] as const) {
     await pick(page, 'From', 'selimbar');
     await pick(page, 'To', 'zona');
     await page.getByText('9.6 km, about 17 min').waitFor();
-    await page.getByLabel('Day', { exact: true }).selectOption({ label: 'Tomorrow' });
+    await pickDay(page, 'Day', 'Tomorrow');
     await pickTime(page, 'Leaving at', '07:30');
     await page.waitForTimeout(1400);
     await shot('2.2-publish-tripb');

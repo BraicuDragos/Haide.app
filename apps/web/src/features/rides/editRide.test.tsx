@@ -133,14 +133,21 @@ function renderSheet(r: OwnerRide, onClose = vi.fn()) {
 }
 
 const save = () => screen.getByRole('button', { name: 'Save changes' }) as HTMLButtonElement;
-const dayField = () => screen.getByLabelText('Day') as HTMLSelectElement;
-const pickLater = () => fireEvent.change(dayField(), { target: { value: days[4]!.value } });
+const dayField = () => screen.getByRole('button', { name: /^Day/ });
+/** Opens the Day wheel, taps the day and sets it. */
+const chooseDay = (value: string) => {
+  fireEvent.click(dayField());
+  const wheel = screen.getByRole('listbox', { name: 'Day' });
+  fireEvent.click(wheel.querySelector(`[data-value="${value}"]`)!);
+  fireEvent.click(screen.getByRole('button', { name: 'Set day' }));
+};
+const pickLater = () => chooseDay(days[4]!.value);
 const noteField = () => screen.getByLabelText(/Note for passengers/) as HTMLTextAreaElement;
 
 describe('EditRideSheet', () => {
   it('is prefilled from the ride and says the route cannot change', () => {
     renderSheet(ride({ autoAccept: true }));
-    expect(dayField().value).toBe(days[3]!.value);
+    expect(dayField().textContent).toContain(days[3]!.label);
     expect(screen.getByRole('button', { name: /Leaving at/ }).textContent).toContain('07:30');
     expect(noteField().value).toBe('Near the red kiosk');
     expect((screen.getByRole('switch') as HTMLInputElement).checked).toBe(true);
@@ -261,7 +268,7 @@ describe('EditRideSheet', () => {
     // A ride that leaves in 5 minutes, moved to today at a time that has already passed.
     const today = days[0]!.value;
     renderSheet(ride({ departureAt: bucharestToIso(days[1]!.value, '07:30') }));
-    fireEvent.change(dayField(), { target: { value: today } });
+    chooseDay(today);
     fireEvent.click(save());
     expect(api.patchRide).not.toHaveBeenCalled();
   });

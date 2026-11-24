@@ -287,6 +287,139 @@
     text-align: left;
   }
 
+  /* ---- shared day / time trigger (PickerField): one height on every platform ---- */
+  .picker-field {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 56px;
+    padding-block: 0;
+    padding-inline: var(--tk-space-3);
+    text-align: left;
+    font-family: inherit;
+    line-height: 24px;
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  /* Half-width columns on a phone: the value ("Tomorrow") matters more than the trailing chevron. */
+  @media (max-width: 400px) {
+    .picker-chev {
+      display: none;
+    }
+  }
+
+  /* ---- alarm-style wheels (WheelPicker): scroll-snap columns behind one centre band ---- */
+  .wheels {
+    --wheel-row: 48px;
+    position: relative;
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    gap: var(--tk-space-2);
+    height: calc(var(--wheel-row) * 5);
+    margin-block: var(--tk-space-2);
+  }
+  .wheels::before {
+    content: '';
+    position: absolute;
+    inset-inline: 0;
+    top: calc(var(--wheel-row) * 2);
+    height: var(--wheel-row);
+    border-radius: var(--tk-radius-md);
+    background: var(--theme-tint);
+    border: 1px solid var(--theme-border-strong);
+    pointer-events: none;
+  }
+  .wheel-col {
+    position: relative;
+    z-index: 1;
+    flex: 1 1 0;
+    min-width: 0;
+    height: 100%;
+    border-radius: var(--tk-radius-md);
+  }
+  .wheel-lg {
+    max-width: 8rem;
+  }
+  .wheel-md {
+    max-width: 20rem;
+  }
+  .wheel-col:has(.wheel:focus-visible) {
+    outline: 3px solid var(--theme-focus-ring);
+    outline-offset: 2px;
+  }
+  .wheel {
+    height: 100%;
+    margin: 0;
+    padding-block: calc(var(--wheel-row) * 2);
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    scroll-snap-type: y mandatory;
+    scrollbar-width: none;
+    touch-action: pan-y;
+    outline: none;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-mask-image: linear-gradient(to bottom, transparent, black 32%, black 68%, transparent);
+    mask-image: linear-gradient(to bottom, transparent, black 32%, black 68%, transparent);
+  }
+  .wheel::-webkit-scrollbar {
+    display: none;
+  }
+  .wheel-item {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: var(--wheel-row);
+    scroll-snap-align: center;
+    scroll-snap-stop: always;
+    color: var(--theme-text-muted);
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .wheel-lg .wheel-item {
+    font-size: var(--tk-text-3xl);
+  }
+  .wheel-md .wheel-item {
+    font-size: var(--tk-text-2xl);
+  }
+  .wheel-item > span {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transform: scale(0.72);
+    transition:
+      transform var(--tk-dur-fast) var(--tk-ease-standard),
+      color var(--tk-dur-fast) var(--tk-ease-standard);
+  }
+  .wheel-item[aria-selected='true'] {
+    color: var(--theme-text);
+    font-weight: 700;
+  }
+  .wheel-item[aria-selected='true'] > span {
+    transform: none;
+  }
+  .wheel-item[aria-disabled='true'] {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+  .wheel-colon {
+    position: relative;
+    z-index: 1;
+    flex: none;
+    font-size: var(--tk-text-3xl);
+    font-weight: 700;
+    line-height: 1;
+    color: var(--theme-text);
+  }
+
   /* ---- chips, segmented control, switch ---- */
   .seg {
     display: grid;

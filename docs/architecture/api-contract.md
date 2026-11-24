@@ -89,12 +89,14 @@ Popular corridors for the Find screen. `limit` 1 to 10 (default 5). `Cache-Contr
 
 `from` and `to` are ordinary `Place`s at area level: the gazetteer place of kind `area` for that area (rank 1), else the area centroid with the area id as a stable `id` (the same fallback `POST /places/reverse` uses). The web can pass `place.point` straight to `POST /search` as `from` and `to`; no name lookup is needed.
 
-**Fallback:** when fewer than 3 real routes qualify, the list is filled up to 3 with `CURATED_PILOT_ROUTES` (Cisnădie to Piața Mare, Șelimbăr to Zona Industrială Vest, Hipodrom to Piața Mare), resolved server-side by name to gazetteer places and skipped if a name cannot be resolved. Curated items have `source: "curated"` and `rides: 0` and **must not be shown as a popularity count**. A curated item never duplicates a real route (same ids or same names). Real items come first, `source: "data"`, `rides` is the number of rides in the window.
+**Fallback:** when fewer than 3 real routes qualify, the list is filled up to 3 with `CURATED_PILOT_ROUTES` (Cisnădie to Centrul Istoric, Șelimbăr to Turnișor, Hipodrom I to Centrul Istoric), resolved server-side by name (and locality) to gazetteer places and skipped if a name cannot be resolved. Route 1 starts from the area "Centru" of Cisnădie and is **shown as "Cisnădie"** (`name` is a display label, `secondary` keeps "Centru"; id and point are those of Centru). **Every place and route returned is inside the coverage box** (ADR 0043): a route with an end outside it is dropped, so every item can be passed straight to `POST /search` (guarded by an integration test). Curated items have `source: "curated"` and `rides: 0` and **must not be shown as a popularity count**. A curated item never duplicates a real route (same ids or same names). Real items come first, `source: "data"`, `rides` is the number of rides in the window.
 
 Errors: `400 VALIDATION_FAILED` (`fields.limit`), `429 RATE_LIMITED`.
 
 ### `POST /places/reverse`: Public. Rate limit 60/min
-Body `{ "point": LatLng }` → `200 { "place": Place }` (nearest address/street + area). `404` outside the coverage bbox.
+Body `{ "point": LatLng }` → `200 { "place": Place }` (nearest address/street + area). `404` outside the coverage bbox. The result is always inside the coverage bbox too (ADR 0043).
+
+**Coverage rule (ADR 0043):** `GET /places`, `POST /places/reverse` and `GET /popular-routes` never return a point outside the coverage bbox. The 10 locality-level rows outside it (Cisnădie, Sadu, Tălmaciu, Avrig, Orlat, Rășinari, Racovița, Gura Râului, Șura Mare, Ocna Sibiului) are therefore not offered; typing "Cisnădie" still finds its sub-areas (Centru, ...) because the search text includes the locality.
 
 ### `POST /search`: Public. Rate limit 30/min
 ```json

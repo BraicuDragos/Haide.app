@@ -1,9 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useId, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useId, useRef, useState } from 'react';
 import { ApiError } from '@/api/client';
 import { keys } from '@/api/keys';
 import { reversePlace, searchPlaces } from '@/api/places';
-import type { Place } from '@/api/types';
+import type { LatLng, Place } from '@/api/types';
 import { t, tError, tp } from '@/i18n';
 import { GeolocationFailure, getCurrentPoint } from '@/lib/geolocation';
 import { useDebounced } from '@/lib/useDebounced';
@@ -21,14 +21,20 @@ interface Props {
   kind: PickerKind;
   onSelect: (place: Place) => void;
   onClose: () => void;
+  /** Where the map picker starts: the place already chosen in this field, if any. */
+  initial?: LatLng | undefined;
 }
+
+// MapLibre and its CSS live in this lazy chunk: the entry chunk never pays for the map.
+const MapPicker = lazy(() => import('./MapPicker'));
+const preloadMap = () => void import('./MapPicker');
 
 const DEBOUNCE_MS = 250;
 const MIN_CHARS = 2;
 // Static suggestions: tapping one fills the search box. "Șelimbăr" shows off the diacritics-insensitive search.
 const SUGGESTIONS = ['Piața Mare', 'Șelimbăr', 'Cisnădie', 'Hipodrom', 'Gara Sibiu'] as const;
 
-export function PlacePickerSheet({ open, kind, onSelect, onClose }: Props) {
+export function PlacePickerSheet({ open, kind, onSelect, onClose, initial }: Props) {
   return (
     <Sheet
       open={open}
@@ -36,19 +42,27 @@ export function PlacePickerSheet({ open, kind, onSelect, onClose }: Props) {
       title={t(kind === 'from' ? 'place.title.from' : 'place.title.to')}
     >
       {/* Body unmounts with the sheet, so every opening starts with a clean search. */}
-      <PickerBody onSelect={onSelect} />
+      <PickerBody kind={kind} initial={initial} onSelect={onSelect} />
     </Sheet>
   );
 }
 
-function PickerBody({ onSelect }: { onSelect: (place: Place) => void }) {
+function PickerBody({
+  kind,
+  initial,
+  onSelect,
+}: {
+  kind: PickerKind;
+  initial: LatLng | undefined;
+  onSelect: (place: Place) => void;
+}) {
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const [q, setQ] = useState('');
   const debounced = useDebounced(q.trim(), DEBOUNCE_MS);
   const [locating, setLocating] = useState(false);
   const [locError, setLocError] = useState<string | null>(null);
-  const [mapNote, setMapNote] = useState(false);
+  const [mapOpen, setMapOpen] = useState(false);
 
   // The dialog opens in the parent's effect, which runs after this one: focus on the next tick.
   useEffect(() => {
@@ -70,7 +84,6 @@ function PickerBody({ onSelect }: { onSelect: (place: Place) => void }) {
 
   async function locateMe() {
     setLocError(null);
-    setMapNote(false);
     setLocating(true);
     try {
       const point = await getCurrentPoint();
@@ -130,11 +143,28 @@ function PickerBody({ onSelect }: { onSelect: (place: Place) => void }) {
         </Button>
         <p className="text-sm leading-5 text-text-muted">{t('place.myLocation.hint')}</p>
         {locError && <Notice tone="error">{locError}</Notice>}
-        <Button variant="ghost" block icon={<Icon name="map" />} onClick={() => setMapNote(true)}>
+        <Button
+          variant="tonal"
+          block
+          icon={<Icon name="map" />}
+          aria-haspopup="dialog"
+          onClick={() => setMapOpen(true)}
+          onPointerEnter={preloadMap}
+          onFocus={preloadMap}
+        >
           {t('place.onMap')}
         </Button>
-        {mapNote && <Notice tone="info">{t('place.mapSoon')}</Notice>}
       </div>
+      {mapOpen && (
+        <Suspense fallback={null}>
+          <MapPicker
+            kind={kind}
+            initial={initial}
+            onPick={onSelect}
+            onClose={() => setMapOpen(false)}
+          />
+        </Suspense>
+      )}
 
       <section aria-labelledby={`${inputId}-res`} className="flex flex-col gap-2">
         <h3 id={`${inputId}-res`} className="type-label text-text-muted">

@@ -8,6 +8,7 @@ import {
   TRIP_B,
   type FakeRides,
 } from './rides-helpers';
+import { pickDay, pickTime } from './time-helpers';
 
 // Editing a published ride (ADR 0041) at 360x800. The API is mocked with the stateful rides fake, which mirrors
 // PATCH /rides/{id}: the server rules themselves are covered by the backend tests.
@@ -19,6 +20,12 @@ function departure(daysAhead: number, hour: number): string {
   d.setUTCDate(d.getUTCDate() + daysAhead);
   d.setUTCHours(hour, 0, 0, 0);
   return d.toISOString();
+}
+
+/** The Europe/Bucharest calendar day `n` days from now, as YYYY-MM-DD (the value of a row on the Day wheel). */
+function daysAhead(n: number): string {
+  const d = new Date(Date.now() + n * 86_400_000);
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Bucharest' }).format(d);
 }
 
 const person = {
@@ -168,12 +175,12 @@ test.describe('edit a ride (360x800)', () => {
     fake.failNext.edit = [409, 'DAILY_RIDE_LIMIT'];
     await page.goto(`/driving/${RIDE_ID}`);
     await page.getByRole('button', { name: 'Edit ride' }).click();
-    await sheet(page).getByLabel('Day', { exact: true }).selectOption({ index: 5 });
+    await pickDay(page, 'Day', daysAhead(5));
     await sheet(page).getByRole('button', { name: 'Save changes' }).click();
     await expect(
       sheet(page).getByText('You’ve reached 4 rides on that day. Choose another day.'),
     ).toBeVisible();
-    await expect(sheet(page).getByLabel('Day', { exact: true })).toBeFocused();
+    await expect(sheet(page).getByRole('button', { name: /^Day/ })).toBeFocused();
     await expectNoAxeViolations(page);
     await expect(sheet(page)).toBeVisible();
   });
@@ -195,21 +202,3 @@ test.describe('edit a ride (360x800)', () => {
     await page.screenshot({ path: 'docs/screenshots/ride-edit/edit-sheet.png' });
   });
 });
-
-/** The time picker opens inside the edit sheet, so only the picker's own sheet must close, not every dialog. */
-async function pickTime(page: Page, label: string, hhmm: string) {
-  const [hh, mm] = hhmm.split(':') as [string, string];
-  await sheet(page).getByRole('button', { name: label }).click();
-  const picker = page.getByRole('dialog').last();
-  await picker
-    .getByRole('radiogroup', { name: 'Hour' })
-    .getByRole('radio', { name: hh, exact: true })
-    .click();
-  await picker
-    .getByRole('radiogroup', { name: 'Minute' })
-    .getByRole('radio', { name: mm, exact: true })
-    .click();
-  await picker.getByRole('button', { name: 'Set time' }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(1);
-  await expect(sheet(page)).toBeVisible();
-}

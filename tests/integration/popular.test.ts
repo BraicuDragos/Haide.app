@@ -57,7 +57,17 @@ describe.skipIf(!BASE || !SECRET || DB_SKIP)('GET /popular-routes against the lo
   }
 
   beforeAll(async () => {
-    areas = await sql<Area[]>`select id, name from app.areas order by random() limit 3`;
+    // Only areas the app can offer: the API drops places outside the coverage box (ADR 0043), and a few
+    // locality-level areas (e.g. the whole of Cisnădie) lie outside it. Same point rule as the API uses.
+    areas = await sql<Area[]>`
+      select a.id, a.name from app.areas a
+      where coalesce(
+              (select pl.geom from app.places pl
+                where pl.area_id = a.id and pl.kind = 'area' and pl.rank = 1
+                order by pl.osm_id asc nulls last, pl.id asc limit 1),
+              a.centroid)
+            && ST_MakeEnvelope(23.98, 45.68, 24.32, 45.86, 4326)
+      order by random() limit 3`;
   });
 
   afterAll(async () => {

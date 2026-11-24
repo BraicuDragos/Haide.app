@@ -1,5 +1,5 @@
 import { test, type Page } from '@playwright/test';
-import { pickTime } from './time-helpers';
+import { pickDay, pickTime } from './time-helpers';
 import { mockPlaces } from './rides-helpers';
 import { mockSearchApi, newFakeSearch, tripBItem } from './search-helpers';
 
@@ -39,7 +39,7 @@ for (const theme of ['dark', 'light'] as const) {
     await shot('3.1-find-empty');
     await pick(page, 'From', 'selimbar');
     await pick(page, 'To', 'zona');
-    await page.getByLabel('Day', { exact: true }).selectOption({ label: 'Tomorrow' });
+    await pickDay(page, 'Day', 'Tomorrow');
     await pickTime(page, 'Leave around', '07:30');
     await shot('3.1-find-filled');
 

@@ -82,6 +82,18 @@ export const COORD_DECIMALS = 5;
 /** Coverage bbox (Sibiu and surroundings). Same box as the gazetteer build. */
 export const COVERAGE_BBOX = { south: 45.68, west: 23.98, north: 45.86, east: 24.32 } as const;
 
+/**
+ * The coverage box in the argument order of PostGIS ST_MakeEnvelope (xmin, ymin, xmax, ymax), to be
+ * bound as SQL parameters so SQL and `inCoverage` (privacy.ts) cannot disagree about the box.
+ * Filter with `geom && ST_MakeEnvelope(..., 4326)`: inclusive on the edges, like `inCoverage`.
+ */
+export const COVERAGE_ENVELOPE = [
+  COVERAGE_BBOX.west,
+  COVERAGE_BBOX.south,
+  COVERAGE_BBOX.east,
+  COVERAGE_BBOX.north,
+] as const;
+
 /** Rate limits (architecture §15): max hits per fixed window. */
 export const RATE_LIMITS = {
   places: { max: 60, windowS: 60 },

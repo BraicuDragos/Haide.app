@@ -11,7 +11,7 @@ import { mockPlaces, mockRidesApi, newFakeRides, readyDriver } from './rides-hel
 
 const WIDTHS = [320, 375, 390, 430] as const;
 
-type Box = { left: number; right: number; width: number };
+type Box = { left: number; right: number; width: number; height: number };
 type Measure = Awaited<ReturnType<typeof measure>>;
 
 /** Measures overflow and the geometry of the named elements. Shared by every test (and by the guard tests). */
@@ -21,7 +21,7 @@ async function measure(page: Page, ids: string[]) {
     const rect = (el: Element | null) => {
       if (!el) return null;
       const r = el.getBoundingClientRect();
-      return { left: r.left, right: r.right, width: r.width };
+      return { left: r.left, right: r.right, width: r.width, height: r.height };
     };
     const outside: string[] = [];
     for (const el of Array.from(document.body.querySelectorAll('*'))) {
@@ -75,6 +75,7 @@ function expectRow(m: Measure, left: string, right: string) {
   expect(Math.abs(r.right - field.right), `right margin differs: ${note}`).toBeLessThanOrEqual(1);
   expect(Math.abs(l.left - field.left), `left margin differs: ${note}`).toBeLessThanOrEqual(1);
   expect(Math.abs(r.width - l.width), `columns differ: ${note}`).toBeLessThanOrEqual(1);
+  expect(Math.abs(r.height - l.height), `heights differ: ${note}`).toBeLessThanOrEqual(0.5);
 }
 
 async function openFind(page: Page, width: number) {

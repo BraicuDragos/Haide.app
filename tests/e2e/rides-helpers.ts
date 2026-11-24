@@ -49,7 +49,28 @@ const STREETS: Record<string, { name: string; area: string; point: { lat: number
  * Mocked GET /places. A query that is a known street plus a house number ("Negoveanu 2", "2/B Negoveanu") answers with
  * the synthetic approximate suggestion first, label = street + the number exactly as typed. `queries` records every `q`.
  */
-export async function mockPlaces(page: Page, queries: string[] = []) {
+export async function mockPlaces(
+  page: Page,
+  queries: string[] = [],
+  reversed: Array<{ lat: number; lng: number }> = [],
+) {
+  // POST /places/reverse (the map picker): the nearest "address" sits a few metres from the posted point.
+  await page.route('**/places/reverse', (route: Route) => {
+    const point = (route.request().postDataJSON() as { point: { lat: number; lng: number } }).point;
+    reversed.push(point);
+    return route.fulfill({
+      json: {
+        place: {
+          id: 'rev-1',
+          name: 'Strada Nicolae Bălcescu 12',
+          secondary: 'Sibiu, Centru',
+          kind: 'address',
+          point: { lat: point.lat + 0.00005, lng: point.lng },
+          areaName: 'Centru',
+        },
+      },
+    });
+  });
   await page.route('**/places?*', (route: Route) => {
     const raw = new URL(route.request().url()).searchParams.get('q') ?? '';
     queries.push(raw);

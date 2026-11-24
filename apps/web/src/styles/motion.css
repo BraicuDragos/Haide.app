@@ -533,6 +533,46 @@
   }
 }
 
+/* Tab swipe (useTabSwipe sets html[data-swipe] just before navigating and removes it after): the old screen leaves
+   toward the finger, the new one arrives from the other side. A short slide plus the usual fade, root layer only
+   (the tab bar keeps its own name, so it stays put). Reduced motion never sets the attribute. */
+html[data-swipe='next']::view-transition-old(root) {
+  animation: vt-slide-out-left var(--tk-dur-moderate) var(--tk-ease-exit) both;
+}
+html[data-swipe='next']::view-transition-new(root) {
+  animation: vt-slide-in-right var(--tk-dur-moderate) var(--tk-ease-enter) both;
+}
+html[data-swipe='prev']::view-transition-old(root) {
+  animation: vt-slide-out-right var(--tk-dur-moderate) var(--tk-ease-exit) both;
+}
+html[data-swipe='prev']::view-transition-new(root) {
+  animation: vt-slide-in-left var(--tk-dur-moderate) var(--tk-ease-enter) both;
+}
+@keyframes vt-slide-out-left {
+  to {
+    opacity: 0;
+    transform: translateX(-10%);
+  }
+}
+@keyframes vt-slide-out-right {
+  to {
+    opacity: 0;
+    transform: translateX(10%);
+  }
+}
+@keyframes vt-slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(10%);
+  }
+}
+@keyframes vt-slide-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(-10%);
+  }
+}
+
 /* ---- reduced motion: no transitions, no loops, no view transitions. The in-app switch (data-motion) and the OS
    setting (before the script has run, or without JS) both land here. ---- */
 html[data-motion='reduced'] *,
@@ -717,5 +757,117 @@ html[data-motion='reduced']::view-transition-new(*) {
   .rl-light {
     background: var(--theme-accent);
     box-shadow: 0 0 10px 2px var(--theme-pulse-ring);
+  }
+}
+
+/* ---- Find hero: the night-city scene (RouteArt). Base CSS is the finished still picture; the WAAPI loops and the one-time
+   sweep, ripples and afterglow only decorate it (never started with reduced motion). Transform and opacity only. Layers
+   are drawn 24px (LAYER_BLEED) larger than the hero so the parallax never shows an edge. ---- */
+@layer components {
+  /* City glow: a soft bloom behind the route, the one big light of the scene. */
+  .hero-art::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: radial-gradient(70% 50% at 58% 64%, var(--theme-route-glow), transparent 72%);
+  }
+  .hero-art .hp {
+    position: absolute;
+    inset: 0;
+    will-change: transform;
+  }
+  .hero-art svg.hp-far,
+  .hero-art svg.hp-mid,
+  .hero-art svg.hp-fx,
+  .hero-art svg.hp-near {
+    position: absolute;
+    inset: auto;
+    left: -24px;
+    top: -24px;
+    fill: none;
+  }
+  .hp-far path {
+    stroke: var(--theme-map-road);
+    stroke-width: 1px;
+    opacity: 0.55;
+  }
+  .hp-far .tw {
+    fill: var(--theme-route-core);
+    opacity: 0.85;
+  }
+  .hp-far .tw:nth-of-type(2) {
+    fill: var(--theme-pulse);
+  }
+  .hp-mid .lane {
+    stroke: var(--theme-route-glow);
+    stroke-width: 1.5px;
+    stroke-dasharray: 2 8;
+  }
+  .hp-near path {
+    stroke: var(--theme-map-road);
+    stroke-width: 16px;
+    stroke-linecap: round;
+    opacity: 0.45;
+  }
+  .hp-near circle {
+    fill: var(--theme-route-glow);
+    opacity: 0.7;
+  }
+  .hp-fx .ag {
+    stroke: var(--theme-route-glow);
+    stroke-width: 22px;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    opacity: 0;
+  }
+  .hp-fx .rp {
+    stroke: var(--theme-pulse-ring);
+    stroke-width: 1.5px;
+    opacity: 0;
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+  .hp-lights {
+    position: absolute;
+    left: 0;
+    top: 0;
+  }
+  .tl {
+    position: absolute;
+    left: -3px;
+    top: -3px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--theme-pulse);
+    box-shadow: 0 0 12px 3px var(--theme-route-glow);
+    opacity: 0;
+    will-change: transform, opacity;
+  }
+  .hero-sweep {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 44%;
+    opacity: 0;
+    pointer-events: none;
+    background: linear-gradient(90deg, transparent, var(--theme-route-glow) 50%, transparent);
+    -webkit-mask-image: linear-gradient(to bottom, transparent, black 30%, black 70%, transparent);
+    mask-image: linear-gradient(to bottom, transparent, black 30%, black 70%, transparent);
+    will-change: transform, opacity;
+  }
+  /* Reduced motion: a finished, still picture (afterglow, ringed pins, resting lights). */
+  html[data-motion='reduced'] .hp-fx .ag {
+    opacity: 0.4;
+  }
+  html[data-motion='reduced'] .hp-fx .rp.pk,
+  html[data-motion='reduced'] .hp-fx .rp.dp {
+    opacity: 0.5;
+    transform: scale(1.8);
+  }
+  html[data-motion='reduced'] .tl {
+    opacity: 0.85;
   }
 }

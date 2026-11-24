@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { pickTime } from './time-helpers';
+import { pickDay, pickTime } from './time-helpers';
 import { expectNoAxeViolations, mockAccountApi, newAccount, seedSession } from './accounts-helpers';
 import {
   mockPlaces,
@@ -50,7 +50,7 @@ async function chooseTripB(page: Page) {
 }
 
 async function whenTomorrow(page: Page) {
-  await page.getByLabel('Day', { exact: true }).selectOption({ label: 'Tomorrow' });
+  await pickDay(page, 'Day', 'Tomorrow');
   await pickTime(page, 'Leaving at', '07:30');
 }
 
@@ -133,9 +133,15 @@ for (const theme of ['dark', 'light'] as const) {
       await expect(page.getByRole('button', { name: /^Leaving at/ })).toBeFocused();
       // The picker greys out the past: nothing before 22:15 is selectable today.
       await page.getByRole('button', { name: /^Leaving at/ }).click();
-      const hourGroup = page.getByRole('dialog').getByRole('radiogroup', { name: 'Hour' });
-      await expect(hourGroup.getByRole('radio', { name: '07', exact: true })).toBeDisabled();
-      await expect(hourGroup.getByRole('radio', { name: '23', exact: true })).toBeEnabled();
+      const hourGroup = page.getByRole('dialog').getByRole('listbox', { name: 'Hours' });
+      await expect(hourGroup.getByRole('option', { name: '07', exact: true })).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      );
+      await expect(hourGroup.getByRole('option', { name: '23', exact: true })).not.toHaveAttribute(
+        'aria-disabled',
+        'true',
+      );
       await page.keyboard.press('Escape');
       await expect(page.getByRole('dialog')).toBeHidden();
       await expect(page.getByRole('button', { name: /^Leaving at/ })).toBeFocused();

@@ -5,6 +5,7 @@ import { useScreenHeading } from '@/app/useScreenHeading';
 import { t } from '@/i18n';
 import { dayOptions } from '@/lib/dates';
 import { minTimeFor, toMinutes } from '@/lib/timeSlots';
+import { DayPicker } from '@/ui/DayPicker';
 import { TimePicker } from '@/ui/TimePicker';
 import { Button } from '@/ui/Button';
 import { Icon } from '@/ui/Icon';
@@ -151,23 +152,13 @@ export function FindScreen() {
         </div>
 
         <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-3">
-          <div className="flex min-w-0 flex-col gap-1">
-            <label htmlFor="find-day" className="type-label">
-              {t('find.day')}
-            </label>
-            <select
-              id="find-day"
-              value={day}
-              onChange={(e) => setDay(e.target.value)}
-              className="control min-h-12 border border-border-strong"
-            >
-              {days.map((d) => (
-                <option key={d.value} value={d.value}>
-                  {d.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          <DayPicker
+            id="find-day"
+            label={t('find.day')}
+            value={day}
+            options={days}
+            onChange={setDay}
+          />
           <TimePicker
             id="find-time"
             ref={timeInput}
@@ -216,6 +207,8 @@ export function FindScreen() {
       <PlacePickerSheet
         open={picker !== null}
         kind={picker ?? 'from'}
+        // "Choose on map" starts where the current value for this field is, if there is one.
+        initial={(picker === 'to' ? to : from)?.point}
         onSelect={pick}
         onClose={() => setPicker(null)}
       />

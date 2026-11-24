@@ -9,6 +9,7 @@ import {
   parseAddressQuery,
   type ParsedAddress,
 } from '../../_shared/domain/address.ts';
+import { inCoverage } from '../../_shared/domain/privacy.ts';
 import { areaNameForPoint, findStreetCandidates, searchPlaces, toPlace } from '../repo/places.ts';
 
 /** A street key shorter than this (letters only) is too vague to place a number on. */
@@ -30,6 +31,7 @@ export async function approximateAddresses(sql: Db, parsed: ParsedAddress): Prom
     const pos = estimatePosition(c.known, num.n, c.streetPoint);
     if (!pos) continue;
     const point = { lat: pos.lat, lng: pos.lng };
+    if (!inCoverage(point)) continue; // never offer a point the app cannot search or publish
     const area = await areaNameForPoint(sql, point);
     const place = toPlace({
       id: approximatePlaceId(c.locality, c.name, num),

@@ -1,4 +1,4 @@
-import { test } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import { mockAccountApi, seedSession } from './accounts-helpers';
 import { makeImage } from './photo-helpers';
 import { mockPlaces, readyDriver } from './rides-helpers';
@@ -23,7 +23,8 @@ test('time picker sheet', async ({ page }) => {
   await mockPlaces(page);
   await page.goto('/find');
   await page.getByRole('button', { name: /^Leave around/ }).click();
-  await page.getByRole('dialog').locator('[role=radio]:not([disabled])').first().click();
+  // The time sheet is an alarm-style wheel now (hours and minutes columns): capture it as it opens.
+  await expect(page.getByRole('dialog').getByRole('listbox', { name: 'Hours' })).toBeVisible();
   await page.waitForTimeout(600);
   await page.screenshot({ path: `${OUT}/time-picker.jpg`, type: 'jpeg', quality: 82 });
 });

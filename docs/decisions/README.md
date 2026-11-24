@@ -47,3 +47,4 @@ Every significant decision (business, brand, UX, architecture) gets a file
 | [0040](0040-zero-cost-personal-deploy-no-domain.md) | Zero-cost personal deploy: no custom domain, single-sender mail, OAuth in Testing mode | Architecture | Accepted | Orchestrator |
 | [0041](0041-rides-are-editable-time-seats-note-auto-accept.md) | Rides are editable (time, seats, note, auto-accept); route fixed; a time change notifies each passenger | Architecture | Accepted | backend-dev |
 | [0042](0042-approximate-address-positions.md) | Any house number in address search: own gazetteer plus synthetic, flagged approximate addresses (300 m interpolation bound) | Architecture | Proposed | backend-dev |
+| [0043](0043-never-serve-places-outside-coverage.md) | Never serve places outside coverage; curated popular routes may carry a display label | Architecture | Accepted | backend-dev |

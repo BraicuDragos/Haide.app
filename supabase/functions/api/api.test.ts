@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { errorEnvelopeSchema } from '../_shared/contracts/errors.ts';
 import { healthResponseSchema, tickResponseSchema } from '../_shared/contracts/system.ts';
 import { placesResponseSchema, reverseResponseSchema } from '../_shared/contracts/geo.ts';
+import { COVERAGE_ENVELOPE } from '../_shared/domain/rules.ts';
 import { authMiddleware, requireAuth } from './middleware/auth.ts';
 import { onError, pgDiagnostics } from './middleware/errors.ts';
 import type { AppBindings } from './types.ts';
@@ -151,7 +152,7 @@ describe('GET /places', () => {
       },
     ]);
     const search = calls.find((c) => c.text.includes('from app.places'));
-    expect(search?.values).toEqual(['selimbar', 3]);
+    expect(search?.values).toEqual(['selimbar', ...COVERAGE_ENVELOPE, 3]);
   });
 
   it('adds locality and area to the secondary label', async () => {
@@ -169,12 +170,39 @@ describe('GET /places', () => {
     expect(body.items[0]?.secondary).toBe('Sibiu, Centru');
   });
 
+  it('typing "Cisnădie" asks for places inside the coverage box only (the locality row is outside), so its sub-areas stay findable', async () => {
+    const centru = {
+      ...placeRow,
+      name: 'Centru',
+      kind: 'area',
+      locality: 'Cisnădie',
+      area_name: 'Centru',
+      lat: 45.714466,
+      lng: 24.152046,
+    };
+    const { app, calls } = makeApp([
+      (q) => (q.text.includes('from app.places') ? [centru] : undefined),
+    ]);
+    const body = placesResponseSchema.parse(
+      await (await app.request(`${BASE}/places?q=cisnadie`)).json(),
+    );
+    expect(body.items.map((p) => p.name)).toEqual(['Centru']);
+    const search = calls.find((c) => c.text.includes('from app.places'));
+    expect(search?.text).toContain('p.geom && cov.g');
+    expect(search?.text).toContain('ST_MakeEnvelope(');
+    expect(search?.values).toEqual(['cisnadie', ...COVERAGE_ENVELOPE, 8]);
+  });
+
   it('defaults limit to 8 and trims the query', async () => {
     const { app, calls } = makeApp();
     const res = await app.request(`${BASE}/places?q=%20%20piata%20`);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ items: [] });
-    expect(calls.find((c) => c.text.includes('from app.places'))?.values).toEqual(['piata', 8]);
+    expect(calls.find((c) => c.text.includes('from app.places'))?.values).toEqual([
+      'piata',
+      ...COVERAGE_ENVELOPE,
+      8,
+    ]);
   });
 
   it.each([
